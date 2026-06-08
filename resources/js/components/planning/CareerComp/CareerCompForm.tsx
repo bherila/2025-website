@@ -748,8 +748,8 @@ function OptionGrantsList({ job, onChange, onOpenGrantEditor, activeGrant }: { j
 }
 
 export function updateJob(inputs: CareerCompInputs, jobId: string, updater: (job: JobSpec) => JobSpec): CareerCompInputs {
-  if (inputs.currentJob?.id === jobId) {
-    return { ...inputs, currentJob: updater(inputs.currentJob) }
+  if (inputs.currentJobs.some((job) => job.id === jobId)) {
+    return { ...inputs, currentJobs: inputs.currentJobs.map((job) => (job.id === jobId ? updater(job) : job)) }
   }
 
   return {
@@ -759,11 +759,34 @@ export function updateJob(inputs: CareerCompInputs, jobId: string, updater: (job
 }
 
 function findJob(inputs: CareerCompInputs, jobId: string): JobSpec | null {
-  if (inputs.currentJob?.id === jobId) {
-    return inputs.currentJob
+  const currentJob = inputs.currentJobs.find((job) => job.id === jobId)
+  if (currentJob) {
+    return currentJob
+  }
+  return inputs.hypotheticalJobs.find((job) => job.id === jobId) ?? null
+}
+
+function nextJobId(existing: JobSpec[], prefix: string): string {
+  const used = new Set(existing.map((job) => job.id))
+  let ordinal = existing.length + 1
+  let id = `${prefix}-${ordinal}`
+  while (used.has(id)) {
+    ordinal += 1
+    id = `${prefix}-${ordinal}`
   }
 
-  return inputs.hypotheticalJobs.find((job) => job.id === jobId) ?? null
+  return id
+}
+
+function removeCurrentJob(inputs: CareerCompInputs, jobId: string): CareerCompInputs {
+  return {
+    ...inputs,
+    currentJobs: inputs.currentJobs.filter((job) => job.id !== jobId),
+    hypotheticalJobs: inputs.hypotheticalJobs.map((job) => ({
+      ...job,
+      retainedCurrentJobIds: job.retainedCurrentJobIds.filter((id) => id !== jobId),
+    })),
+  }
 }
 
 function ModelAssumptionsEditor({ inputs, onChange }: { inputs: CareerCompInputs; onChange: (inputs: CareerCompInputs) => void }): ReactElement {
@@ -1179,13 +1202,57 @@ function ProjectedRefreshersPreview({ job, startYear, horizonYears }: { job: Job
   )
 }
 
+function RetainedCurrentJobsSelector({ currentJobs, selectedIds, onChange }: {
+  currentJobs: JobSpec[]
+  selectedIds: string[]
+  onChange: (selectedIds: string[]) => void
+}): ReactElement | null {
+  const selectorId = useId()
+
+  if (currentJobs.length === 0) {
+    return null
+  }
+
+  const selected = new Set(selectedIds)
+
+  function toggle(jobId: string, checked: boolean): void {
+    if (checked) {
+      onChange([...selectedIds, jobId].filter((id, index, ids) => ids.indexOf(id) === index))
+      return
+    }
+
+    onChange(selectedIds.filter((id) => id !== jobId))
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border p-3 sm:col-span-2">
+      <div>
+        <Label className="text-sm font-semibold">Retained current jobs</Label>
+        <p className="text-sm text-muted-foreground">{selectedIds.length === 0 ? 'None retained; this offer quits every current job.' : `${selectedIds.length} retained alongside this offer.`}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {currentJobs.map((currentJob) => {
+          const checkboxId = `${selectorId}-retain-${currentJob.id}`
+
+          return (
+            <label key={currentJob.id} htmlFor={checkboxId} className="flex min-h-11 items-center gap-2 rounded-md border p-3 text-sm">
+              <Checkbox id={checkboxId} checked={selected.has(currentJob.id)} onCheckedChange={(checked) => toggle(currentJob.id, checked === true)} />
+              <span className="min-w-0 truncate">{currentJob.name}</span>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function transitionOverrideActive(job: JobSpec): boolean {
   return job.priorJobResignationDate !== null
     || job.transitionOverride.currentJobNoticeWeeks !== null
     || job.transitionOverride.timeOffBetweenJobsWeeks !== null
 }
 
-function JobEditor({ job, startYear, horizonYears, modelAssumptions, showCareerTransition = false, onChange, onRemove, removeLabel, onOpenGrantEditor, onOpenValuationTimeline, onOpenModelAssumptions, activeGrant }: { job: JobSpec; startYear: number; horizonYears: number; modelAssumptions: ModelAssumptions; showCareerTransition?: boolean; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; onOpenValuationTimeline: OpenValuationTimeline; onOpenModelAssumptions: () => void; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
+function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssumptions, showCareerTransition = false, onChange, onRemove, removeLabel, onOpenGrantEditor, onOpenValuationTimeline, onOpenModelAssumptions, activeGrant }: { job: JobSpec; currentJobs?: JobSpec[]; startYear: number; horizonYears: number; modelAssumptions: ModelAssumptions; showCareerTransition?: boolean; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; onOpenValuationTimeline: OpenValuationTimeline; onOpenModelAssumptions: () => void; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
   const nameId = useId()
   const rsuGrantTypeId = useId()
   const optionGrantTypeId = useId()
@@ -1233,6 +1300,13 @@ function JobEditor({ job, startYear, horizonYears, modelAssumptions, showCareerT
             <Input id={nameId} value={job.name} onChange={(event) => onChange({ ...job, name: event.target.value })} />
           </div>
           <DateField label="Start date" value={job.startDate ?? ''} onChange={(value) => onChange({ ...job, startDate: value || null })} />
+          {showCareerTransition ? (
+            <RetainedCurrentJobsSelector
+              currentJobs={currentJobs}
+              selectedIds={job.retainedCurrentJobIds}
+              onChange={(retainedCurrentJobIds) => onChange({ ...job, retainedCurrentJobIds })}
+            />
+          ) : null}
           {showCareerTransition ? (
             <div className="space-y-3 rounded-md border p-3 sm:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1347,31 +1421,50 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
   if (section === 'current-job') {
     return (
       <div className="space-y-4">
-        {inputs.currentJob ? (
-          <JobEditor
-            activeGrant={activeGrant}
-            job={inputs.currentJob}
-            startYear={inputs.startYear}
-            horizonYears={inputs.horizonYears}
-            modelAssumptions={inputs.modelAssumptions}
-            onChange={(job) => onChange(updateJob(inputs, inputs.currentJob?.id ?? 'current', () => job))}
-            onRemove={() => onChange({ ...inputs, currentJob: null })}
-            removeLabel="Remove current job — compare against no job"
-            onOpenGrantEditor={onOpenGrantEditor}
-            onOpenValuationTimeline={onOpenValuationTimeline}
-            onOpenModelAssumptions={onOpenModelAssumptions}
-          />
+        {inputs.currentJobs.length > 0 ? (
+          inputs.currentJobs.map((job) => (
+            <JobEditor
+              key={job.id}
+              activeGrant={activeGrant}
+              job={job}
+              startYear={inputs.startYear}
+              horizonYears={inputs.horizonYears}
+              modelAssumptions={inputs.modelAssumptions}
+              onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
+              onRemove={() => onChange(removeCurrentJob(inputs, job.id))}
+              removeLabel={`Remove ${job.name}`}
+              onOpenGrantEditor={onOpenGrantEditor}
+              onOpenValuationTimeline={onOpenValuationTimeline}
+              onOpenModelAssumptions={onOpenModelAssumptions}
+            />
+          ))
         ) : (
           <Card className="border-dashed">
             <CardHeader>
-              <CardTitle>No current job</CardTitle>
-              <CardDescription>Deltas will be hidden until you add a current job baseline.</CardDescription>
+              <CardTitle>No current jobs</CardTitle>
+              <CardDescription>Deltas will be hidden until you add at least one current job baseline.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button type="button" onClick={() => onChange({ ...inputs, currentJob: buildDefaultJob('current', 'Current job') })}>Add current job</Button>
+              <Button type="button" onClick={() => {
+                const id = nextJobId(inputs.currentJobs, 'current')
+                onChange({ ...inputs, currentJobs: [buildDefaultJob(id, 'Current job')] })
+              }}>Add current job</Button>
             </CardContent>
           </Card>
         )}
+        {inputs.currentJobs.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              const id = nextJobId(inputs.currentJobs, 'current')
+              onChange({ ...inputs, currentJobs: [...inputs.currentJobs, buildDefaultJob(id, `Current job ${inputs.currentJobs.length + 1}`)] })
+            }}
+          >
+            <Plus className="mr-2 size-4" /> Add current job
+          </Button>
+        ) : null}
       </div>
     )
   }
@@ -1386,6 +1479,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           startYear={inputs.startYear}
           horizonYears={inputs.horizonYears}
           modelAssumptions={inputs.modelAssumptions}
+          currentJobs={inputs.currentJobs}
           showCareerTransition
           onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
           onRemove={inputs.hypotheticalJobs.length > 1 ? () => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) }) : undefined}
@@ -1398,7 +1492,10 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
         type="button"
         variant="outline"
         className="w-full"
-        onClick={() => onChange({ ...inputs, hypotheticalJobs: [...inputs.hypotheticalJobs, buildDefaultJob(`hyp-${inputs.hypotheticalJobs.length + 1}`, `Offer ${inputs.hypotheticalJobs.length + 1}`)] })}
+        onClick={() => {
+          const id = nextJobId(inputs.hypotheticalJobs, 'hyp')
+          onChange({ ...inputs, hypotheticalJobs: [...inputs.hypotheticalJobs, buildDefaultJob(id, `Offer ${inputs.hypotheticalJobs.length + 1}`)] })
+        }}
       >
         <Plus className="mr-2 size-4" /> Add offer
       </Button>

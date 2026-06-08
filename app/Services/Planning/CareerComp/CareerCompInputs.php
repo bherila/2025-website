@@ -14,18 +14,23 @@ final class CareerCompInputs
      */
     public static function fromArray(array $values): self
     {
-        $currentJobProvidedAsNull = array_key_exists('currentJob', $values) && $values['currentJob'] === null;
+        $currentJobs = self::currentJobsFromInput($values);
         $values = self::withoutNulls($values);
+
+        unset($values['currentJob']);
+        if ($currentJobs !== null) {
+            $values['currentJobs'] = $currentJobs;
+        }
+
         $merged = array_replace_recursive(self::defaults(), $values);
 
-        if ($currentJobProvidedAsNull) {
-            $merged['currentJob'] = null;
-        } elseif (array_key_exists('currentJob', $values)) {
-            $merged['currentJob'] = $values['currentJob'];
+        if (array_key_exists('currentJobs', $values)) {
+            $merged['currentJobs'] = $values['currentJobs'];
         }
         if (array_key_exists('hypotheticalJobs', $values)) {
             $merged['hypotheticalJobs'] = $values['hypotheticalJobs'];
         }
+        $merged['currentJob'] = is_array($merged['currentJobs'] ?? null) ? ($merged['currentJobs'][0] ?? null) : null;
 
         return new self($merged);
     }
@@ -37,11 +42,11 @@ final class CareerCompInputs
     {
         $startYear = (int) date('Y');
 
-        return [
+        $defaults = [
             'horizonYears' => 10,
             'startYear' => $startYear,
             'modelAssumptions' => ModelAssumptions::defaults(),
-            'currentJob' => [
+            'currentJobs' => [[
                 'id' => 'current',
                 'name' => 'Current role',
                 'startDate' => null,
@@ -50,6 +55,7 @@ final class CareerCompInputs
                     'currentJobNoticeWeeks' => null,
                     'timeOffBetweenJobsWeeks' => null,
                 ],
+                'retainedCurrentJobIds' => [],
                 'company' => [
                     'type' => 'public',
                     'currentSharePrice' => 80.0,
@@ -96,7 +102,7 @@ final class CareerCompInputs
                     'mediumPct' => 5.0,
                     'highPct' => 10.0,
                 ],
-            ],
+            ]],
             'hypotheticalJobs' => [[
                 'id' => 'hyp-1',
                 'name' => 'Private offer',
@@ -106,6 +112,7 @@ final class CareerCompInputs
                     'currentJobNoticeWeeks' => null,
                     'timeOffBetweenJobsWeeks' => null,
                 ],
+                'retainedCurrentJobIds' => [],
                 'company' => [
                     'type' => 'private',
                     'currentSharePrice' => 0.0,
@@ -174,6 +181,10 @@ final class CareerCompInputs
                 ],
             ]],
         ];
+
+        $defaults['currentJob'] = $defaults['currentJobs'][0];
+
+        return $defaults;
     }
 
     /**
@@ -181,7 +192,10 @@ final class CareerCompInputs
      */
     public function toArray(): array
     {
-        return $this->values;
+        $values = $this->values;
+        $values['currentJob'] = is_array($values['currentJobs'] ?? null) ? ($values['currentJobs'][0] ?? null) : null;
+
+        return $values;
     }
 
     public function value(string $path): mixed
@@ -225,9 +239,7 @@ final class CareerCompInputs
 
     public function currentJob(): ?JobSpec
     {
-        $job = $this->value('currentJob');
-
-        return JobSpec::nullableFromArray(is_array($job) ? $job : null, true);
+        return $this->currentJobs()[0] ?? null;
     }
 
     public function modelAssumptions(): ModelAssumptions
@@ -235,6 +247,22 @@ final class CareerCompInputs
         $assumptions = $this->value('modelAssumptions');
 
         return ModelAssumptions::fromArray(is_array($assumptions) ? $assumptions : []);
+    }
+
+    /**
+     * @return list<JobSpec>
+     */
+    public function currentJobs(): array
+    {
+        $jobs = $this->value('currentJobs');
+        if (! is_array($jobs)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            fn (mixed $job): ?JobSpec => JobSpec::nullableFromArray(is_array($job) ? $job : null, true),
+            $jobs,
+        )));
     }
 
     /**
@@ -251,6 +279,64 @@ final class CareerCompInputs
             fn (mixed $job): ?JobSpec => JobSpec::nullableFromArray(is_array($job) ? $job : null, false),
             $jobs,
         )));
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return list<array<string, mixed>>|null
+     */
+    private static function currentJobsFromInput(array $values): ?array
+    {
+        if (array_key_exists('currentJobs', $values)) {
+            if (array_key_exists('currentJob', $values) && self::currentJobsMatchDefault($values['currentJobs'])) {
+                if ($values['currentJob'] === null) {
+                    return [];
+                }
+
+                if (is_array($values['currentJob']) && self::legacyCurrentJobDiffersFromDefault($values['currentJob'])) {
+                    return [$values['currentJob']];
+                }
+            }
+
+            return is_array($values['currentJobs'])
+                ? array_values(array_filter($values['currentJobs'], 'is_array'))
+                : [];
+        }
+
+        if (! array_key_exists('currentJob', $values)) {
+            return null;
+        }
+
+        return is_array($values['currentJob']) ? [$values['currentJob']] : [];
+    }
+
+    /**
+     * Preserve the old `CareerCompInputs::defaults(); $inputs['currentJob']...` mutation patterns.
+     * Real canonical payloads still win whenever `currentJobs` is empty or differs from defaults.
+     */
+    private static function currentJobsMatchDefault(mixed $currentJobs): bool
+    {
+        if (! is_array($currentJobs)) {
+            return false;
+        }
+
+        $jobs = array_values(array_filter($currentJobs, 'is_array'));
+        $defaultCurrentJob = self::defaults()['currentJobs'][0] ?? null;
+
+        return count($jobs) === 1 && is_array($defaultCurrentJob) && $jobs[0] == $defaultCurrentJob;
+    }
+
+    /**
+     * @param  array<string, mixed>  $legacyCurrentJob
+     */
+    private static function legacyCurrentJobDiffersFromDefault(array $legacyCurrentJob): bool
+    {
+        $defaultCurrentJob = self::defaults()['currentJobs'][0] ?? null;
+        if (! is_array($defaultCurrentJob)) {
+            return false;
+        }
+
+        return $legacyCurrentJob != $defaultCurrentJob;
     }
 
     /**

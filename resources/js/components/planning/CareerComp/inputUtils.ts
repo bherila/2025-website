@@ -22,6 +22,19 @@ function stripNulls(value: unknown): unknown {
   )
 }
 
+function normalizeLegacyCurrentJobs(rawInputs: unknown): unknown {
+  if (!isRecord(rawInputs)) {
+    return rawInputs
+  }
+
+  const currentJobs = 'currentJobs' in rawInputs
+    ? rawInputs.currentJobs
+    : ('currentJob' in rawInputs ? (isRecord(rawInputs.currentJob) ? [rawInputs.currentJob] : []) : undefined)
+  const withoutLegacy = Object.fromEntries(Object.entries(rawInputs).filter(([key]) => key !== 'currentJob'))
+
+  return currentJobs === undefined ? withoutLegacy : { ...withoutLegacy, currentJobs }
+}
+
 function mergeDefaults<T>(defaults: T, incoming: unknown): T {
   if (Array.isArray(defaults)) {
     return (Array.isArray(incoming) ? incoming : defaults) as T
@@ -67,6 +80,7 @@ function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
       currentJobNoticeWeeks: job.transitionOverride.currentJobNoticeWeeks,
       timeOffBetweenJobsWeeks: job.transitionOverride.timeOffBetweenJobsWeeks,
     },
+    retainedCurrentJobIds: [...new Set(job.retainedCurrentJobIds.map((id) => id.trim()).filter(Boolean))],
     grantTypes,
     company: {
       ...job.company,
@@ -92,9 +106,11 @@ function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
 }
 
 export function normalizeCareerCompInputs(rawInputs: unknown): CareerCompInputs {
-  const merged = mergeDefaults(DEFAULT_CAREER_COMP_INPUTS, stripNulls(rawInputs))
+  const merged = mergeDefaults(DEFAULT_CAREER_COMP_INPUTS, stripNulls(normalizeLegacyCurrentJobs(rawInputs)))
   const parsed = careerCompInputsSchema.safeParse(merged)
   const inputs = parsed.success ? parsed.data : DEFAULT_CAREER_COMP_INPUTS
+  const currentJobs = inputs.currentJobs.map((job, index) => normalizeJob(job, `current-${index + 1}`))
+  const currentJobIds = new Set(currentJobs.map((job) => job.id))
 
   return {
     ...inputs,
@@ -102,9 +118,16 @@ export function normalizeCareerCompInputs(rawInputs: unknown): CareerCompInputs 
     // does not pass client normalization only to 422 on compute.
     horizonYears: Math.min(30, Math.max(1, Math.round(inputs.horizonYears))),
     startYear: Math.max(1900, Math.round(inputs.startYear)),
-    currentJob: inputs.currentJob ? normalizeJob(inputs.currentJob, 'current') : null,
+    currentJobs,
     hypotheticalJobs: inputs.hypotheticalJobs.length > 0
-      ? inputs.hypotheticalJobs.map((job, index) => normalizeJob(job, `hyp-${index + 1}`))
+      ? inputs.hypotheticalJobs.map((job, index) => {
+          const normalizedJob = normalizeJob(job, `hyp-${index + 1}`)
+
+          return {
+            ...normalizedJob,
+            retainedCurrentJobIds: normalizedJob.retainedCurrentJobIds.filter((id) => currentJobIds.has(id)),
+          }
+        })
       : DEFAULT_CAREER_COMP_INPUTS.hypotheticalJobs,
   }
 }

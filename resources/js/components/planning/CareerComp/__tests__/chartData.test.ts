@@ -8,6 +8,7 @@ describe('Career Comparison chart data mappers', () => {
       startYear: 2026,
       horizonYears: 2,
       currentJobId: 'salary-heavy',
+      currentJobIds: ['salary-heavy'],
       jobs: [
         {
           id: 'salary-heavy',
@@ -140,6 +141,7 @@ describe('Career Comparison chart data mappers', () => {
       startYear: 2026,
       horizonYears: 1,
       currentJobId: null,
+      currentJobIds: [],
       jobs: [{
         id: 'private-job',
         name: 'Private job',

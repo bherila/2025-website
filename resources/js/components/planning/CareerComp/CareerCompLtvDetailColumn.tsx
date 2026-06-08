@@ -133,8 +133,9 @@ function jobForId(projection: CareerCompProjection, jobId: string): JobProjectio
 }
 
 function inputJobForId(inputs: CareerCompInputs, jobId: string): JobSpec | null {
-  if (inputs.currentJob?.id === jobId) {
-    return inputs.currentJob
+  const currentJob = inputs.currentJobs.find((job) => job.id === jobId)
+  if (currentJob) {
+    return currentJob
   }
 
   return inputs.hypotheticalJobs.find((job) => job.id === jobId) ?? null

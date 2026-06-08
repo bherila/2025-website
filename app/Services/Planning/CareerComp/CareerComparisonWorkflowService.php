@@ -118,24 +118,27 @@ class CareerComparisonWorkflowService
     private function writeComparison(?CareerComparison $existing, CareerCompInputs $inputs, ?int $jobOwnerId, ?callable $metaForCreate, bool $preserveCurrent = false): CareerComparison
     {
         // When preserving a confidential current job the editor could not see, the submitted inputs
-        // carry `currentJob: null`. Re-hydrate the stored current job before projecting so the saved
-        // computed_json (currentJobId + deltas-vs-current) stays consistent with the preserved
-        // `current_job_id`, instead of being recorded as a no-current-job scenario.
+        // carry `currentJobs: []`. Re-hydrate the stored current jobs before projecting so the saved
+        // computed_json (currentJobIds + deltas-vs-current) stays consistent with the preserved
+        // `current_job_ids`, instead of being recorded as a no-current-job scenario.
         $projection = $this->calculator->project($this->projectionInputs($existing, $inputs, $preserveCurrent))->toArray();
 
         return DB::transaction(function () use ($existing, $inputs, $jobOwnerId, $metaForCreate, $preserveCurrent, $projection): CareerComparison {
             if ($existing instanceof CareerComparison) {
                 $staleJobIds = $this->referencedJobIds($existing);
-                if ($preserveCurrent && $existing->current_job_id !== null) {
-                    $staleJobIds = array_values(array_filter($staleJobIds, fn (int $id): bool => $id !== (int) $existing->current_job_id));
+                $existingCurrentJobIds = $this->currentJobRowIds($existing);
+                if ($preserveCurrent && $existingCurrentJobIds !== []) {
+                    $preserved = array_fill_keys($existingCurrentJobIds, true);
+                    $staleJobIds = array_values(array_filter($staleJobIds, fn (int $id): bool => ! isset($preserved[$id])));
                 }
 
                 $references = $this->persistJobs($inputs, $jobOwnerId, ! $preserveCurrent);
-                $currentJobId = $preserveCurrent ? $existing->current_job_id : $references['currentJobId'];
+                $currentJobIds = $preserveCurrent ? $existingCurrentJobIds : $references['currentJobIds'];
 
                 $existing->update([
                     'title' => $this->workflowTitle($inputs, $existing->title),
-                    'current_job_id' => $currentJobId,
+                    'current_job_id' => $currentJobIds[0] ?? null,
+                    'current_job_ids' => $currentJobIds,
                     'hypothetical_job_ids' => $references['hypotheticalJobIds'],
                     'computed_json' => $projection,
                 ]);
@@ -151,7 +154,8 @@ class CareerComparisonWorkflowService
                 'title' => $this->workflowTitle($inputs, null),
                 'is_snapshot' => false,
                 'last_active_at' => now(),
-                'current_job_id' => $references['currentJobId'],
+                'current_job_id' => $references['currentJobIds'][0] ?? null,
+                'current_job_ids' => $references['currentJobIds'],
                 'hypothetical_job_ids' => $references['hypotheticalJobIds'],
                 'computed_json' => $projection,
             ], $metaForCreate !== null ? $metaForCreate() : []));
@@ -160,23 +164,39 @@ class CareerComparisonWorkflowService
 
     /**
      * Inputs to project from: identical to the submitted inputs, except a preserved confidential
-     * current job (redacted to null in the submission) is re-hydrated from the stored row so the
-     * projection matches the `current_job_id` the save keeps.
+     * current jobs (redacted to an empty list in the submission) are re-hydrated from the stored
+     * rows so the projection matches the `current_job_ids` the save keeps.
      */
     private function projectionInputs(?CareerComparison $existing, CareerCompInputs $inputs, bool $preserveCurrent): CareerCompInputs
     {
-        if (! $preserveCurrent || ! $existing instanceof CareerComparison || $existing->current_job_id === null) {
+        if (! $preserveCurrent || ! $existing instanceof CareerComparison) {
             return $inputs;
         }
 
-        $storedCurrent = CareerJob::query()->find($existing->current_job_id);
+        $currentJobIds = $this->currentJobRowIds($existing);
+        if ($currentJobIds === []) {
+            return $inputs;
+        }
 
-        if (! $storedCurrent instanceof CareerJob) {
+        $storedCurrent = CareerJob::query()
+            ->whereIn('id', $currentJobIds)
+            ->get()
+            ->keyBy('id');
+
+        $currentJobs = [];
+        foreach ($currentJobIds as $id) {
+            $job = $storedCurrent->get($id);
+            if ($job instanceof CareerJob) {
+                $currentJobs[] = $job->spec_json;
+            }
+        }
+
+        if ($currentJobs === []) {
             return $inputs;
         }
 
         return CareerCompInputs::fromArray(array_replace($inputs->toArray(), [
-            'currentJob' => $storedCurrent->spec_json,
+            'currentJobs' => $currentJobs,
         ]));
     }
 
@@ -221,9 +241,11 @@ class CareerComparisonWorkflowService
 
     public function inputsFromComparison(CareerComparison $comparison): CareerCompInputs
     {
-        $currentJob = $comparison->current_job_id !== null
-            ? CareerJob::query()->find($comparison->current_job_id)
-            : null;
+        $currentJobIds = $this->currentJobRowIds($comparison);
+        $current = CareerJob::query()
+            ->whereIn('id', $currentJobIds)
+            ->get()
+            ->keyBy('id');
 
         $hypothetical = CareerJob::query()
             ->whereIn('id', $comparison->hypothetical_job_ids)
@@ -241,10 +263,18 @@ class CareerComparisonWorkflowService
             }
         }
 
+        $currentSpecs = [];
+        foreach ($currentJobIds as $id) {
+            $job = $current->get($id);
+            if ($job instanceof CareerJob) {
+                $currentSpecs[] = $job->spec_json;
+            }
+        }
+
         return CareerCompInputs::fromArray([
             'startYear' => $computed['startYear'] ?? $defaults['startYear'],
             'horizonYears' => $computed['horizonYears'] ?? $defaults['horizonYears'],
-            'currentJob' => $currentJob?->spec_json,
+            'currentJobs' => $currentSpecs,
             'hypotheticalJobs' => $hypotheticalSpecs,
         ]);
     }
@@ -269,15 +299,15 @@ class CareerComparisonWorkflowService
     }
 
     /**
-     * @return array{currentJobId: int|null, hypotheticalJobIds: list<int>}
+     * @return array{currentJobIds: list<int>, hypotheticalJobIds: list<int>}
      */
     private function persistJobs(CareerCompInputs $inputs, ?int $userId, bool $persistCurrent = true): array
     {
-        $currentJob = $persistCurrent ? $inputs->currentJob() : null;
-        $currentJobId = null;
+        $currentJobs = $persistCurrent ? $inputs->currentJobs() : [];
+        $currentJobIds = [];
 
-        if ($currentJob !== null) {
-            $currentJobId = CareerJob::query()->create([
+        foreach ($currentJobs as $currentJob) {
+            $currentJobIds[] = CareerJob::query()->create([
                 'user_id' => $userId,
                 'kind' => 'current',
                 'name' => $currentJob->name(),
@@ -296,7 +326,7 @@ class CareerComparisonWorkflowService
             ])->id;
         }
 
-        return ['currentJobId' => $currentJobId, 'hypotheticalJobIds' => $hypotheticalJobIds];
+        return ['currentJobIds' => $currentJobIds, 'hypotheticalJobIds' => $hypotheticalJobIds];
     }
 
     /**
@@ -304,7 +334,7 @@ class CareerComparisonWorkflowService
      */
     private function referencedJobIds(CareerComparison $comparison): array
     {
-        $ids = $comparison->current_job_id !== null ? [(int) $comparison->current_job_id] : [];
+        $ids = $this->currentJobRowIds($comparison);
 
         foreach ($comparison->hypothetical_job_ids as $id) {
             $ids[] = (int) $id;
@@ -331,10 +361,10 @@ class CareerComparisonWorkflowService
         CareerComparison::query()
             ->when($userId !== null, fn ($query) => $query->where('user_id', $userId), fn ($query) => $query->whereNull('user_id'))
             ->where('id', '!=', $keepComparisonId)
-            ->get(['current_job_id', 'hypothetical_job_ids'])
+            ->get(['current_job_id', 'current_job_ids', 'hypothetical_job_ids'])
             ->each(function (CareerComparison $other) use (&$referenced): void {
-                if ($other->current_job_id !== null) {
-                    $referenced[(int) $other->current_job_id] = true;
+                foreach ($this->currentJobRowIds($other) as $id) {
+                    $referenced[$id] = true;
                 }
 
                 foreach ($other->hypothetical_job_ids as $id) {
@@ -521,7 +551,26 @@ class CareerComparisonWorkflowService
             return $trimmed;
         }
 
-        return (string) ($inputs->value('currentJob.name') ?: 'Career comparison');
+        return $inputs->currentJob()?->name() ?? 'Career comparison';
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function currentJobRowIds(CareerComparison $comparison): array
+    {
+        $ids = is_array($comparison->current_job_ids ?? null)
+            ? array_values(array_filter(array_map(
+                static fn (mixed $id): int => (int) $id,
+                $comparison->current_job_ids,
+            ), static fn (int $id): bool => $id > 0))
+            : [];
+
+        if ($ids === [] && $comparison->current_job_id !== null) {
+            $ids[] = (int) $comparison->current_job_id;
+        }
+
+        return array_values(array_unique($ids));
     }
 
     private function shortCode(): string

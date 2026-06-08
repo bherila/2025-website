@@ -17,7 +17,7 @@ describe('careerCompUrlState', () => {
           timeOffBetweenJobsWeeks: 1,
         },
       },
-      currentJob: { ...baseJob, id: 'current', name: 'Current job' },
+      currentJobs: [{ ...baseJob, id: 'current', name: 'Current job' }],
       hypotheticalJobs: [
         {
           ...baseJob,

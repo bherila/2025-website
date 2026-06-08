@@ -22,11 +22,11 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
 
     const normalized = normalizeCareerCompInputs(serverInputs)
 
-    expect(normalized.currentJob).not.toBeNull()
-    expect(normalized.currentJob?.id).toBe('current')
-    expect(normalized.currentJob?.startDate).toBeNull()
-    expect(normalized.currentJob?.rsuGrants).toHaveLength(1)
-    expect(normalized.currentJob?.rsuGrants[0]?.shareCount).toBe(1000)
+    expect(normalized.currentJobs).toHaveLength(1)
+    expect(normalized.currentJobs[0]?.id).toBe('current')
+    expect(normalized.currentJobs[0]?.startDate).toBeNull()
+    expect(normalized.currentJobs[0]?.rsuGrants).toHaveLength(1)
+    expect(normalized.currentJobs[0]?.rsuGrants[0]?.shareCount).toBe(1000)
   })
 
   it('clamps horizonYears to the backend-accepted maximum of 30', () => {
@@ -109,5 +109,32 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
     expect(job?.refresher.optionPctOfFullyDilutedShares).toBe(0)
     expect(job?.rsuGrants).toHaveLength(0)
     expect(job?.optionGrants).toHaveLength(0)
+  })
+
+  it('keeps retained current job ids only when they reference submitted current jobs', () => {
+    const currentJob = {
+      id: 'current-main',
+      name: 'Current role',
+      company: { type: 'public', currentSharePrice: 25, fourNineA: 0, fullyDilutedShares: 0, annualDilutionPct: 0, liquidityDate: null },
+      comp: { baseSalary: 100000, cashBonus: 0 },
+      rsuGrants: [],
+      optionGrants: [],
+      growthBands: { lowPct: 0, mediumPct: 5, highPct: 10 },
+    }
+    const offer = {
+      ...currentJob,
+      id: 'hyp-1',
+      name: 'Offer 1',
+      retainedCurrentJobIds: ['current-main', 'missing-current', ' current-main '],
+    }
+
+    const normalized = normalizeCareerCompInputs({
+      horizonYears: 5,
+      startYear: 2026,
+      currentJobs: [currentJob],
+      hypotheticalJobs: [offer],
+    })
+
+    expect(normalized.hypotheticalJobs[0]?.retainedCurrentJobIds).toEqual(['current-main'])
   })
 })

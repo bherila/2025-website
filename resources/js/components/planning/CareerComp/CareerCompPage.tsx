@@ -535,8 +535,11 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     }
 
     try {
-      const response = await importRsuIntoCurrentJob(normalizedInputs.currentJob)
-      setInputs({ ...normalizedInputs, currentJob: response.currentJob })
+      const response = await importRsuIntoCurrentJob(normalizedInputs.currentJobs[0] ?? null)
+      const currentJobs = normalizedInputs.currentJobs.length > 0
+        ? normalizedInputs.currentJobs.map((job, index) => (index === 0 ? response.currentJob : job))
+        : [response.currentJob]
+      setInputs({ ...normalizedInputs, currentJobs })
       setStatus(response.importedGrants.length > 0 ? `Imported ${response.importedGrants.length} RSU grant${response.importedGrants.length === 1 ? '' : 's'}.` : 'No RSU awards found to import.')
     } catch (error: unknown) {
       setStatus(error instanceof Error ? error.message : String(error))
@@ -707,7 +710,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
             <p className="max-w-2xl text-sm text-muted-foreground">
               {isShareView
                 ? 'Anyone with this link can edit this scenario; changes save to the link.'
-                : 'Compare a current job (or no job) against hypothetical offers with cash compensation, equity liquidity, and vesting views.'}
+                : 'Compare one or more current jobs against hypothetical offers with cash compensation, equity liquidity, and vesting views.'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

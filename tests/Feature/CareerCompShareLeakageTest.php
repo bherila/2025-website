@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Models\CareerJob;
 use App\Models\CareerComparison;
+use App\Models\CareerJob;
 use App\Models\User;
-use App\Services\Planning\CareerComp\ComparisonShareRedactor;
 use App\Services\Planning\CareerComp\CareerCompCalculator;
 use App\Services\Planning\CareerComp\CareerCompInputs;
+use App\Services\Planning\CareerComp\ComparisonShareRedactor;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
@@ -16,6 +16,10 @@ class CareerCompShareLeakageTest extends TestCase
     private const string CURRENT_SALARY = '424242';
 
     private const string CURRENT_NAME = 'Confidential Current';
+
+    private const string SIDE_CURRENT_SALARY = '131313';
+
+    private const string SIDE_CURRENT_NAME = 'Confidential Side Current';
 
     public function test_exclusive_share_html_omits_current_job_for_non_owner(): void
     {
@@ -28,8 +32,12 @@ class CareerCompShareLeakageTest extends TestCase
         $content = (string) $response->getContent();
         $this->assertStringNotContainsString(self::CURRENT_SALARY, $content);
         $this->assertStringNotContainsString(self::CURRENT_NAME, $content);
+        $this->assertStringNotContainsString(self::SIDE_CURRENT_SALARY, $content);
+        $this->assertStringNotContainsString(self::SIDE_CURRENT_NAME, $content);
         $this->assertStringContainsString('"currentJob":null', $content);
+        $this->assertStringContainsString('"currentJobs":[]', $content);
         $this->assertStringContainsString('"currentJobId":null', $content);
+        $this->assertStringContainsString('"currentJobIds":[]', $content);
         $this->assertStringContainsString('Public Offer', $content);
     }
 
@@ -43,13 +51,14 @@ class CareerCompShareLeakageTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString(self::CURRENT_SALARY, (string) $response->getContent());
+        $this->assertStringContainsString(self::SIDE_CURRENT_SALARY, (string) $response->getContent());
     }
 
     public function test_exclusive_share_xlsx_export_omits_current_job(): void
     {
         $inputs = $this->scenarioInputs();
         $projection = app(CareerCompCalculator::class)->project(CareerCompInputs::fromArray($inputs))->toArray();
-        $redacted = app(ComparisonShareRedactor::class)->redact($inputs, $projection, 'current');
+        $redacted = app(ComparisonShareRedactor::class)->redact($inputs, $projection, ['current', 'current-side']);
 
         $response = $this->postJson('/api/financial-planning/career-comparison/export-xlsx', [
             'inputs' => $redacted['inputs'],
@@ -60,6 +69,8 @@ class CareerCompShareLeakageTest extends TestCase
         $blob = implode("\n", $cells);
         $this->assertStringNotContainsString(self::CURRENT_SALARY, $blob);
         $this->assertStringNotContainsString(self::CURRENT_NAME, $blob);
+        $this->assertStringNotContainsString(self::SIDE_CURRENT_SALARY, $blob);
+        $this->assertStringNotContainsString(self::SIDE_CURRENT_NAME, $blob);
         $this->assertStringContainsString('Public Offer', $blob);
     }
 
@@ -69,13 +80,22 @@ class CareerCompShareLeakageTest extends TestCase
     private function scenarioInputs(): array
     {
         $inputs = CareerCompInputs::defaults();
-        $inputs['currentJob']['name'] = self::CURRENT_NAME;
-        $inputs['currentJob']['comp']['baseSalary'] = (float) self::CURRENT_SALARY;
+        $mainCurrent = $inputs['currentJob'];
+        $mainCurrent['id'] = 'current';
+        $mainCurrent['name'] = self::CURRENT_NAME;
+        $mainCurrent['comp']['baseSalary'] = (float) self::CURRENT_SALARY;
         // Decreasing growth bands force a calculator warning that embeds the current job name,
         // so the leakage assertions exercise warning redaction, not just job/series removal.
-        $inputs['currentJob']['growthBands'] = ['lowPct' => 10.0, 'mediumPct' => 5.0, 'highPct' => 0.0];
+        $mainCurrent['growthBands'] = ['lowPct' => 10.0, 'mediumPct' => 5.0, 'highPct' => 0.0];
+        $sideCurrent = $mainCurrent;
+        $sideCurrent['id'] = 'current-side';
+        $sideCurrent['name'] = self::SIDE_CURRENT_NAME;
+        $sideCurrent['comp']['baseSalary'] = (float) self::SIDE_CURRENT_SALARY;
+        $inputs['currentJobs'] = [$mainCurrent, $sideCurrent];
+        $inputs['currentJob'] = $mainCurrent;
         $inputs['hypotheticalJobs'][0]['name'] = 'Public Offer';
         $inputs['hypotheticalJobs'][0]['comp']['baseSalary'] = 191919.0;
+        $inputs['hypotheticalJobs'][0]['retainedCurrentJobIds'] = ['current-side'];
 
         return $inputs;
     }
@@ -84,15 +104,18 @@ class CareerCompShareLeakageTest extends TestCase
     {
         $inputs = CareerCompInputs::fromArray($this->scenarioInputs());
         $projection = app(CareerCompCalculator::class)->project($inputs)->toArray();
-        $currentJob = $inputs->currentJob();
+        $currentJobs = $inputs->currentJobs();
         $hypothetical = $inputs->hypotheticalJobs()[0];
 
-        $current = CareerJob::factory()->create([
-            'user_id' => $owner->id,
-            'kind' => 'current',
-            'name' => $currentJob?->name(),
-            'spec_json' => $currentJob?->toArray(),
-        ]);
+        $currentJobIds = [];
+        foreach ($currentJobs as $currentJob) {
+            $currentJobIds[] = CareerJob::factory()->create([
+                'user_id' => $owner->id,
+                'kind' => 'current',
+                'name' => $currentJob->name(),
+                'spec_json' => $currentJob->toArray(),
+            ])->id;
+        }
         $offer = CareerJob::factory()->create([
             'user_id' => $owner->id,
             'kind' => 'hypothetical',
@@ -102,7 +125,8 @@ class CareerCompShareLeakageTest extends TestCase
 
         return CareerComparison::factory()->create([
             'user_id' => $owner->id,
-            'current_job_id' => $current->id,
+            'current_job_id' => $currentJobIds[0] ?? null,
+            'current_job_ids' => $currentJobIds,
             'hypothetical_job_ids' => [$offer->id],
             'share_includes_current' => false,
             'computed_json' => $projection,

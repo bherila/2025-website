@@ -2,6 +2,9 @@
     "startYear": 2026,
     "horizonYears": 10,
     "currentJobId": "current",
+    "currentJobIds": [
+        "current"
+    ],
     "jobs": [
         {
             "id": "current",
@@ -561,7 +564,13 @@
                     }
                 ],
                 "form6251": []
-            }
+            },
+            "componentJobIds": [
+                "current"
+            ],
+            "componentJobNames": [
+                "Current role"
+            ]
         },
         {
             "id": "hyp-1",
@@ -1496,7 +1505,17 @@
                         }
                     }
                 ]
-            }
+            },
+            "retainedCurrentJobIds": [],
+            "quitCurrentJobIds": [
+                "current"
+            ],
+            "componentJobIds": [
+                "hyp-1"
+            ],
+            "componentJobNames": [
+                "Private offer"
+            ]
         }
     ],
     "deltasVsCurrent": [

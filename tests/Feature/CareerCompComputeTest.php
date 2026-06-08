@@ -162,6 +162,51 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('deltasVsCurrent.0.cashCompDelta', 100000);
     }
 
+    public function test_compute_endpoint_aggregates_multiple_current_jobs_and_retains_selected_current_jobs_per_offer(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 2,
+                'startYear' => 2026,
+                'currentJobs' => [
+                    $this->cashOnlyJob('current-main', 'Main job', 100000),
+                    $this->cashOnlyJob('current-side', 'Side job', 20000),
+                ],
+                'hypotheticalJobs' => [
+                    [
+                        ...$this->cashOnlyJob('offer-retain-side', 'Offer retaining side role', 150000),
+                        'startDate' => '2027-01-01',
+                        'retainedCurrentJobIds' => ['current-side'],
+                    ],
+                    [
+                        ...$this->cashOnlyJob('offer-quit-all', 'Offer quitting all current roles', 150000),
+                        'startDate' => '2027-01-01',
+                    ],
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('currentJobId', 'current-baseline');
+        $response->assertJsonPath('currentJobIds', ['current-main', 'current-side']);
+        $response->assertJsonPath('jobs.0.id', 'current-baseline');
+        $response->assertJsonPath('jobs.0.isCurrent', true);
+        $response->assertJsonPath('jobs.0.annual.0.salary', 120000);
+        $response->assertJsonPath('jobs.0.annual.1.salary', 120000);
+        $response->assertJsonPath('jobs.1.retainedCurrentJobIds', ['current-side']);
+        $response->assertJsonPath('jobs.1.quitCurrentJobIds', ['current-main']);
+        $response->assertJsonPath('jobs.1.annual.0.salary', 120000);
+        $response->assertJsonPath('jobs.1.annual.1.salary', 170000);
+        $response->assertJsonPath('jobs.1.lifetime.totalCashComp', 290000);
+        $response->assertJsonPath('jobs.2.retainedCurrentJobIds', []);
+        $response->assertJsonPath('jobs.2.quitCurrentJobIds', ['current-main', 'current-side']);
+        $response->assertJsonPath('jobs.2.annual.0.salary', 120000);
+        $response->assertJsonPath('jobs.2.annual.1.salary', 150000);
+        $response->assertJsonPath('jobs.2.lifetime.totalCashComp', 270000);
+        $response->assertJsonPath('deltasVsCurrent.0.cashCompDelta', 50000);
+        $response->assertJsonPath('deltasVsCurrent.1.cashCompDelta', 30000);
+    }
+
     public function test_compute_endpoint_transition_override_cuts_off_current_job_vesting(): void
     {
         $currentJob = $this->cashOnlyJob('current', 'Current job', 0);
@@ -195,6 +240,26 @@ class CareerCompComputeTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('jobs.1.annual.0.vestedLiquidEquity', 500);
         $response->assertJsonPath('jobs.1.lifetime.totalEquityValue.medium', 500);
+    }
+
+    public function test_compute_endpoint_ignores_prior_resignation_date_when_offer_has_no_start_date(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 1,
+                'startYear' => 2026,
+                'currentJob' => $this->cashOnlyJob('current', 'Current job', 100000),
+                'hypotheticalJobs' => [[
+                    ...$this->cashOnlyJob('hyp-1', 'Offer without start date', 200000),
+                    'priorJobResignationDate' => '2026-06-01',
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.1.annual.0.salary', 200000);
+        $response->assertJsonPath('jobs.1.lifetime.totalCashComp', 200000);
+        $response->assertJsonPath('deltasVsCurrent.0.cashCompDelta', 100000);
     }
 
     public function test_compute_endpoint_keeps_projection_raise_offset_for_past_start_dates(): void
