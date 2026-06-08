@@ -29,6 +29,20 @@ class IrsFieldValueFormatterTest extends TestCase
             'checkedWhen' => 'head_of_household',
             'onValue' => '4',
         ]));
+        $this->assertSame('5', $formatter->format('qualifying_surviving_spouse', [
+            'format' => 'checkbox',
+            'checkedValues' => [
+                'married_filing_jointly' => '2',
+                'qualifying_surviving_spouse' => '5',
+            ],
+        ]));
+        $this->assertFalse($formatter->format('single', [
+            'format' => 'checkbox',
+            'checkedValues' => [
+                'married_filing_jointly' => '2',
+                'qualifying_surviving_spouse' => '5',
+            ],
+        ]));
     }
 
     public function test_formats_identifiers_dates_and_phone_numbers(): void

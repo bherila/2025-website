@@ -65,6 +65,12 @@ class IrsFieldValueFormatter
      */
     private function checkbox(mixed $value, array $mapping): string|bool
     {
+        if (is_array($mapping['checkedValues'] ?? null)) {
+            $checkedValue = $mapping['checkedValues'][(string) $value] ?? null;
+
+            return is_scalar($checkedValue) ? (string) $checkedValue : false;
+        }
+
         if (array_key_exists('checkedWhen', $mapping)) {
             $checked = (string) $value === (string) $mapping['checkedWhen'];
 

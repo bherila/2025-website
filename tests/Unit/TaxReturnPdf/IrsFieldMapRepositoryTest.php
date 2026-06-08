@@ -52,6 +52,25 @@ class IrsFieldMapRepositoryTest extends TestCase
         ]);
     }
 
+    public function test_form_1040_filing_status_map_uses_one_mapping_per_shared_pdf_radio_field(): void
+    {
+        $map = app(IrsFieldMapRepository::class)->map(2025, 'form-1040');
+        $mappings = collect($map->mappings)
+            ->filter(static fn (array $mapping): bool => str_starts_with((string) ($mapping['key'] ?? ''), 'filing_status.'))
+            ->values();
+        $pdfFields = $mappings->pluck('pdfField');
+        $byPdfField = $mappings->keyBy('pdfField');
+
+        $this->assertSame($pdfFields->all(), $pdfFields->unique()->values()->all());
+        $this->assertSame(['single' => '1', 'head_of_household' => '4'], $byPdfField->get('c1_8[0]')['checkedValues'] ?? null);
+        $this->assertSame([
+            'married_filing_jointly' => '2',
+            'qualifying_surviving_spouse' => '5',
+        ], $byPdfField->get('c1_8[1]')['checkedValues'] ?? null);
+        $this->assertSame('married_filing_separately', $byPdfField->get('c1_8[2]')['checkedWhen'] ?? null);
+        $this->assertSame('3', $byPdfField->get('c1_8[2]')['onValue'] ?? null);
+    }
+
     public function test_validation_fails_when_pdf_field_is_missing(): void
     {
         $this->expectException(RuntimeException::class);

@@ -66,8 +66,10 @@ class IrsFieldMapRepository
                     $errors[] = "{$key} maps checkbox PDF field {$pdfField}, but no on-value was found in the template.";
                 }
 
-                if (isset($mapping['onValue']) && ! in_array((string) $mapping['onValue'], $onValues, true)) {
-                    $errors[] = "{$key} maps checkbox PDF field {$pdfField} to unknown on-value {$mapping['onValue']}.";
+                foreach ($this->mappedCheckboxOnValues($mapping) as $mappedOnValue) {
+                    if (! in_array($mappedOnValue, $onValues, true)) {
+                        $errors[] = "{$key} maps checkbox PDF field {$pdfField} to unknown on-value {$mappedOnValue}.";
+                    }
                 }
             }
         }
@@ -121,5 +123,28 @@ class IrsFieldMapRepository
         }
 
         return array_values(array_unique($onValues));
+    }
+
+    /**
+     * @param  array<string, mixed>  $mapping
+     * @return array<int, string>
+     */
+    private function mappedCheckboxOnValues(array $mapping): array
+    {
+        $mappedOnValues = [];
+
+        if (isset($mapping['onValue'])) {
+            $mappedOnValues[] = (string) $mapping['onValue'];
+        }
+
+        if (is_array($mapping['checkedValues'] ?? null)) {
+            foreach ($mapping['checkedValues'] as $checkedValue) {
+                if (is_scalar($checkedValue)) {
+                    $mappedOnValues[] = (string) $checkedValue;
+                }
+            }
+        }
+
+        return array_values(array_unique($mappedOnValues));
     }
 }
