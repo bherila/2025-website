@@ -17,6 +17,7 @@ export type LiquidityMode = CareerCompLiquidityMode
 interface LiquidityOverTimeChartProps {
   projection: CareerCompProjection
   initialMode?: LiquidityMode | undefined
+  initialBand?: CareerCompLtvBand | undefined
   onOpenDetail?: ((jobId: string, year: number, band: CareerCompLtvBand, mode: LiquidityMode) => void) | undefined
 }
 
@@ -82,11 +83,11 @@ function LiquidityDrillButton({
   )
 }
 
-export function LiquidityOverTimeChart({ projection, initialMode = 'preTax', onOpenDetail }: LiquidityOverTimeChartProps): ReactElement {
+export function LiquidityOverTimeChart({ projection, initialMode = 'preTax', initialBand = 'medium', onOpenDetail }: LiquidityOverTimeChartProps): ReactElement {
   const hasAfterTaxData = hasAfterTaxLiquidity(projection)
   const [requestedLiquidityMode, setRequestedLiquidityMode] = useState<LiquidityMode>(initialMode)
   const liquidityMode = requestedLiquidityMode === 'afterTax' && hasAfterTaxData ? 'afterTax' : 'preTax'
-  const [selectedBand, setSelectedBand] = useState<ProjectionBand>('medium')
+  const [selectedBand, setSelectedBand] = useState<ProjectionBand>(initialBand)
   const [valueScale, setValueScale] = useState<ValueScale>('linear')
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>(() => projection.jobs.map((job) => job.id))
   const [jobSelectionTouched, setJobSelectionTouched] = useState(false)

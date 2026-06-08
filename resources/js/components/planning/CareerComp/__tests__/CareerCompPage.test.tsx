@@ -212,13 +212,33 @@ describe('CareerCompPage', () => {
   })
 
   it('opens liquidity detail columns from deep links', () => {
-    const detailInstance = liquidityDetailRouteInstance({ jobId: 'hyp-1', year: 2027, band: 'medium', mode: 'afterTax' })
+    const detailInstance = liquidityDetailRouteInstance({ jobId: 'hyp-1', year: 2027, band: 'high', mode: 'afterTax' })
     window.history.replaceState(null, '', `/financial-planning/career-comparison#/liquidity-over-time/liquidity-detail:${encodeURIComponent(detailInstance)}`)
 
     const { container } = render(<CareerCompPage initialData={baseInitialData({ projection: projectionWithAfterTax(sampleCareerCompProjection) })} />)
 
     expect(container.querySelector('section[data-column-id="liquidity-detail"]')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'After tax' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('Offer 1 2027 after-tax liquidity')).toBeInTheDocument()
+  })
+
+  it('syncs a mounted liquidity chart when hash navigation changes mode and band', async () => {
+    window.history.replaceState(null, '', '/financial-planning/career-comparison#/liquidity-over-time')
+
+    const { container } = render(<CareerCompPage initialData={baseInitialData({ projection: projectionWithAfterTax(sampleCareerCompProjection) })} />)
+
+    expect(container.querySelector('section[data-column-id="liquidity-over-time"]')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Before tax' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Medium' })).toHaveAttribute('aria-pressed', 'true')
+
+    const detailInstance = liquidityDetailRouteInstance({ jobId: 'hyp-1', year: 2027, band: 'high', mode: 'afterTax' })
+    window.history.pushState(null, '', `/financial-planning/career-comparison#/liquidity-over-time/liquidity-detail:${encodeURIComponent(detailInstance)}`)
+    fireEvent(window, new Event('hashchange'))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'After tax' })).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true')
+    expect(container.querySelector('section[data-column-id="liquidity-detail"]')).toBeInTheDocument()
     expect(screen.getByText('Offer 1 2027 after-tax liquidity')).toBeInTheDocument()
   })
 

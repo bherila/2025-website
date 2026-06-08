@@ -21,6 +21,7 @@ interface ProjectionProps {
 
 interface ProjectionLiquidityProps extends ProjectionProps {
   initialMode?: LiquidityMode | undefined
+  initialBand?: CareerCompLtvBand | undefined
   onOpenDetail?: ((jobId: string, year: number, band: CareerCompLtvBand, mode: CareerCompLiquidityMode) => void) | undefined
 }
 
@@ -36,8 +37,8 @@ const LTV_DRILL_LABELS: Record<CareerCompLtvMetric, string> = {
   'paper-total': 'paper total',
 }
 
-export function ProjectionLiquidity({ projection, initialMode = 'preTax', onOpenDetail }: ProjectionLiquidityProps): ReactElement {
-  return <LiquidityOverTimeChart projection={projection} initialMode={initialMode} onOpenDetail={onOpenDetail} />
+export function ProjectionLiquidity({ projection, initialMode = 'preTax', initialBand, onOpenDetail }: ProjectionLiquidityProps): ReactElement {
+  return <LiquidityOverTimeChart projection={projection} initialMode={initialMode} initialBand={initialBand} onOpenDetail={onOpenDetail} />
 }
 
 export function ProjectionAnnualFreeCashFlow({ projection }: ProjectionProps): ReactElement {

@@ -78,7 +78,7 @@ interface CareerCompColumnMeta {
 
 type CareerCompColumnState =
   | { kind: 'form'; id: CareerCompFormSectionId }
-  | { kind: 'result'; id: CareerCompResultViewId; initialLiquidityMode?: LiquidityMode | undefined }
+  | { kind: 'result'; id: CareerCompResultViewId; initialLiquidityMode?: LiquidityMode | undefined; initialLiquidityBand?: CareerCompLtvBand | undefined }
   | { kind: 'grant'; editorKey: string; jobId: string; grantType: GrantType; grantId?: string | undefined }
   | { kind: 'valuationTimeline'; jobId: string }
   | { kind: 'liquidityDetail'; jobId: string; year: number; band: CareerCompLtvBand; mode: CareerCompLiquidityMode }
@@ -88,6 +88,7 @@ type CareerCompColumnState =
 interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, CareerCompResultViewId, CareerCompColumnMeta> {
   render: (projection: CareerCompProjection, options?: {
     initialLiquidityMode?: LiquidityMode | undefined
+    initialLiquidityBand?: CareerCompLtvBand | undefined
     onOpenLiquidityDetail?: (jobId: string, year: number, band: CareerCompLtvBand, mode: CareerCompLiquidityMode) => void
     onOpenLtvDetail?: (jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand) => void
   }) => ReactElement
@@ -102,7 +103,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     component: notRenderedViaMillerShell,
     meta: { description: 'Compare liquidity by tax mode, job, growth band, and scale.', icon: LineChart },
     size: 'full',
-    render: (projection, options) => <ProjectionLiquidity projection={projection} initialMode={options?.initialLiquidityMode} onOpenDetail={options?.onOpenLiquidityDetail} />,
+    render: (projection, options) => <ProjectionLiquidity projection={projection} initialMode={options?.initialLiquidityMode} initialBand={options?.initialLiquidityBand} onOpenDetail={options?.onOpenLiquidityDetail} />,
   },
   {
     id: 'annual-fcf',
@@ -262,7 +263,7 @@ function routeToColumnStack(route: CareerCompRoute): CareerCompColumnState[] {
 
   return stack.map((column) => (
     column.kind === 'result' && column.id === 'liquidity-over-time'
-      ? { ...column, initialLiquidityMode: liquidityDetail.mode }
+      ? { ...column, initialLiquidityMode: liquidityDetail.mode, initialLiquidityBand: liquidityDetail.band }
       : column
   ))
 }
@@ -604,8 +605,8 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   function openLiquidityDetail(jobId: string, year: number, band: CareerCompLtvBand, mode: CareerCompLiquidityMode): void {
     setColumnStack((stack) => {
       const liquidityColumn: CareerCompColumnState = stack[0]?.kind === 'result' && stack[0].id === 'liquidity-over-time'
-        ? { ...stack[0], initialLiquidityMode: mode }
-        : { kind: 'result', id: 'liquidity-over-time', initialLiquidityMode: mode }
+        ? { ...stack[0], initialLiquidityMode: mode, initialLiquidityBand: band }
+        : { kind: 'result', id: 'liquidity-over-time', initialLiquidityMode: mode, initialLiquidityBand: band }
 
       return [liquidityColumn, { kind: 'liquidityDetail', jobId, year, band, mode }]
     })
@@ -735,14 +736,17 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     }
 
     const view = findMeta(RESULT_VIEWS, column.id)
+    const resultKey = column.id === 'liquidity-over-time'
+      ? `result:${column.id}:${column.initialLiquidityMode ?? 'preTax'}:${column.initialLiquidityBand ?? 'medium'}`
+      : `result:${column.id}`
 
     return {
-      key: `result:${column.id}`,
+      key: resultKey,
       id: column.id,
       label: view.label,
       shortLabel: view.shortLabel,
       size: view.size,
-      children: projection ? view.render(projection, { initialLiquidityMode: column.initialLiquidityMode, onOpenLiquidityDetail: openLiquidityDetail, onOpenLtvDetail: openLtvDetail }) : <ProjectionEmptyState loading={loading} />,
+      children: projection ? view.render(projection, { initialLiquidityMode: column.initialLiquidityMode, initialLiquidityBand: column.initialLiquidityBand, onOpenLiquidityDetail: openLiquidityDetail, onOpenLtvDetail: openLtvDetail }) : <ProjectionEmptyState loading={loading} />,
     }
   }
 
