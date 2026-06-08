@@ -1,8 +1,15 @@
-import { formatCurrency, formatFriendlyAmount, formatFriendlyCurrencyAmount } from '../formatCurrency'
+import { formatCurrency, formatCurrencyInput, formatFriendlyAmount, formatFriendlyCurrencyAmount } from '../formatCurrency'
 
 describe('formatCurrency helpers', () => {
   it('keeps exact currency formatting available', () => {
     expect(formatCurrency(239283)).toBe('$239,283.00')
+  })
+
+  it('formats currency input display values without symbols or unnecessary cents', () => {
+    expect(formatCurrencyInput(180001651)).toBe('180,001,651')
+    expect(formatCurrencyInput('250000000')).toBe('250,000,000')
+    expect(formatCurrencyInput(12.5)).toBe('12.5')
+    expect(formatCurrencyInput(null)).toBe('')
   })
 
   it('keeps existing friendly amount semantics unchanged', () => {

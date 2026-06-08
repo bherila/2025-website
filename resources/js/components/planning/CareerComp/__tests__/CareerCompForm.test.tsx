@@ -189,10 +189,25 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.getAllByText('Company valuation timeline')).toHaveLength(2)
     expect(screen.getByText('Benchmark $0.15 @ 15%')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Headline valuation'), { target: { value: '250000000' } })
+    fireEvent.blur(screen.getByLabelText('Headline valuation'))
     fireEvent.click(screen.getByRole('button', { name: 'Add stage' }))
 
-    expect(screen.getByDisplayValue('250000000')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('250,000,000')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Stage' })).toBeInTheDocument()
+  })
+
+  it('renders commas in money input boxes while keeping currency.js parsing', () => {
+    render(<Harness initial={makeInputs('private')} />)
+
+    expect(screen.getByLabelText('Base salary')).toHaveValue('180,000')
+    fireEvent.click(screen.getByRole('button', { name: /Company valuation timeline/ }))
+    expect(screen.getByLabelText('Headline valuation')).toHaveValue('100,000,000')
+
+    fireEvent.change(screen.getByLabelText('Headline valuation'), { target: { value: '180,001,651' } })
+    fireEvent.blur(screen.getByLabelText('Headline valuation'))
+
+    expect(screen.getByLabelText('Headline valuation')).toHaveValue('180,001,651')
+    expect(screen.getByText('Benchmark $0.27 @ 15%')).toBeInTheDocument()
   })
 
   it('hides RSU controls when RSU grants are disabled and restores draft rows when re-enabled', () => {
