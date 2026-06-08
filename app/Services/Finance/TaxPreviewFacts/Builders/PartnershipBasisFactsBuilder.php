@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance\TaxPreviewFacts\Builders;
 
+use App\Enums\Finance\PartnershipBasisEventType;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinPartnershipBasisEvent;
 use App\Models\FinanceTool\FinPartnershipBasisYear;
@@ -11,20 +12,91 @@ use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisEventFact;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisInterestFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisWorksheetFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use Illuminate\Support\Collection;
 
 class PartnershipBasisFactsBuilder
 {
     public function __construct(private readonly PartnershipBasisService $partnershipBasisService) {}
 
-    /** @param iterable<FileForTaxDocument> $k1Docs */
+    /**
+     * Build partnership-basis facts. This is a READ path: it returns already-synced basis
+     * rollforwards without mutating any basis state. Re-syncing from K-1 documents happens only
+     * through the explicit recompute/initialize/event endpoints.
+     *
+     * @param  iterable<FileForTaxDocument>  $k1Docs
+     */
     public function build(int $userId, int $year, iterable $k1Docs): PartnershipBasisFacts
     {
-        $basisYears = $this->partnershipBasisService->recomputeForUserYear($userId, $year, $k1Docs);
+        $basisYears = $this->partnershipBasisService->basisYearsForUserYear($userId, $year);
+
+        $interests = [];
+        $distributionGainSources = [];
+        $liquidationGainLossSources = [];
+
+        foreach ($basisYears as $basisYear) {
+            $interests[] = $this->interestFact($basisYear);
+
+            $interest = $basisYear->partnershipInterest;
+            $partnerName = $interest->partnership_name;
+            $events = $interest->relationLoaded('basisEvents') ? $interest->basisEvents : collect();
+
+            $gain = (int) $basisYear->distribution_gain_cents;
+            if ($gain > 0) {
+                $longTerm = $this->heldLongTerm($events);
+                $distributionGainSources[] = new TaxFactSource(
+                    id: "partnership-basis-{$basisYear->id}-excess-distribution-gain",
+                    label: "{$partnerName} — excess distribution gain",
+                    amount: MoneyMath::fromCents($gain),
+                    sourceType: TaxFactSourceType::PartnershipExcessDistributionGain,
+                    accountId: $interest->account_id,
+                    formType: 'k1',
+                    box: '19',
+                    routing: $longTerm ? TaxFactRouting::ScheduleDLine12 : TaxFactRouting::NeedsReviewScheduleDLine5Or12,
+                    routingReason: $longTerm
+                        ? 'Cash distribution in excess of outside basis is treated as long-term gain from the sale of the partnership interest (interest held over one year) and flows to Schedule D line 12.'
+                        : 'Cash distribution in excess of outside basis is gain from the sale of the partnership interest; confirm the holding period before Schedule D routing.',
+                    isReviewed: false,
+                    reviewStatus: 'needs_review',
+                );
+            }
+
+            if ($basisYear->liquidation_gain_loss_cents !== null) {
+                $liquidationGainLossSources[] = new TaxFactSource(
+                    id: "partnership-basis-{$basisYear->id}-liquidation-gain-loss",
+                    label: "{$partnerName} — liquidation gain/loss (estimate)",
+                    amount: MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents),
+                    sourceType: TaxFactSourceType::PartnershipLiquidationGainLoss,
+                    accountId: $interest->account_id,
+                    formType: 'k1',
+                    routing: TaxFactRouting::NeedsReviewScheduleDLine5Or12,
+                    routingReason: 'Liquidation gain/loss is an estimate from remaining outside basis; confirm the character of property received before reporting on Schedule D.',
+                    isReviewed: false,
+                    reviewStatus: 'needs_review',
+                );
+            }
+        }
 
         return new PartnershipBasisFacts(
             year: $year,
-            interests: $basisYears->map(fn (FinPartnershipBasisYear $basisYear): PartnershipBasisInterestFacts => $this->interestFact($basisYear))->values()->all(),
+            interests: $interests,
+            distributionGainSources: $distributionGainSources,
+            liquidationGainLossSources: $liquidationGainLossSources,
         );
+    }
+
+    /**
+     * Excess-distribution gain is long-term when the interest was held over a year. A prior-year
+     * carryforward event proves the interest crossed a year boundary; in the interest's first year
+     * the holding period is indeterminate and the gain is left for review rather than summed.
+     *
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     */
+    private function heldLongTerm(Collection $events): bool
+    {
+        return $events->contains(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::PriorYearRollforward->value);
     }
 
     private function interestFact(FinPartnershipBasisYear $basisYear): PartnershipBasisInterestFacts

@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers\FinanceTool;
 
+use App\Enums\Finance\PartnershipBasisEventType;
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPartnershipBasisEvent;
+use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Services\Finance\PartnershipBasisService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class PartnershipBasisController extends Controller
 {
@@ -16,9 +19,9 @@ class PartnershipBasisController extends Controller
 
     public function show(Request $request, int $account): JsonResponse
     {
+        // Reads never mutate basis state; use the recompute endpoint to (re)sync from K-1s.
         $year = $this->year($request);
         $financeAccount = $this->account($account);
-        $this->partnershipBasisService->recomputeForUserYear((int) Auth::id(), $year);
 
         return response()->json($this->partnershipBasisService->accountBasisData($financeAccount, (int) Auth::id(), $year));
     }
@@ -39,7 +42,7 @@ class PartnershipBasisController extends Controller
 
         $basisYear = $this->partnershipBasisService->initializeAccount($this->account($account), (int) Auth::id(), $payload);
 
-        return response()->json($this->partnershipBasisService->basisYearToArray($basisYear->load('partnershipInterest.basisEvents')), 201);
+        return response()->json($this->partnershipBasisService->basisYearToArray($this->loadYearEvents($basisYear)), 201);
     }
 
     public function storeEvent(Request $request, int $account): JsonResponse
@@ -59,9 +62,25 @@ class PartnershipBasisController extends Controller
             ->where('account_id', $financeAccount->acct_id)
             ->firstOrFail();
 
+        $interest = $basisEvent->partnershipInterest;
+        $originalYear = (int) $basisEvent->tax_year;
         $payload = $this->eventPayload($request, false);
+        $newYear = isset($payload['tax_year']) ? (int) $payload['tax_year'] : $originalYear;
+
+        $this->partnershipBasisService->assertYearEditable($interest, $originalYear);
+        if ($newYear !== $originalYear) {
+            $this->partnershipBasisService->assertYearEditable($interest, $newYear);
+        }
+
         $basisEvent->fill($payload)->save();
-        $this->partnershipBasisService->recomputeInterestYear($basisEvent->partnershipInterest, (int) $basisEvent->tax_year);
+
+        // Recompute every affected year (ascending) so a moved event no longer counts in the
+        // year it left and the destination year reflects it.
+        $years = array_unique([$originalYear, $newYear]);
+        sort($years);
+        foreach ($years as $affectedYear) {
+            $this->partnershipBasisService->recomputeInterestYear($interest, $affectedYear);
+        }
 
         return response()->json($this->partnershipBasisService->eventToArray($basisEvent->refresh()));
     }
@@ -80,7 +99,12 @@ class PartnershipBasisController extends Controller
         $basisYear = $this->partnershipBasisService->lockAccountYear($this->account($account), (int) Auth::id(), $this->year($request));
         abort_if($basisYear === null, 404);
 
-        return response()->json($this->partnershipBasisService->basisYearToArray($basisYear->load('partnershipInterest.basisEvents')));
+        return response()->json($this->partnershipBasisService->basisYearToArray($this->loadYearEvents($basisYear)));
+    }
+
+    private function loadYearEvents(FinPartnershipBasisYear $basisYear): FinPartnershipBasisYear
+    {
+        return $basisYear->load(['partnershipInterest.basisEvents' => fn ($events) => $events->where('tax_year', $basisYear->tax_year)->orderBy('event_order')->orderBy('id')]);
     }
 
     private function account(int $accountId): FinAccounts
@@ -101,10 +125,13 @@ class PartnershipBasisController extends Controller
     {
         return $request->validate([
             'tax_year' => [$requireTaxYear ? 'required' : 'sometimes', 'integer', 'min:1900', 'max:2200'],
+            'partnership_interest_id' => ['nullable', 'integer'],
             'event_date' => ['nullable', 'date'],
             'event_order' => ['nullable', 'integer'],
             'basis_side' => ['nullable', 'in:outside,inside,both,memorandum'],
-            'event_type' => [$requireTaxYear ? 'required' : 'sometimes', 'string', 'max:60'],
+            // Reject unknown event types: an unrecognised type would persist a source row that
+            // silently has no basis effect during the rollforward.
+            'event_type' => [$requireTaxYear ? 'required' : 'sometimes', 'string', 'max:60', Rule::enum(PartnershipBasisEventType::class)],
             'amount_cents' => [$requireTaxYear ? 'required' : 'sometimes', 'integer'],
             'source_type' => ['nullable', 'in:k1_field,k1_code,account_transaction,statement,statement_investment,manual,carryforward'],
             'line_item_id' => ['nullable', 'integer'],

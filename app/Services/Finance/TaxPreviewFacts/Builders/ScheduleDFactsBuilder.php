@@ -21,6 +21,9 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      * @param  ScheduleDRollupInput[]  $rollups
+     * @param  TaxFactSource[]  $partnershipBasisGainSources  Long-term excess cash-distribution
+     *                                                        gains from the partnership-basis layer,
+     *                                                        already filtered to Schedule D line 12.
      */
     public function build(
         array $k1Docs,
@@ -29,6 +32,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         Form6781Facts $form6781,
         ?Form4797Facts $form4797 = null,
         ?ScheduleDCarryoverInput $carryoverInput = null,
+        array $partnershipBasisGainSources = [],
     ): ScheduleDFacts {
         $lineBuckets = $this->emptyScheduleDLineBuckets();
         foreach ($rollups as $rollup) {
@@ -50,7 +54,13 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             ...($form4797 instanceof Form4797Facts ? $form4797->scheduleDSources : []),
         ];
         $line5Sources = $this->scheduleDLine5Sources($k1Docs);
-        $line12Sources = $this->scheduleDLine12Sources($k1Docs);
+        // Long-term excess cash-distribution gains from the partnership-basis layer are gains from
+        // the sale of the interest; they sum into line 12 alongside K-1 Box 9 long-term gains and
+        // carry needs_review status for the partner to confirm.
+        $line12Sources = [
+            ...$this->scheduleDLine12Sources($k1Docs),
+            ...$partnershipBasisGainSources,
+        ];
         $line13Sources = $this->scheduleDLine13Sources($docs1099);
         $ambiguous11SSources = $this->scheduleDAmbiguous11SSources($k1Docs);
 

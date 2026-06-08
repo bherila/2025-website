@@ -10,6 +10,7 @@ use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Models\User;
 use App\Services\Finance\PartnershipBasisService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class PartnershipBasisServiceTest extends TestCase
@@ -50,6 +51,15 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(120_00, $basisYear->beginning_book_capital_cents);
     }
 
+    public function test_k1_identity_uses_box_a_ein_and_box_b_name(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Identity LP', ['5' => '100'], [], [], '98-7654321');
+        $interest = $basisYear->partnershipInterest;
+
+        $this->assertSame('Identity LP', $interest->partnership_name);
+        $this->assertSame('987654321', $interest->partnership_ein);
+    }
+
     public function test_taxable_interest_with_zero_partial_and_full_distribution(): void
     {
         $zero = $this->basisFromK1(2024, 'Zero Distribution LP', ['5' => '100'], []);
@@ -74,6 +84,72 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame('needs_review', $basisYear->review_status);
     }
 
+    public function test_box19_property_distribution_does_not_create_gain(): void
+    {
+        // A property distribution (Box 19B) reduces basis (floored at zero) but never produces gain.
+        $basisYear = $this->basisFromK1(2024, 'Property Distribution LP', ['5' => '100'], ['19' => [['code' => 'B', 'value' => '150']]]);
+
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents);
+        $this->assertSame(0, $basisYear->distribution_gain_cents);
+        $this->assertSame(150_00, $basisYear->property_distributions_basis_cents);
+    }
+
+    public function test_box19_distribution_counted_once_when_present_in_normalized_and_codes(): void
+    {
+        // Same distribution supplied via normalized basis.distributions AND Box 19 codes must
+        // only be counted once.
+        $basisYear = $this->basisFromK1(2024, 'Dedup Distribution LP', ['5' => '100'], ['19' => [['code' => 'A', 'value' => '40']]], [
+            'distributions' => [['box' => '19', 'code' => 'A', 'amount' => 40]],
+        ]);
+
+        $this->assertSame(40_00, $basisYear->cash_distributions_cents);
+        $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_guaranteed_payments_do_not_increase_basis_and_are_not_double_counted(): void
+    {
+        // Box 5 income increases basis; guaranteed payments (4a/4b/4c) are income to the partner
+        // but not a distributive share, so they are memorandum-only and counted once.
+        $basisYear = $this->basisFromK1(2024, 'Guaranteed Payment LP', ['5' => '100', '4a' => '50', '4b' => '30', '4c' => '80'], []);
+
+        $this->assertSame(100_00, $basisYear->taxable_income_increase_cents);
+        $this->assertSame(100_00, $basisYear->ending_outside_basis_cents);
+
+        $memos = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', 'memorandum')
+            ->where('k1_box', '4')
+            ->get();
+        $this->assertCount(1, $memos);
+        $this->assertSame(80_00, (int) $memos->first()->amount_cents);
+    }
+
+    public function test_box18_codes_route_to_tax_exempt_income_and_nondeductible_expense(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Box18 LP', ['5' => '100'], [
+            '18' => [
+                ['code' => 'A', 'value' => '20'],
+                ['code' => 'B', 'value' => '5'],
+            ],
+        ]);
+
+        $this->assertSame(20_00, $basisYear->tax_exempt_income_increase_cents);
+        $this->assertSame(5_00, $basisYear->nondeductible_expenses_decrease_cents);
+        $this->assertSame(115_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_capital_account_net_income_is_reconciliation_only_and_not_double_counted(): void
+    {
+        // Box 5 income is authoritative; capitalAccount.currentYearNetIncomeLoss is reconciliation
+        // only and must not add a second income amount.
+        $basisYear = $this->basisFromK1(2024, 'Capital Account LP', ['5' => '100'], [], [
+            'capitalAccount' => ['currentYearNetIncomeLoss' => 100],
+        ]);
+
+        $this->assertSame(100_00, $basisYear->taxable_income_increase_cents);
+        $this->assertSame(100_00, $basisYear->ending_outside_basis_cents);
+    }
+
     public function test_liability_increase_and_decrease_roll_into_outside_basis(): void
     {
         $increase = $this->basisFromK1(2024, 'Liability Increase LP', [], [], [
@@ -90,59 +166,87 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(25_00, $decrease->ending_outside_basis_cents);
     }
 
+    public function test_k1_re_extraction_updates_amounts_and_prunes_removed_sources(): void
+    {
+        $document = $this->k1Document(2024, 'Reparse LP', '55-5555555', ['5' => ['value' => '100']], ['19' => [['code' => 'A', 'value' => '40']]]);
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+
+        $firstYear = $this->basisYearFor('Reparse LP', 2024);
+        $this->assertSame(100_00, $firstYear->taxable_income_increase_cents);
+        $this->assertSame(40_00, $firstYear->cash_distributions_cents);
+
+        // Re-extraction: income amount changes and the distribution disappears entirely.
+        $document->forceFill(['parsed_data' => [
+            'schemaVersion' => '2026.1',
+            'formType' => 'K-1-1065',
+            'fields' => ['A' => ['value' => '55-5555555'], 'B' => ['value' => 'Reparse LP'], 'D' => ['value' => 'false'], '5' => ['value' => '120']],
+            'codes' => [],
+            'basis' => [],
+        ]])->save();
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+
+        $secondYear = $this->basisYearFor('Reparse LP', 2024);
+        $this->assertSame(120_00, $secondYear->taxable_income_increase_cents, 'amount should be refreshed in place');
+        $this->assertSame(0, $secondYear->cash_distributions_cents, 'removed source should be pruned, not linger as a ghost');
+
+        $income = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $secondYear->partnership_interest_id)
+            ->where('event_type', 'taxable_income')
+            ->get();
+        $this->assertCount(1, $income, 'income source should be updated, not duplicated');
+    }
+
     public function test_prior_year_rollforward_and_downstream_stale_marking(): void
     {
         $interest = $this->interest('Rollforward LP');
-        FinPartnershipBasisEvent::create([
-            'user_id' => $this->user->id,
-            'partnership_interest_id' => $interest->id,
-            'tax_year' => 2023,
-            'event_type' => 'beginning_basis',
-            'amount_cents' => 100_00,
-            'source_type' => 'manual',
-            'review_status' => 'reviewed',
-        ]);
+        $this->manualEvent($interest, 2023, 'beginning_basis', 100_00);
 
         $firstYear = $this->service->recomputeInterestYear($interest, 2023);
         $secondYear = $this->service->recomputeInterestYear($interest, 2024);
         $this->assertSame($firstYear->ending_outside_basis_cents, $secondYear->beginning_outside_basis_cents);
 
-        FinPartnershipBasisEvent::create([
-            'user_id' => $this->user->id,
-            'partnership_interest_id' => $interest->id,
-            'tax_year' => 2023,
-            'event_type' => 'taxable_income',
-            'amount_cents' => 25_00,
-            'source_type' => 'manual',
-            'review_status' => 'reviewed',
-        ]);
+        $this->manualEvent($interest, 2023, 'taxable_income', 25_00);
         $this->service->recomputeInterestYear($interest, 2023);
 
         $this->assertTrue(FinPartnershipBasisYear::where('id', $secondYear->id)->firstOrFail()->is_stale);
     }
 
+    public function test_carryforward_amount_refreshes_when_prior_year_changes(): void
+    {
+        $interest = $this->interest('Carryforward Refresh LP');
+        $this->manualEvent($interest, 2023, 'beginning_basis', 100_00);
+        $this->service->recomputeInterestYear($interest, 2023);
+        $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(100_00, $this->service->recomputeInterestYear($interest, 2024)->beginning_outside_basis_cents);
+
+        // Prior year grows; recomputing 2024 must pull the refreshed carryforward, not the stale one.
+        $this->manualEvent($interest, 2023, 'taxable_income', 50_00);
+        $this->service->recomputeInterestYear($interest, 2023);
+        $refreshed = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(150_00, $refreshed->beginning_outside_basis_cents);
+
+        $rollforwardEvents = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('event_type', 'prior_year_rollforward')
+            ->get();
+        $this->assertCount(1, $rollforwardEvents, 'carryforward marker should be updated in place');
+        $this->assertSame(150_00, (int) $rollforwardEvents->first()->amount_cents);
+    }
+
     public function test_liquidation_with_cash_and_property_distributions_computes_liquidation_loss(): void
     {
         $interest = $this->interest('Liquidation LP');
-        foreach ([
-            ['beginning_basis', 100_00],
-            ['liquidation_distribution_cash', 40_00],
-            ['liquidation_distribution_property', 30_00],
-        ] as [$eventType, $amount]) {
-            FinPartnershipBasisEvent::create([
-                'user_id' => $this->user->id,
-                'partnership_interest_id' => $interest->id,
-                'tax_year' => 2024,
-                'event_type' => $eventType,
-                'amount_cents' => $amount,
-                'source_type' => 'manual',
-                'review_status' => 'reviewed',
-            ]);
-        }
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->manualEvent($interest, 2024, 'liquidation_distribution_cash', 40_00);
+        $this->manualEvent($interest, 2024, 'liquidation_distribution_property', 30_00);
 
         $basisYear = $this->service->recomputeInterestYear($interest, 2024);
         $this->assertSame(30_00, $basisYear->ending_outside_basis_cents);
         $this->assertSame(-30_00, $basisYear->liquidation_gain_loss_cents);
+        $this->assertSame('needs_review', $basisYear->review_status);
     }
 
     public function test_basis_limited_losses_are_suspended(): void
@@ -153,43 +257,127 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(150_00, $basisYear->suspended_loss_carryforward_cents);
     }
 
+    public function test_multiple_manual_events_of_same_type_are_not_collapsed(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Manual Multi LP',
+            'initial_cash_contribution_cents' => 100_00,
+        ]);
+
+        foreach ([10_00, 15_00] as $amount) {
+            $this->service->createManualEvent($this->account, $this->user->id, [
+                'tax_year' => 2024,
+                'event_type' => 'cash_distribution',
+                'amount_cents' => $amount,
+            ]);
+        }
+
+        $distributions = FinPartnershipBasisEvent::query()
+            ->where('account_id', $this->account->acct_id)
+            ->where('event_type', 'cash_distribution')
+            ->get();
+        $this->assertCount(2, $distributions, 'each manual distribution is a distinct row');
+    }
+
+    public function test_locked_year_rejects_new_manual_events(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Locked LP',
+            'initial_cash_contribution_cents' => 100_00,
+        ]);
+        $this->service->lockAccountYear($this->account, $this->user->id, 2024);
+
+        $this->expectException(ValidationException::class);
+        $this->service->createManualEvent($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 10_00,
+        ]);
+    }
+
+    public function test_manual_event_requires_interest_id_when_account_has_multiple_interests(): void
+    {
+        $this->basisFromK1(2024, 'First Fund LP', ['5' => '100'], [], [], '11-1111111');
+        $this->basisFromK1(2024, 'Second Fund LP', ['5' => '100'], [], [], '22-2222222');
+
+        try {
+            $this->service->createManualEvent($this->account, $this->user->id, [
+                'tax_year' => 2024,
+                'event_type' => 'cash_distribution',
+                'amount_cents' => 10_00,
+            ]);
+            $this->fail('Expected a validation error for an ambiguous interest.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('partnership_interest_id', $e->errors());
+        }
+
+        $second = FinPartnershipInterest::where('partnership_name', 'Second Fund LP')->firstOrFail();
+        $event = $this->service->createManualEvent($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 10_00,
+            'partnership_interest_id' => $second->id,
+        ]);
+        $this->assertSame($second->id, (int) $event->partnership_interest_id);
+    }
+
     /**
      * @param  array<string, string>  $fields
      * @param  array<string, array<int, array<string, string>>>  $codes
      * @param  array<string, mixed>  $basis
      */
-    private function basisFromK1(int $year, string $name, array $fields, array $codes, array $basis = []): FinPartnershipBasisYear
+    private function basisFromK1(int $year, string $name, array $fields, array $codes, array $basis = [], ?string $ein = null): FinPartnershipBasisYear
     {
-        $docFields = [
-            'A' => ['value' => $name],
-            'B' => ['value' => 'Partner'],
-            'D' => ['value' => null],
-        ];
+        $ein ??= '47-'.str_pad((string) (abs(crc32($name)) % 10_000_000), 7, '0', STR_PAD_LEFT);
+        $docFields = ['A' => ['value' => $ein], 'B' => ['value' => $name."\n123 Example Way"], 'D' => ['value' => 'false']];
         foreach ($fields as $box => $value) {
             $docFields[$box] = ['value' => $value];
         }
 
-        FileForTaxDocument::create([
+        $this->k1Document($year, $name, $ein, $docFields, $codes, $basis);
+        $this->service->recomputeForUserYear($this->user->id, $year);
+
+        return $this->basisYearFor($name, $year);
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $fields
+     * @param  array<string, array<int, array<string, string>>>  $codes
+     * @param  array<string, mixed>  $basis
+     */
+    private function k1Document(int $year, string $name, string $ein, array $fields, array $codes, array $basis = []): FileForTaxDocument
+    {
+        if (! isset($fields['A'])) {
+            // Union (not array_merge) so numeric box keys such as '5'/'19' are not reindexed.
+            $fields += ['A' => ['value' => $ein], 'B' => ['value' => $name], 'D' => ['value' => 'false']];
+        }
+
+        $slug = str_replace(' ', '-', strtolower($name));
+
+        return FileForTaxDocument::create([
             'user_id' => $this->user->id,
             'tax_year' => $year,
             'form_type' => 'k1',
             'account_id' => $this->account->acct_id,
-            'original_filename' => str_replace(' ', '-', strtolower($name)).'.pdf',
-            'stored_filename' => str_replace(' ', '-', strtolower($name)).'.pdf',
+            'original_filename' => "{$slug}.pdf",
+            'stored_filename' => "{$slug}.pdf",
             'file_size_bytes' => 1,
-            'file_hash' => sha1(str_replace(' ', '-', strtolower($name))),
+            'file_hash' => sha1($slug.$ein),
             'is_reviewed' => true,
             'parsed_data' => [
                 'schemaVersion' => '2026.1',
                 'formType' => 'K-1-1065',
-                'fields' => $docFields,
+                'fields' => $fields,
                 'codes' => $codes,
                 'basis' => $basis,
             ],
         ]);
+    }
 
-        $this->service->recomputeForUserYear($this->user->id, $year);
-
+    private function basisYearFor(string $name, int $year): FinPartnershipBasisYear
+    {
         return FinPartnershipBasisYear::query()
             ->where('user_id', $this->user->id)
             ->where('tax_year', $year)
@@ -205,6 +393,19 @@ class PartnershipBasisServiceTest extends TestCase
             'partnership_name' => $name,
             'normalized_partnership_name' => strtolower($name),
             'form_type' => 'k1_1065',
+        ]);
+    }
+
+    private function manualEvent(FinPartnershipInterest $interest, int $year, string $eventType, int $amountCents): void
+    {
+        FinPartnershipBasisEvent::create([
+            'user_id' => $this->user->id,
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => $year,
+            'event_type' => $eventType,
+            'amount_cents' => $amountCents,
+            'source_type' => 'manual',
+            'review_status' => 'reviewed',
         ]);
     }
 }

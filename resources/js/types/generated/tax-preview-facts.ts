@@ -508,6 +508,8 @@ reviewStatus: string;
 };
 export type PartnershipBasisFacts = {
 interests: Array<PartnershipBasisInterestFacts>;
+distributionGainSources: Array<TaxFactSource>;
+liquidationGainLossSources: Array<TaxFactSource>;
 year: number;
 };
 export type PartnershipBasisInterestFacts = {

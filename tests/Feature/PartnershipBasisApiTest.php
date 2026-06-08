@@ -7,6 +7,8 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPartnershipBasisEvent;
 use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Models\User;
+use App\Services\Finance\PartnershipBasisService;
+use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\Finance\TaxPreviewWorkbookBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -35,9 +37,10 @@ class PartnershipBasisApiTest extends TestCase
                 'schemaVersion' => '2026.1',
                 'formType' => 'K-1-1065',
                 'fields' => [
-                    'A' => ['value' => 'Basis API LP'],
-                    'B' => ['value' => 'Partner'],
-                    'D' => ['value' => '12-3456789'],
+                    // Box A = EIN, Box B = name/address, Box D = PTP flag.
+                    'A' => ['value' => '12-3456789'],
+                    'B' => ['value' => "Basis API LP\n123 Example Way"],
+                    'D' => ['value' => 'false'],
                     '5' => ['value' => '100'],
                 ],
                 'codes' => ['19' => [['code' => 'A', 'value' => '40']]],
@@ -45,15 +48,55 @@ class PartnershipBasisApiTest extends TestCase
             ],
         ]);
 
+        // Sync is an explicit action; reads never mutate basis state.
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/recompute?year=2024")->assertOk();
+
         $this->getJson("/api/finance/accounts/{$account->acct_id}/basis?year=2024")
             ->assertOk()
             ->assertJsonPath('interests.0.partnershipName', 'Basis API LP')
+            ->assertJsonPath('interests.0.partnershipEin', '123456789')
             ->assertJsonPath('interests.0.endingOutsideBasis', 60);
 
         $this->getJson('/api/finance/tax-preview-data?year=2024&include_tax_facts=1')
             ->assertOk()
             ->assertJsonPath('taxFacts.partnershipBasis.interestCount', 1)
             ->assertJsonPath('taxFacts.partnershipBasis.interests.0.worksheet.cashDistributions', 40);
+    }
+
+    public function test_excess_cash_distribution_gain_flows_to_schedule_d_line_12_when_long_term(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Disposition Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_ein' => '900000001',
+            'partnership_name' => 'Disposition LP',
+            'normalized_partnership_name' => 'disposition lp',
+            'form_type' => 'k1_1065',
+        ]);
+
+        // 2023 seeds basis; 2024 distributes far in excess → long-term gain on the interest.
+        $this->event($user->id, $interest->id, 2023, 'beginning_basis', 50_00, 'reviewed');
+        $this->event($user->id, $interest->id, 2024, 'cash_distribution', 90_00, 'reviewed');
+
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2023);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        // The excess distribution gain (90 − 50 = 40) is surfaced as a reviewable basis gain source…
+        $gainSources = $facts['partnershipBasis']['distributionGainSources'];
+        $this->assertCount(1, $gainSources);
+        $this->assertSame(40.0, $gainSources[0]['amount']);
+        $this->assertSame('needs_review', $gainSources[0]['reviewStatus']);
+
+        // …and, because the interest was held over a year, it is wired into Schedule D line 12.
+        $line12 = collect($facts['scheduleD']['line12Sources'])
+            ->firstWhere('sourceType', 'partnership_excess_distribution_gain');
+        $this->assertNotNull($line12, 'excess distribution gain should appear on Schedule D line 12');
+        $this->assertSame(40.0, $line12['amount']);
     }
 
     public function test_initialization_and_manual_event_endpoints_preserve_source_review_state(): void
@@ -85,6 +128,26 @@ class PartnershipBasisApiTest extends TestCase
             ->assertJsonPath('reviewStatus', 'locked');
     }
 
+    public function test_unknown_event_type_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Validation Account']);
+        FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Validation LP',
+            'normalized_partnership_name' => 'validation lp',
+            'form_type' => 'k1_1065',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/events", [
+            'tax_year' => 2024,
+            'event_type' => 'not_a_real_event_type',
+            'amount_cents' => 10_00,
+        ])->assertStatus(422)->assertJsonValidationErrors('event_type');
+    }
+
     public function test_workbook_export_includes_partnership_basis_worksheets(): void
     {
         $user = User::factory()->create();
@@ -97,15 +160,8 @@ class PartnershipBasisApiTest extends TestCase
             'normalized_partnership_name' => 'workbook lp',
             'form_type' => 'k1_1065',
         ]);
-        FinPartnershipBasisEvent::create([
-            'user_id' => $user->id,
-            'partnership_interest_id' => $interest->id,
-            'tax_year' => 2024,
-            'event_type' => 'beginning_basis',
-            'amount_cents' => 100_00,
-            'source_type' => 'manual',
-            'review_status' => 'reviewed',
-        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
 
         $workbook = app(TaxPreviewWorkbookBuilder::class)->buildForUserYear($user->id, 2024);
         $names = array_column($workbook['sheets'], 'name');
@@ -115,5 +171,18 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertContains('Inside Basis / Capital Reconciliation', $names);
         $this->assertContains('Distribution & Liquidation Analysis', $names);
         $this->assertContains('Basis Source Lines', $names);
+    }
+
+    private function event(int $userId, int $interestId, int $year, string $eventType, int $amountCents, string $reviewStatus): void
+    {
+        FinPartnershipBasisEvent::create([
+            'user_id' => $userId,
+            'partnership_interest_id' => $interestId,
+            'tax_year' => $year,
+            'event_type' => $eventType,
+            'amount_cents' => $amountCents,
+            'source_type' => 'manual',
+            'review_status' => $reviewStatus,
+        ]);
     }
 }
