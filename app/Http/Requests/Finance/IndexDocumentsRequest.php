@@ -20,6 +20,7 @@ class IndexDocumentsRequest extends FormRequest
             'q' => ['nullable', 'string', 'max:255'],
             'tax_year' => ['nullable', 'integer', 'min:1900', 'max:2100'],
             'document_kind' => ['nullable', 'string'],
+            'document_type' => ['nullable', 'string'],
             'account_id' => ['nullable', 'integer'],
             'form_type' => ['nullable', 'string', 'max:50'],
             'genai_status' => ['nullable', 'string', 'max:50'],
@@ -30,7 +31,7 @@ class IndexDocumentsRequest extends FormRequest
             'has_lots' => ['nullable', 'boolean'],
             'processing_status' => ['nullable', 'string', 'max:50'],
             'source_job_id' => ['nullable', 'integer'],
-            'sort' => ['nullable', 'string', 'in:default,created_desc,name_asc,kind_asc,tax_year_desc,period_end_desc'],
+            'sort' => ['nullable', 'string', 'in:default,created_desc,name_asc,kind_asc,tax_year_desc,period_end_desc,document_date_desc'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }

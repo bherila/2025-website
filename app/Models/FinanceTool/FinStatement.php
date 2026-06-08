@@ -71,4 +71,10 @@ class FinStatement extends Model
     {
         return $this->hasMany(FinAccountLineItems::class, 'statement_id', 'statement_id');
     }
+
+    /** @return HasMany<FinStatementInvestment, $this> */
+    public function investments(): HasMany
+    {
+        return $this->hasMany(FinStatementInvestment::class, 'statement_id', 'statement_id');
+    }
 }

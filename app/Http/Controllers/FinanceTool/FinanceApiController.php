@@ -102,6 +102,10 @@ class FinanceApiController extends Controller
             'accountName' => 'required|string',
             'isDebt' => 'boolean',
             'isRetirement' => 'boolean',
+            'capitalCommitment' => 'nullable|numeric|min:0',
+            'capitalCommitmentCurrency' => 'nullable|string|size:3',
+            'capitalCommitmentDate' => 'nullable|date',
+            'capitalCommitmentNotes' => 'nullable|string|max:2000',
         ]);
 
         $uid = Auth::id();
@@ -112,6 +116,10 @@ class FinanceApiController extends Controller
             'acct_is_debt' => $request->isDebt,
             'acct_is_retirement' => $request->isRetirement,
             'acct_last_balance' => '0',
+            'acct_capital_commitment' => $request->input('capitalCommitment'),
+            'acct_capital_commitment_currency' => $request->input('capitalCommitmentCurrency', 'USD'),
+            'acct_capital_commitment_date' => $request->input('capitalCommitmentDate'),
+            'acct_capital_commitment_notes' => $request->input('capitalCommitmentNotes'),
         ]);
 
         return response()->json(['success' => true]);
@@ -536,6 +544,10 @@ class FinanceApiController extends Controller
             'expectedFeePct' => 'nullable|numeric|min:0|max:999.9999',
             'expectedFeeFlat' => 'nullable|numeric|min:0',
             'expectedFeeNotes' => 'nullable|string|max:255',
+            'capitalCommitment' => 'nullable|numeric|min:0',
+            'capitalCommitmentCurrency' => 'nullable|string|size:3',
+            'capitalCommitmentDate' => 'nullable|date',
+            'capitalCommitmentNotes' => 'nullable|string|max:2000',
         ]);
 
         $uid = Auth::id();
@@ -563,6 +575,22 @@ class FinanceApiController extends Controller
 
         if ($request->has('expectedFeeNotes')) {
             $updates['expected_fee_notes'] = $request->input('expectedFeeNotes') ?: null;
+        }
+
+        if ($request->has('capitalCommitment')) {
+            $updates['acct_capital_commitment'] = $request->input('capitalCommitment');
+        }
+
+        if ($request->has('capitalCommitmentCurrency')) {
+            $updates['acct_capital_commitment_currency'] = strtoupper((string) $request->input('capitalCommitmentCurrency', 'USD'));
+        }
+
+        if ($request->has('capitalCommitmentDate')) {
+            $updates['acct_capital_commitment_date'] = $request->input('capitalCommitmentDate') ?: null;
+        }
+
+        if ($request->has('capitalCommitmentNotes')) {
+            $updates['acct_capital_commitment_notes'] = $request->input('capitalCommitmentNotes') ?: null;
         }
 
         $account->update($updates);

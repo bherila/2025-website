@@ -25,6 +25,10 @@ class FinAccounts extends Model
         'expected_fee_pct',
         'expected_fee_flat',
         'expected_fee_notes',
+        'acct_capital_commitment',
+        'acct_capital_commitment_currency',
+        'acct_capital_commitment_date',
+        'acct_capital_commitment_notes',
         'acct_sort_order',
         'when_closed',
     ];
@@ -37,6 +41,8 @@ class FinAccounts extends Model
             'acct_is_retirement' => 'boolean',
             'expected_fee_pct' => 'decimal:4',
             'expected_fee_flat' => 'decimal:2',
+            'acct_capital_commitment' => 'decimal:4',
+            'acct_capital_commitment_date' => 'date',
             'when_closed' => 'datetime',
         ];
     }
