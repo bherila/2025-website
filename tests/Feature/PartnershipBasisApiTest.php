@@ -168,6 +168,40 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(25_00, (int) $event->amount_cents);
     }
 
+    public function test_event_update_reseats_order_when_type_changes(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Reorder Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Reorder LP',
+            'normalized_partnership_name' => 'reorder lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $event = FinPartnershipBasisEvent::create([
+            'user_id' => $user->id,
+            'partnership_interest_id' => $interest->id,
+            'account_id' => $account->acct_id,
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'event_order' => 40,
+            'amount_cents' => 10_00,
+            'source_type' => 'manual',
+            'review_status' => 'reviewed',
+        ]);
+
+        // Correcting the type to income (without sending event_order) must re-seat the row at the
+        // income slot so the rollforward applies it before same-year distributions.
+        $this->putJson("/api/finance/accounts/{$account->acct_id}/basis/events/{$event->id}", [
+            'event_type' => 'taxable_income',
+            'amount_cents' => 50_00,
+        ])->assertOk()->assertJsonPath('eventOrder', 20);
+
+        $this->assertSame(20, (int) $event->refresh()->event_order);
+    }
+
     public function test_lock_endpoint_locks_every_basis_year_for_account(): void
     {
         $user = User::factory()->create();

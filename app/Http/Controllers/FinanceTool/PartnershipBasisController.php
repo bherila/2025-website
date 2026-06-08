@@ -66,6 +66,14 @@ class PartnershipBasisController extends Controller
         $originalYear = (int) $basisEvent->tax_year;
         $payload = $this->eventPayload($request, false);
         unset($payload['partnership_interest_id']);
+
+        // The rollforward sorts events by event_order, so a type change without an explicit order
+        // must re-seat the event at the canonical slot for its new type (e.g. a distribution
+        // corrected to income must apply before same-year distributions, not after).
+        if (array_key_exists('event_type', $payload) && ! array_key_exists('event_order', $payload)) {
+            $payload['event_order'] = $this->partnershipBasisService->eventOrder((string) $payload['event_type']);
+        }
+
         $newYear = isset($payload['tax_year']) ? (int) $payload['tax_year'] : $originalYear;
 
         $this->partnershipBasisService->assertYearEditable($interest, $originalYear);

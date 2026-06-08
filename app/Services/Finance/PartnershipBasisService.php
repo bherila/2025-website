@@ -564,6 +564,14 @@ class PartnershipBasisService
             $push(PartnershipBasisEventType::Section179, 'k1_field', 'fields.12.value', 'K-1 Box 12 Section 179 deduction', $box12, '12', null, $reviewStatus);
         }
 
+        // ── Foreign taxes paid or accrued (Box 21, the flat field the rest of the app parses for
+        //    foreign tax) — a §705(a)(2)(B) expenditure that reduces outside basis. The K-3 carries
+        //    the country detail, but Box 21 reports the partner's total, which is the basis effect. ──
+        $box21 = $this->moneyToCents($data['fields']['21']['value'] ?? null);
+        if ($box21 !== null && $box21 !== 0) {
+            $push(PartnershipBasisEventType::ForeignTax, 'k1_field', 'fields.21.value', 'K-1 Box 21 foreign taxes paid or accrued', $box21, '21', null, $reviewStatus);
+        }
+
         // ── Coded boxes ──
         $this->collectK1CodedEvents($data, $reviewStatus, $push);
 
@@ -1085,7 +1093,7 @@ class PartnershipBasisService
         return $distributionGain > 0 ? $distributionGain : -$endingOutside;
     }
 
-    private function eventOrder(string $eventType): int
+    public function eventOrder(string $eventType): int
     {
         return match ($eventType) {
             'beginning_basis', 'prior_year_rollforward' => -100,

@@ -107,7 +107,10 @@ return new class extends Migration
 
             $table->foreign('user_id', 'fp_basis_events_user_fk')->references('id')->on('users')->cascadeOnDelete();
             $table->foreign('partnership_interest_id', 'fp_basis_events_interest_fk')->references('id')->on('fin_partnership_interests')->cascadeOnDelete();
-            $table->foreign('tax_document_id', 'fp_basis_events_tax_doc_fk')->references('id')->on('fin_tax_documents')->nullOnDelete();
+            // Delete K-1-sourced events with their source document: nullOnDelete would orphan them
+            // (tax_document_id => null), and pruneDocumentK1Events() matches on tax_document_id, so a
+            // deleted K-1 would otherwise keep affecting outside basis on the next recompute.
+            $table->foreign('tax_document_id', 'fp_basis_events_tax_doc_fk')->references('id')->on('fin_tax_documents')->cascadeOnDelete();
             $table->foreign('tax_document_account_id', 'fp_basis_events_doc_acct_fk')->references('id')->on('fin_document_accounts')->nullOnDelete();
             $table->foreign('account_id', 'fp_basis_events_account_fk')->references('acct_id')->on('fin_accounts')->nullOnDelete();
             $table->index(['user_id', 'partnership_interest_id', 'tax_year'], 'fp_basis_events_user_interest_year_idx');

@@ -138,6 +138,16 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(115_00, $basisYear->ending_outside_basis_cents);
     }
 
+    public function test_box21_foreign_taxes_reduce_outside_basis(): void
+    {
+        // Box 21 foreign taxes paid/accrued are a §705(a)(2)(B) expenditure that reduces outside
+        // basis (the same flat field the rest of the app parses for foreign tax).
+        $basisYear = $this->basisFromK1(2024, 'Foreign Tax LP', ['5' => '100', '21' => '15'], []);
+
+        $this->assertSame(15_00, $basisYear->foreign_taxes_decrease_cents);
+        $this->assertSame(85_00, $basisYear->ending_outside_basis_cents);
+    }
+
     public function test_capital_account_net_income_is_reconciliation_only_and_not_double_counted(): void
     {
         // Box 5 income is authoritative; capitalAccount.currentYearNetIncomeLoss is reconciliation
@@ -527,6 +537,27 @@ class PartnershipBasisServiceTest extends TestCase
 
         $this->assertDatabaseMissing('fin_partnership_basis_events', ['tax_document_id' => $document->id]);
         $this->assertSame(0, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_deleting_k1_document_removes_its_basis_events(): void
+    {
+        $document = $this->k1Document(2024, 'Deletable LP', '77-7777777', [
+            'A' => ['value' => '77-7777777'],
+            'B' => ['value' => 'Deletable LP'],
+            'D' => ['value' => 'false'],
+            '5' => ['value' => '100'],
+        ], ['19' => [['code' => 'A', 'value' => '40']]]);
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+        $this->assertDatabaseHas('fin_partnership_basis_events', ['tax_document_id' => $document->id]);
+
+        $document->delete();
+
+        // Source events are deleted with their document instead of being orphaned, so a later
+        // recompute no longer counts the removed K-1 in outside basis.
+        $this->assertDatabaseMissing('fin_partnership_basis_events', ['tax_document_id' => $document->id]);
+
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+        $this->assertSame(0, $this->basisYearFor('Deletable LP', 2024)->ending_outside_basis_cents);
     }
 
     public function test_legacy_k1_data_is_transformed_before_basis_sync(): void
