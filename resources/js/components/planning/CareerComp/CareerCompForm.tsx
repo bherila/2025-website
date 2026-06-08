@@ -1129,7 +1129,7 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
 
       <div className="space-y-4">
         {scenarios.map((scenario, scenarioIndex) => (
-          <div key={scenario.id} className="space-y-3 rounded-md border p-3">
+          <div key={scenario.id} className="space-y-3 rounded-md border border-muted p-3">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
               <div className="space-y-2">
                 <Label htmlFor={`${scenario.id}-label`}>Scenario</Label>
