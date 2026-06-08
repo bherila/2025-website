@@ -233,6 +233,16 @@ class FinanceDocumentController extends Controller
             return response()->json(['message' => 'No file associated with this document.'], 404);
         }
 
+        // Guard against poisoned/legacy rows whose s3_path sits outside the
+        // owner's expected prefix for this document kind (IDOR hardening).
+        if (! FinDocument::isValidS3PathForOwner(
+            $document->s3_path,
+            (int) Auth::id(),
+            $document->document_kind,
+        )) {
+            abort(404);
+        }
+
         $document->recordDownload();
 
         $filename = $document->original_filename ?? 'document';
@@ -585,20 +595,13 @@ class FinanceDocumentController extends Controller
      */
     private function validateS3Key(string $s3Key, int $userId, string $documentKind): array
     {
-        $expectedPrefix = FinDocument::generateS3Path($userId, '', $documentKind);
-        if (! str_starts_with($s3Key, $expectedPrefix)) {
-            abort(422, 'Invalid upload key for this document kind.');
-        }
-
-        $keySuffix = substr($s3Key, strlen($expectedPrefix));
-        $storedFilename = basename($s3Key);
-        if ($storedFilename === '' || $storedFilename === '.' || $storedFilename === '..' || $keySuffix !== $storedFilename) {
+        if (! FinDocument::isValidS3PathForOwner($s3Key, $userId, $documentKind)) {
             abort(422, 'Invalid upload key for this document kind.');
         }
 
         return [
             's3_key' => $s3Key,
-            'stored_filename' => $storedFilename,
+            'stored_filename' => basename($s3Key),
         ];
     }
 

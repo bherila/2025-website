@@ -482,8 +482,12 @@ class FinanceStatementControllerTest extends TestCase
         $response->assertNotFound();
     }
 
-    public function test_view_statement_pdf_does_not_sign_linked_non_statement_fin_document(): void
+    public function test_view_statement_pdf_signs_linked_csv_import_fin_document_with_valid_path(): void
     {
+        // FIX 2 regression guard: import-pipeline documents (csv_import, json_import, toon_import)
+        // must be viewable via this endpoint when their s3_path is under the owner's
+        // expected prefix for their own kind — they must NOT be 404'd just because
+        // their document_kind is not KIND_STATEMENT.
         $user = $this->createUser();
 
         $acctId = DB::table('fin_accounts')->insertGetId([
@@ -495,14 +499,66 @@ class FinanceStatementControllerTest extends TestCase
         $document = FinDocument::create([
             'user_id' => $user->id,
             'document_kind' => FinDocument::KIND_CSV_IMPORT,
-            'original_filename' => 'statement.csv',
-            'stored_filename' => 'statement.csv',
-            's3_path' => "fin_documents/{$user->id}/csv_import/statement.csv",
+            'original_filename' => 'history.csv',
+            'stored_filename' => 'history.csv',
+            's3_path' => "fin_documents/{$user->id}/csv_import/history.csv",
             'mime_type' => 'text/csv',
         ]);
 
         $statementId = DB::table('fin_statements')->insertGetId([
             'document_id' => $document->id,
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock) use ($document): void {
+            $mock->shouldReceive('getSignedViewUrl')
+                ->once()
+                ->with($document->s3_path, 'text/csv')
+                ->andReturn('https://signed.example/view-csv');
+            $mock->shouldReceive('getSignedDownloadUrl')
+                ->once()
+                ->with($document->s3_path, 'history.csv')
+                ->andReturn('https://signed.example/download-csv');
+        });
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/statements/{$statementId}/pdf");
+
+        $response->assertOk()
+            ->assertJson([
+                'view_url' => 'https://signed.example/view-csv',
+                'download_url' => 'https://signed.example/download-csv',
+                'filename' => 'history.csv',
+            ]);
+    }
+
+    public function test_view_statement_pdf_does_not_sign_csv_import_document_with_cross_user_path(): void
+    {
+        // Even after FIX 2, a csv_import document whose s3_path points to another user's
+        // prefix must still be rejected (path validation is per-kind, not kind-blind).
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $poisonedDocument = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_CSV_IMPORT,
+            'original_filename' => 'history.csv',
+            'stored_filename' => 'history.csv',
+            's3_path' => "fin_documents/{$otherUser->id}/csv_import/history.csv",
+            'mime_type' => 'text/csv',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'document_id' => $poisonedDocument->id,
             'acct_id' => $acctId,
             'balance' => '5000',
             'statement_closing_date' => '2025-01-31',

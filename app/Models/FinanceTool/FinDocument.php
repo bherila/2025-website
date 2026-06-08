@@ -90,6 +90,33 @@ class FinDocument extends Model
         return "fin_documents/{$userId}/{$documentKind}/{$storedFilename}";
     }
 
+    /**
+     * Validate that an s3_path belongs to the expected owner/kind prefix and is
+     * a direct (non-traversal) filename within that prefix.
+     *
+     * Used by FinanceDocumentController::download(), FileController::viewStatementPdf(),
+     * and FinanceDocumentController::validateS3Key() so the check cannot drift.
+     */
+    public static function isValidS3PathForOwner(string $s3Path, int $userId, string $documentKind): bool
+    {
+        if ($s3Path === '') {
+            return false;
+        }
+
+        $expectedPrefix = self::generateS3Path($userId, '', $documentKind);
+        if (! str_starts_with($s3Path, $expectedPrefix)) {
+            return false;
+        }
+
+        $storedFilename = basename($s3Path);
+        $keySuffix = substr($s3Path, strlen($expectedPrefix));
+
+        return $storedFilename !== ''
+            && $storedFilename !== '.'
+            && $storedFilename !== '..'
+            && $keySuffix === $storedFilename;
+    }
+
     public static function generateStoredFilename(string $originalFilename): string
     {
         $datePart = now()->format('Y.m.d');
