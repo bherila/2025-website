@@ -1,9 +1,17 @@
 import currency from 'currency.js'
 
+import { parseMoneyOrZero } from '@/lib/finance/money'
 import { formatFriendlyCurrencyAmount } from '@/lib/formatCurrency'
 
 export function formatMoney(value: number | null | undefined): string {
   return currency(value ?? 0, { precision: 0 }).format()
+}
+
+export function formatMoneyInput(value: number | string | null | undefined): string {
+  const amount = parseMoneyOrZero(value)
+  const precision = Number.isInteger(amount) ? 0 : 2
+
+  return currency(amount, { precision, symbol: '' }).format()
 }
 
 export function formatFriendlyMoney(value: number | null | undefined): string {
