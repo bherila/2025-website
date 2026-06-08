@@ -306,7 +306,7 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
     fireEvent.change(screen.getByLabelText('Grant date'), { target: { value: '2028-01-01' } })
-    fireEvent.click(screen.getByLabelText('Input shares by percentage of fully diluted shares'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Input shares by percentage of fully diluted shares' }))
     fireEvent.change(screen.getByLabelText('% of fully diluted shares as of grant date'), { target: { value: '10' } })
 
     expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('81 sh')
