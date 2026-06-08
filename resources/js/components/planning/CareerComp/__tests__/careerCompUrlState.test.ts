@@ -10,6 +10,13 @@ describe('careerCompUrlState', () => {
       ...DEFAULT_CAREER_COMP_INPUTS,
       horizonYears: 7,
       startYear: 2027,
+      modelAssumptions: {
+        ...DEFAULT_CAREER_COMP_INPUTS.modelAssumptions,
+        careerTransition: {
+          currentJobNoticeWeeks: 3,
+          timeOffBetweenJobsWeeks: 1,
+        },
+      },
       currentJob: { ...baseJob, id: 'current', name: 'Current job' },
       hypotheticalJobs: [
         {
@@ -17,6 +24,11 @@ describe('careerCompUrlState', () => {
           id: 'hyp-1',
           name: 'Offer A',
           startDate: '2027-03-15',
+          priorJobResignationDate: '2027-02-15',
+          transitionOverride: {
+            currentJobNoticeWeeks: 2,
+            timeOffBetweenJobsWeeks: 2,
+          },
           comp: { ...baseJob.comp, baseSalary: 225000, cashBonus: 50000 },
           company: { ...baseJob.company, type: 'private', fourNineA: 7.5 },
         },

@@ -2,19 +2,27 @@
 
 namespace App\Services\Planning\CareerComp;
 
+use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Builders\EquityCompensationFactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form6251FactsBuilder;
+use App\Support\Finance\FederalIncomeTax;
 use DateTimeImmutable;
 
 final class CareerCompCalculator
 {
+    private Form6251FactsBuilder $form6251FactsBuilder;
+
     public function __construct(
         private RsuVestingExpander $rsuVestingExpander = new RsuVestingExpander,
         private OptionsVestingService $optionsVestingService = new OptionsVestingService,
         private EquityValuationService $equityValuationService = new EquityValuationService,
         private PrivateValuationScenarioService $privateValuationScenarioService = new PrivateValuationScenarioService,
         private EquityCompensationFactsBuilder $equityCompensationFactsBuilder = new EquityCompensationFactsBuilder,
-    ) {}
+        ?Form6251FactsBuilder $form6251FactsBuilder = null,
+    ) {
+        $this->form6251FactsBuilder = $form6251FactsBuilder ?? new Form6251FactsBuilder(new K1CodeCharacterResolver);
+    }
 
     public function project(CareerCompInputs $inputs): CareerCompProjection
     {
@@ -25,16 +33,15 @@ final class CareerCompCalculator
         $warnings = [];
         $currentJob = $inputs->currentJob();
 
-        $jobSpecs = [];
         if ($currentJob instanceof JobSpec) {
-            $jobSpecs[] = $currentJob;
+            $projected = $this->projectJob($currentJob, $startYear, $horizonYears, $modelAssumptions);
+            $jobs[] = $projected['job'];
+            $warnings = array_merge($warnings, $projected['warnings']);
         }
         foreach ($inputs->hypotheticalJobs() as $job) {
-            $jobSpecs[] = $job;
-        }
-
-        foreach ($jobSpecs as $job) {
-            $projected = $this->projectJob($job, $startYear, $horizonYears, $modelAssumptions);
+            $projected = $currentJob instanceof JobSpec
+                ? $this->projectJobWithPriorCurrent($currentJob, $job, $startYear, $horizonYears, $modelAssumptions)
+                : $this->projectJob($job, $startYear, $horizonYears, $modelAssumptions);
             $jobs[] = $projected['job'];
             $warnings = array_merge($warnings, $projected['warnings']);
         }
@@ -52,21 +59,21 @@ final class CareerCompCalculator
     /**
      * @return array{job:array<string, mixed>,warnings:list<string>}
      */
-    private function projectJob(JobSpec $job, int $startYear, int $horizonYears, ModelAssumptions $modelAssumptions): array
+    private function projectJob(JobSpec $job, int $startYear, int $horizonYears, ModelAssumptions $modelAssumptions, ?DateTimeImmutable $activeThrough = null): array
     {
         $jobStartDate = $this->parseJobStartDate($job);
-        $projectedOptionGrants = $this->projectedOptionRefresherGrants($job, $startYear, $horizonYears, $jobStartDate, $modelAssumptions);
+        $projectedOptionGrants = $this->projectedOptionRefresherGrants($job, $startYear, $horizonYears, $jobStartDate, $modelAssumptions, $activeThrough);
         $vestingJob = $this->withProjectedOptionRefresherGrants($job, $projectedOptionGrants);
         $warnings = $this->staticWarnings($vestingJob, $startYear, $horizonYears);
-        $rsuRows = $this->rsuVestingExpander->expand($vestingJob, $startYear, $horizonYears);
-        $optionResult = $this->optionsVestingService->expand($vestingJob, $startYear, $horizonYears);
+        $rsuRows = $this->rsuVestingExpander->expand($vestingJob, $startYear, $horizonYears, $activeThrough);
+        $optionResult = $this->optionsVestingService->expand($vestingJob, $startYear, $horizonYears, $activeThrough);
         $baseVestingRows = array_merge($rsuRows, $optionResult['rows']);
         $warnings = array_merge($warnings, $optionResult['warnings']);
-        $refresherDefs = $this->refresherDefinitions($vestingJob, $startYear, $horizonYears, $jobStartDate);
-        $valuation = $this->equityValuationService->value($vestingJob, $baseVestingRows, $refresherDefs, $startYear, $horizonYears);
+        $refresherDefs = $this->refresherDefinitions($vestingJob, $startYear, $horizonYears, $jobStartDate, $activeThrough);
+        $valuation = $this->equityValuationService->value($vestingJob, $baseVestingRows, $refresherDefs, $startYear, $horizonYears, $activeThrough);
         // Fold representative refresher vesting into the breakdown + after-tax facts.
         $vestingRows = array_merge($baseVestingRows, $valuation['refresherRows']);
-        $paperVestingRows = $this->paperVestingRows($vestingJob, $startYear, $horizonYears, $valuation['refresherRows']);
+        $paperVestingRows = $this->paperVestingRows($vestingJob, $startYear, $horizonYears, $valuation['refresherRows'], $activeThrough);
         $paperEquity = $this->privateValuationScenarioService->project($vestingJob, $paperVestingRows, $startYear, $horizonYears, $modelAssumptions);
         $warnings = array_merge($warnings, $paperEquity['warnings']);
         $paperEquityProjection = [
@@ -86,7 +93,7 @@ final class CareerCompCalculator
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $year = $startYear + $offset;
             $raiseFactor = $this->raiseFactor($raisePct, $this->cashCompRaiseOffset($jobStartDate, $offset, $year));
-            $cashCompFactor = $this->cashCompYearFactor($jobStartDate, $year);
+            $cashCompFactor = $this->cashCompYearFactor($jobStartDate, $year, $activeThrough);
             $salary = MoneyMath::multiply(MoneyMath::multiply($baseSalary, $raiseFactor), $cashCompFactor);
             $bonus = MoneyMath::multiply(MoneyMath::multiply($cashBonus, $raiseFactor), $cashCompFactor);
             $vestedLiquidEquity = MoneyMath::round($valuation['annualEquity'][$year] ?? 0.0);
@@ -157,6 +164,393 @@ final class CareerCompCalculator
         ];
     }
 
+    /**
+     * @return array{job:array<string, mixed>,warnings:list<string>}
+     */
+    private function projectJobWithPriorCurrent(JobSpec $currentJob, JobSpec $job, int $startYear, int $horizonYears, ModelAssumptions $modelAssumptions): array
+    {
+        $priorCurrentActiveThrough = $this->priorCurrentActiveThrough($job, $modelAssumptions);
+        if (! $priorCurrentActiveThrough instanceof DateTimeImmutable) {
+            return $this->projectJob($job, $startYear, $horizonYears, $modelAssumptions);
+        }
+
+        $prior = $this->projectJob($currentJob, $startYear, $horizonYears, $modelAssumptions, $priorCurrentActiveThrough);
+        $offer = $this->projectJob($job, $startYear, $horizonYears, $modelAssumptions);
+
+        return [
+            'job' => $this->combinePriorCurrentAndOffer($job, $prior['job'], $offer['job'], $startYear, $horizonYears, $modelAssumptions),
+            'warnings' => array_merge($prior['warnings'], $offer['warnings']),
+        ];
+    }
+
+    private function priorCurrentActiveThrough(JobSpec $job, ModelAssumptions $modelAssumptions): ?DateTimeImmutable
+    {
+        $startDate = $this->parseJobStartDate($job);
+        $noticeWeeks = $this->transitionWeeks($job, 'currentJobNoticeWeeks', $modelAssumptions->currentJobNoticeWeeks());
+        $timeOffWeeks = $this->transitionWeeks($job, 'timeOffBetweenJobsWeeks', $modelAssumptions->timeOffBetweenJobsWeeks());
+        $noticeDays = max(0, (int) round($noticeWeeks * 7));
+        $timeOffDays = max(0, (int) round($timeOffWeeks * 7));
+        $resignationDate = $this->parseDateValue($job->value('priorJobResignationDate'));
+
+        if (! $resignationDate instanceof DateTimeImmutable) {
+            if (! $startDate instanceof DateTimeImmutable) {
+                return null;
+            }
+
+            $resignationDate = $startDate->modify('-'.($noticeDays + $timeOffDays).' days');
+        }
+
+        $activeThrough = $resignationDate->modify('+'.$noticeDays.' days')->modify('-1 day');
+        if ($startDate instanceof DateTimeImmutable) {
+            $latestActiveThrough = $startDate->modify('-'.($timeOffDays + 1).' days');
+            if ($activeThrough > $latestActiveThrough) {
+                return $latestActiveThrough;
+            }
+        }
+
+        return $activeThrough;
+    }
+
+    private function transitionWeeks(JobSpec $job, string $key, float $default): float
+    {
+        $value = $job->value('transitionOverride.'.$key);
+
+        return is_numeric($value) ? max(0.0, min(52.0, (float) $value)) : $default;
+    }
+
+    /**
+     * @param  array<string, mixed>  $prior
+     * @param  array<string, mixed>  $offer
+     * @return array<string, mixed>
+     */
+    private function combinePriorCurrentAndOffer(JobSpec $job, array $prior, array $offer, int $startYear, int $horizonYears, ModelAssumptions $modelAssumptions): array
+    {
+        $annual = $this->combineAnnualRows($prior['annual'] ?? [], $offer['annual'] ?? [], $startYear, $horizonYears);
+        $lifetime = $this->combineLifetime($annual, $prior['lifetime'] ?? [], $offer['lifetime'] ?? []);
+        $combined = [
+            'id' => $job->id(),
+            'name' => $job->name(),
+            'isCurrent' => false,
+            'annual' => $annual,
+            'liquidity' => $this->combineLiquidity($prior['liquidity'] ?? [], $offer['liquidity'] ?? [], $startYear, $horizonYears),
+            'paperEquity' => $this->combinePaperEquity($prior, $offer),
+            'vesting' => $this->combineVestingRows($prior['vesting'] ?? [], $offer['vesting'] ?? []),
+            'lifetime' => $lifetime,
+        ];
+        $combined['afterTax'] = $this->combineAfterTax($prior['afterTax'] ?? null, $offer['afterTax'] ?? null, $annual, $lifetime['totalValue'], $modelAssumptions);
+
+        return $combined;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $priorRows
+     * @param  list<array<string, mixed>>  $offerRows
+     * @return list<array<string, mixed>>
+     */
+    private function combineAnnualRows(array $priorRows, array $offerRows, int $startYear, int $horizonYears): array
+    {
+        $priorByYear = $this->rowsByYear($priorRows);
+        $offerByYear = $this->rowsByYear($offerRows);
+        $fields = ['salary', 'bonus', 'vestedLiquidEquity', 'shareSaleProceeds', 'equitySaleBasis', 'equityCapitalGain', 'privateRsuOrdinaryIncome', 'exerciseOutlay', 'freeCashFlow'];
+        $rows = [];
+
+        for ($offset = 0; $offset < $horizonYears; $offset++) {
+            $year = $startYear + $offset;
+            $row = ['year' => $year];
+            foreach ($fields as $field) {
+                $row[$field] = MoneyMath::sum([
+                    (float) ($priorByYear[$year][$field] ?? 0.0),
+                    (float) ($offerByYear[$year][$field] ?? 0.0),
+                ]);
+            }
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function rowsByYear(array $rows): array
+    {
+        $byYear = [];
+
+        foreach ($rows as $row) {
+            if (is_numeric($row['year'] ?? null)) {
+                $byYear[(int) $row['year']] = $row;
+            }
+        }
+
+        return $byYear;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $annual
+     * @param  array<string, mixed>  $priorLifetime
+     * @param  array<string, mixed>  $offerLifetime
+     * @return array<string, mixed>
+     */
+    private function combineLifetime(array $annual, array $priorLifetime, array $offerLifetime): array
+    {
+        $totalCashComp = MoneyMath::sum(array_map(
+            static fn (array $row): float => MoneyMath::add((float) ($row['salary'] ?? 0.0), (float) ($row['bonus'] ?? 0.0)),
+            $annual,
+        ));
+        $totalEquityValue = $this->combineBanded($priorLifetime['totalEquityValue'] ?? [], $offerLifetime['totalEquityValue'] ?? []);
+        $totalPaperEquityValue = $this->combineBanded($priorLifetime['totalPaperEquityValue'] ?? $priorLifetime['totalEquityValue'] ?? [], $offerLifetime['totalPaperEquityValue'] ?? []);
+
+        return [
+            'totalCashComp' => $totalCashComp,
+            'totalEquityValue' => $totalEquityValue,
+            'totalPaperEquityValue' => $totalPaperEquityValue,
+            'totalValue' => $this->addCashToBanded($totalCashComp, $totalEquityValue),
+            'totalPaperValue' => $this->addCashToBanded($totalCashComp, $totalPaperEquityValue),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     * @return array{low:float,medium:float,high:float}
+     */
+    private function combineBanded(array $left, array $right): array
+    {
+        return [
+            'low' => MoneyMath::add((float) ($left['low'] ?? 0.0), (float) ($right['low'] ?? 0.0)),
+            'medium' => MoneyMath::add((float) ($left['medium'] ?? 0.0), (float) ($right['medium'] ?? 0.0)),
+            'high' => MoneyMath::add((float) ($left['high'] ?? 0.0), (float) ($right['high'] ?? 0.0)),
+        ];
+    }
+
+    /**
+     * @param  array{low:float,medium:float,high:float}  $values
+     * @return array{low:float,medium:float,high:float}
+     */
+    private function addCashToBanded(float $cash, array $values): array
+    {
+        return [
+            'low' => MoneyMath::add($cash, $values['low']),
+            'medium' => MoneyMath::add($cash, $values['medium']),
+            'high' => MoneyMath::add($cash, $values['high']),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $priorLiquidity
+     * @param  array<string, mixed>  $offerLiquidity
+     * @return array{low:list<array{year:int,cumulativeValue:float}>,medium:list<array{year:int,cumulativeValue:float}>,high:list<array{year:int,cumulativeValue:float}>}
+     */
+    private function combineLiquidity(array $priorLiquidity, array $offerLiquidity, int $startYear, int $horizonYears): array
+    {
+        $combined = ['low' => [], 'medium' => [], 'high' => []];
+
+        foreach (['low', 'medium', 'high'] as $band) {
+            for ($offset = 0; $offset < $horizonYears; $offset++) {
+                $year = $startYear + $offset;
+                $combined[$band][] = [
+                    'year' => $year,
+                    'cumulativeValue' => MoneyMath::add(
+                        $this->cumulativeValueForYear($priorLiquidity[$band] ?? [], $year),
+                        $this->cumulativeValueForYear($offerLiquidity[$band] ?? [], $year),
+                    ),
+                ];
+            }
+        }
+
+        return $combined;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function cumulativeValueForYear(array $rows, int $year): float
+    {
+        foreach ($rows as $row) {
+            if ((int) ($row['year'] ?? 0) === $year) {
+                return (float) ($row['cumulativeValue'] ?? 0.0);
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $prior
+     * @param  array<string, mixed>  $offer
+     * @return array<string, mixed>
+     */
+    private function combinePaperEquity(array $prior, array $offer): array
+    {
+        $paperEquity = is_array($offer['paperEquity'] ?? null) ? $offer['paperEquity'] : ['scenarios' => [], 'totalsByOutcome' => ['low' => 0.0, 'medium' => 0.0, 'high' => 0.0]];
+        $priorEquity = is_array($prior['lifetime']['totalPaperEquityValue'] ?? null)
+            ? $prior['lifetime']['totalPaperEquityValue']
+            : (is_array($prior['lifetime']['totalEquityValue'] ?? null) ? $prior['lifetime']['totalEquityValue'] : []);
+        $paperEquity['totalsByOutcome'] = $this->combineBanded($priorEquity, is_array($paperEquity['totalsByOutcome'] ?? null) ? $paperEquity['totalsByOutcome'] : []);
+
+        if (is_array($paperEquity['scenarios'] ?? null)) {
+            $paperEquity['scenarios'] = array_map(function (array $scenario) use ($prior): array {
+                $band = in_array($scenario['outcome'] ?? null, ['low', 'medium', 'high'], true) ? (string) $scenario['outcome'] : 'medium';
+                if (is_array($scenario['points'] ?? null)) {
+                    $scenario['points'] = array_map(function (array $point) use ($prior, $band): array {
+                        $year = (int) ($point['year'] ?? 0);
+                        $point['netPaperValue'] = MoneyMath::add((float) ($point['netPaperValue'] ?? 0.0), $this->priorPaperValueForYear($prior, $band, $year));
+
+                        return $point;
+                    }, $scenario['points']);
+                }
+                $scenario['totalNetPaperValue'] = MoneyMath::add((float) ($scenario['totalNetPaperValue'] ?? 0.0), (float) ($prior['lifetime']['totalPaperEquityValue'][$band] ?? $prior['lifetime']['totalEquityValue'][$band] ?? 0.0));
+
+                return $scenario;
+            }, $paperEquity['scenarios']);
+        }
+
+        return $paperEquity;
+    }
+
+    /**
+     * @param  array<string, mixed>  $prior
+     */
+    private function priorPaperValueForYear(array $prior, string $band, int $year): float
+    {
+        $paperEquity = is_array($prior['paperEquity'] ?? null) ? $prior['paperEquity'] : [];
+        $scenarios = is_array($paperEquity['scenarios'] ?? null) ? $paperEquity['scenarios'] : [];
+        $values = [];
+
+        foreach (array_values(array_filter($scenarios, 'is_array')) as $scenario) {
+            if (($scenario['outcome'] ?? null) !== $band || ! is_array($scenario['points'] ?? null)) {
+                continue;
+            }
+
+            foreach (array_values(array_filter($scenario['points'], 'is_array')) as $point) {
+                if ((int) ($point['year'] ?? 0) === $year) {
+                    $values[] = (float) ($point['netPaperValue'] ?? 0.0);
+                }
+            }
+        }
+
+        if ($values !== []) {
+            return max($values);
+        }
+
+        return $this->cumulativeValueForYear($prior['liquidity'][$band] ?? [], $year);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $priorRows
+     * @param  list<array<string, mixed>>  $offerRows
+     * @return list<array<string, mixed>>
+     */
+    private function combineVestingRows(array $priorRows, array $offerRows): array
+    {
+        $rows = array_merge($priorRows, $offerRows);
+        usort($rows, fn (array $left, array $right): int => [(int) ($left['year'] ?? 0), (string) ($left['grantId'] ?? '')] <=> [(int) ($right['year'] ?? 0), (string) ($right['grantId'] ?? '')]);
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $priorAfterTax
+     * @param  array<string, mixed>|null  $offerAfterTax
+     * @param  list<array<string, mixed>>  $annual
+     * @param  array{low:float,medium:float,high:float}  $preTaxTotalValue
+     * @return array<string, mixed>|null
+     */
+    private function combineAfterTax(?array $priorAfterTax, ?array $offerAfterTax, array $annual, array $preTaxTotalValue, ModelAssumptions $modelAssumptions): ?array
+    {
+        if (! is_array($priorAfterTax) || ! is_array($offerAfterTax)) {
+            return null;
+        }
+
+        $priorByYear = $this->rowsByYear(is_array($priorAfterTax['annual'] ?? null) ? $priorAfterTax['annual'] : []);
+        $offerByYear = $this->rowsByYear(is_array($offerAfterTax['annual'] ?? null) ? $offerAfterTax['annual'] : []);
+        $preTaxByYear = $this->rowsByYear($annual);
+        $isMarried = $modelAssumptions->isMarried();
+        $combinedAnnual = [];
+        $form6251 = [];
+        $lifetime = [
+            'taxableCompIncome' => 0.0,
+            'totalTaxableIncome' => 0.0,
+            'nsoOrdinaryIncome' => 0.0,
+            'isoAmtPreference' => 0.0,
+            'equitySaleProceeds' => 0.0,
+            'equityCapitalGain' => 0.0,
+            'estimatedRegularTax' => 0.0,
+            'estimatedAmt' => 0.0,
+            'totalEstimatedTax' => 0.0,
+            'freeCashFlow' => 0.0,
+            'totalValue' => ['low' => 0.0, 'medium' => 0.0, 'high' => 0.0],
+        ];
+
+        foreach ($annual as $annualRow) {
+            $year = (int) $annualRow['year'];
+            $prior = $priorByYear[$year] ?? [];
+            $offer = $offerByYear[$year] ?? [];
+            $taxableCompIncome = MoneyMath::add((float) ($prior['taxableCompIncome'] ?? 0.0), (float) ($offer['taxableCompIncome'] ?? 0.0));
+            $equityCapitalGain = MoneyMath::add((float) ($prior['equityCapitalGain'] ?? 0.0), (float) ($offer['equityCapitalGain'] ?? 0.0));
+            $totalTaxableIncome = MoneyMath::add($taxableCompIncome, $equityCapitalGain);
+            $isoAmtPreference = MoneyMath::add((float) ($prior['isoAmtPreference'] ?? 0.0), (float) ($offer['isoAmtPreference'] ?? 0.0));
+            $estimatedRegularTax = MoneyMath::round(FederalIncomeTax::regularTax($totalTaxableIncome, $year, $isMarried, 0.0, $equityCapitalGain));
+            $form6251Facts = $this->form6251FactsBuilder->buildFromOtherAdjustments(
+                taxableIncome: $totalTaxableIncome,
+                line3OtherAdjustments: $isoAmtPreference,
+                year: $year,
+                isMarried: $isMarried,
+                regularTax: $estimatedRegularTax,
+                sourceEntries: [],
+                preferentialIncome: $equityCapitalGain,
+            );
+            $estimatedAmt = MoneyMath::round($form6251Facts->amt);
+            $totalEstimatedTax = MoneyMath::add($estimatedRegularTax, $estimatedAmt);
+            $freeCashFlow = MoneyMath::subtract((float) ($preTaxByYear[$year]['freeCashFlow'] ?? 0.0), $totalEstimatedTax);
+            $sourceIds = array_values(array_unique(array_merge(
+                is_array($prior['sourceIds'] ?? null) ? $prior['sourceIds'] : [],
+                is_array($offer['sourceIds'] ?? null) ? $offer['sourceIds'] : [],
+            )));
+
+            if ($isoAmtPreference !== 0.0 || $form6251Facts->amt !== 0.0) {
+                $form6251[] = ['year' => $year, 'facts' => $form6251Facts->toArray()];
+            }
+
+            $row = [
+                'year' => $year,
+                'taxableCompIncome' => $taxableCompIncome,
+                'totalTaxableIncome' => $totalTaxableIncome,
+                'nsoOrdinaryIncome' => MoneyMath::add((float) ($prior['nsoOrdinaryIncome'] ?? 0.0), (float) ($offer['nsoOrdinaryIncome'] ?? 0.0)),
+                'isoAmtPreference' => $isoAmtPreference,
+                'equitySaleProceeds' => MoneyMath::add((float) ($prior['equitySaleProceeds'] ?? 0.0), (float) ($offer['equitySaleProceeds'] ?? 0.0)),
+                'equityCapitalGain' => $equityCapitalGain,
+                'estimatedRegularTax' => $estimatedRegularTax,
+                'estimatedAmt' => $estimatedAmt,
+                'totalEstimatedTax' => $totalEstimatedTax,
+                'freeCashFlow' => $freeCashFlow,
+                'sourceIds' => $sourceIds,
+            ];
+            $combinedAnnual[] = $row;
+
+            foreach (['taxableCompIncome', 'totalTaxableIncome', 'nsoOrdinaryIncome', 'isoAmtPreference', 'equitySaleProceeds', 'equityCapitalGain', 'estimatedRegularTax', 'estimatedAmt', 'totalEstimatedTax', 'freeCashFlow'] as $field) {
+                $lifetime[$field] = MoneyMath::add($lifetime[$field], (float) $row[$field]);
+            }
+        }
+
+        $lifetime['totalValue'] = [
+            'low' => MoneyMath::subtract($preTaxTotalValue['low'], $lifetime['totalEstimatedTax']),
+            'medium' => MoneyMath::subtract($preTaxTotalValue['medium'], $lifetime['totalEstimatedTax']),
+            'high' => MoneyMath::subtract($preTaxTotalValue['high'], $lifetime['totalEstimatedTax']),
+        ];
+
+        return [
+            'annual' => $combinedAnnual,
+            'lifetime' => $lifetime,
+            'sources' => array_values(array_merge(
+                is_array($priorAfterTax['sources'] ?? null) ? $priorAfterTax['sources'] : [],
+                is_array($offerAfterTax['sources'] ?? null) ? $offerAfterTax['sources'] : [],
+            )),
+            'form6251' => $form6251,
+        ];
+    }
+
     private function raiseFactor(float $raisePct, int $offset): float
     {
         return round((1.0 + ($raisePct / 100.0)) ** $offset, 8);
@@ -164,7 +558,11 @@ final class CareerCompCalculator
 
     private function parseJobStartDate(JobSpec $job): ?DateTimeImmutable
     {
-        $value = $job->value('startDate');
+        return $this->parseDateValue($job->value('startDate'));
+    }
+
+    private function parseDateValue(mixed $value): ?DateTimeImmutable
+    {
         if (! is_string($value) || trim($value) === '') {
             return null;
         }
@@ -201,25 +599,28 @@ final class CareerCompCalculator
      * Prorate cash compensation by calendar days worked in the projected year. Null start dates
      * intentionally preserve the historical full-year model.
      */
-    private function cashCompYearFactor(?DateTimeImmutable $jobStartDate, int $year): float
+    private function cashCompYearFactor(?DateTimeImmutable $jobStartDate, int $year, ?DateTimeImmutable $activeThrough = null): float
     {
-        if ($jobStartDate === null) {
-            return 1.0;
-        }
-
         $yearStart = new DateTimeImmutable(sprintf('%04d-01-01', $year));
         $nextYearStart = $yearStart->modify('+1 year');
+        $activeStart = $jobStartDate instanceof DateTimeImmutable && $jobStartDate > $yearStart ? $jobStartDate : $yearStart;
+        $activeEndExclusive = $nextYearStart;
 
-        if ($jobStartDate <= $yearStart) {
-            return 1.0;
+        if ($activeThrough instanceof DateTimeImmutable) {
+            if ($activeThrough < $yearStart) {
+                return 0.0;
+            }
+
+            $candidateEnd = $activeThrough->modify('+1 day');
+            $activeEndExclusive = $candidateEnd < $nextYearStart ? $candidateEnd : $nextYearStart;
         }
 
-        if ($jobStartDate >= $nextYearStart) {
+        if ($activeStart >= $nextYearStart || $activeEndExclusive <= $activeStart) {
             return 0.0;
         }
 
         $daysInYear = (int) $yearStart->diff($nextYearStart)->days;
-        $workedDays = (int) $jobStartDate->diff($nextYearStart)->days;
+        $workedDays = (int) $activeStart->diff($activeEndExclusive)->days;
 
         return $daysInYear > 0 ? $workedDays / $daysInYear : 1.0;
     }
@@ -231,7 +632,7 @@ final class CareerCompCalculator
      *
      * @return list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>
      */
-    private function refresherDefinitions(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate): array
+    private function refresherDefinitions(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate, ?DateTimeImmutable $activeThrough): array
     {
         if (! $job->grantsRsu()) {
             return [];
@@ -254,6 +655,11 @@ final class CareerCompCalculator
         $definitions = [];
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $grantYear = $startYear + $offset;
+            $grantDate = DateTimeImmutable::createFromFormat('!Y-m-d', sprintf('%04d-01-01', $grantYear));
+            if ($activeThrough instanceof DateTimeImmutable && $grantDate instanceof DateTimeImmutable && $grantDate > $activeThrough) {
+                continue;
+            }
+
             $yearsSinceRefresherStart = $grantYear - $refresherStartYear;
             if ($yearsSinceRefresherStart < $firstOffset || ($yearsSinceRefresherStart - $firstOffset) % $cadence !== 0) {
                 continue;
@@ -282,7 +688,7 @@ final class CareerCompCalculator
     /**
      * @return list<array<string, mixed>>
      */
-    private function projectedOptionRefresherGrants(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate, ModelAssumptions $modelAssumptions): array
+    private function projectedOptionRefresherGrants(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $jobStartDate, ModelAssumptions $modelAssumptions, ?DateTimeImmutable $activeThrough): array
     {
         if (! $job->grantsOptions() || (string) $job->value('refresher.optionType') !== 'iso') {
             return [];
@@ -309,6 +715,11 @@ final class CareerCompCalculator
 
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $grantYear = $startYear + $offset;
+            $grantDate = DateTimeImmutable::createFromFormat('!Y-m-d', sprintf('%04d-01-01', $grantYear));
+            if ($activeThrough instanceof DateTimeImmutable && $grantDate instanceof DateTimeImmutable && $grantDate > $activeThrough) {
+                continue;
+            }
+
             $yearsSinceRefresherStart = $grantYear - $refresherStartYear;
             if ($yearsSinceRefresherStart < $firstOffset || ($yearsSinceRefresherStart - $firstOffset) % $cadence !== 0) {
                 continue;
@@ -583,14 +994,14 @@ final class CareerCompCalculator
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $refresherRows
      * @return list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>
      */
-    private function paperVestingRows(JobSpec $job, int $startYear, int $horizonYears, array $refresherRows): array
+    private function paperVestingRows(JobSpec $job, int $startYear, int $horizonYears, array $refresherRows, ?DateTimeImmutable $activeThrough): array
     {
         $paperStartYear = min($startYear, $this->earliestGrantYear($job) ?? $startYear);
         $paperHorizonYears = max(1, $startYear + $horizonYears - $paperStartYear);
-        $paperOptionResult = $this->optionsVestingService->expand($job, $paperStartYear, $paperHorizonYears);
+        $paperOptionResult = $this->optionsVestingService->expand($job, $paperStartYear, $paperHorizonYears, $activeThrough);
 
         return array_merge(
-            $this->rsuVestingExpander->expand($job, $paperStartYear, $paperHorizonYears),
+            $this->rsuVestingExpander->expand($job, $paperStartYear, $paperHorizonYears, $activeThrough),
             $paperOptionResult['rows'],
             $refresherRows,
         );

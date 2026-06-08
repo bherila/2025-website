@@ -38,6 +38,7 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
         onChange={setInputs}
         onOpenGrantEditor={(jobId, grantType, grantId) => setEditor({ jobId, grantType, grantId })}
         onOpenValuationTimeline={setTimelineJobId}
+        onOpenModelAssumptions={jest.fn()}
         activeGrant={editor}
       />
       {editor ? (
@@ -62,6 +63,7 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
           onChange={setInputs}
           onOpenGrantEditor={jest.fn()}
           onOpenValuationTimeline={jest.fn()}
+          onOpenModelAssumptions={jest.fn()}
         />
       )
     }
@@ -72,12 +74,15 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
     expect(screen.getByLabelText('Stage B')).toHaveValue(33)
     expect(screen.getByRole('combobox', { name: 'Filing status' })).toHaveTextContent('Single')
+    expect(screen.getByText('Current job notice period')).toBeInTheDocument()
   })
 
   it('shows current share price and hides private-only fields for a public company', () => {
     render(<Harness initial={makeInputs('public')} />)
 
     expect(screen.getByLabelText('Start date')).toBeInTheDocument()
+    expect(screen.getByText('Career transition')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Go to assumptions/ })).toBeInTheDocument()
     expect(screen.getByText('Current share price')).toBeInTheDocument()
     expect(screen.queryByText('409A price')).not.toBeInTheDocument()
     expect(screen.queryByText('Annual dilution')).not.toBeInTheDocument()
@@ -94,6 +99,19 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.getByLabelText('Start date')).toHaveValue('2026-07-01')
     expect(screen.getByLabelText('Grant date')).toHaveValue('2026-01-01')
     expect(screen.getByLabelText('Vesting start')).toHaveValue('')
+  })
+
+  it('reveals per-offer transition override controls', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    expect(screen.queryByLabelText('Prior job resignation date')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Override/ }))
+
+    expect(screen.getByLabelText('Notice period')).toHaveValue(2)
+    expect(screen.getByLabelText('Time off')).toHaveValue(0)
+    fireEvent.change(screen.getByLabelText('Prior job resignation date'), { target: { value: '2027-05-25' } })
+
+    expect(screen.getByLabelText('Prior job resignation date')).toHaveValue('2027-05-25')
   })
 
   it('shows 409A/dilution/liquidity and hides current share price for a private company', () => {

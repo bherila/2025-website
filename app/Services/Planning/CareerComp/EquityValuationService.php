@@ -12,11 +12,11 @@ final class EquityValuationService
      * @param  list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>  $refresherDefs
      * @return array{annualEquity:array<int, float>,liquidity:array{low:list<array{year:int,cumulativeValue:float}>,medium:list<array{year:int,cumulativeValue:float}>,high:list<array{year:int,cumulativeValue:float}>},totals:array{low:float,medium:float,high:float},refresherRows:list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source:string}>}
      */
-    public function value(JobSpec $job, array $vestingRows, array $refresherDefs, int $startYear, int $horizonYears): array
+    public function value(JobSpec $job, array $vestingRows, array $refresherDefs, int $startYear, int $horizonYears, ?DateTimeImmutable $vestingThrough = null): array
     {
         // Refresher share counts are band-specific: the same dollar grant buys more shares at a
         // lower projected price, so each band gets its own vesting series.
-        $refresherVestedByBand = $this->refresherVestedSharesByBand($job, $refresherDefs, $startYear, $horizonYears);
+        $refresherVestedByBand = $this->refresherVestedSharesByBand($job, $refresherDefs, $startYear, $horizonYears, $vestingThrough);
 
         $annualEquity = [];
         $liquidity = ['low' => [], 'medium' => [], 'high' => []];
@@ -54,7 +54,7 @@ final class EquityValuationService
             'liquidity' => $liquidity,
             'totals' => $totals,
             // Representative (medium-band) refresher rows for the vesting breakdown + after-tax facts.
-            'refresherRows' => $this->refresherRows($job, $refresherDefs, 'medium', $startYear, $horizonYears),
+            'refresherRows' => $this->refresherRows($job, $refresherDefs, 'medium', $startYear, $horizonYears, $vestingThrough),
         ];
     }
 
@@ -62,12 +62,12 @@ final class EquityValuationService
      * @param  list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>  $refresherDefs
      * @return array{low:array<int, float>,medium:array<int, float>,high:array<int, float>}
      */
-    private function refresherVestedSharesByBand(JobSpec $job, array $refresherDefs, int $startYear, int $horizonYears): array
+    private function refresherVestedSharesByBand(JobSpec $job, array $refresherDefs, int $startYear, int $horizonYears, ?DateTimeImmutable $vestingThrough): array
     {
         $byBand = ['low' => [], 'medium' => [], 'high' => []];
 
         foreach (['low', 'medium', 'high'] as $band) {
-            foreach ($this->refresherRows($job, $refresherDefs, $band, $startYear, $horizonYears) as $row) {
+            foreach ($this->refresherRows($job, $refresherDefs, $band, $startYear, $horizonYears, $vestingThrough) as $row) {
                 $byBand[$band][$row['year']] = ($byBand[$band][$row['year']] ?? 0.0) + $row['vestedShares'];
             }
         }
@@ -79,9 +79,9 @@ final class EquityValuationService
      * @param  list<array{grantId:string,grantYearOffset:int,grantYear:int,value:float,vestingMonths:int,cliffMonths:int,frequency:string}>  $refresherDefs
      * @return list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source:string}>
      */
-    private function refresherRows(JobSpec $job, array $refresherDefs, string $band, int $startYear, int $horizonYears): array
+    private function refresherRows(JobSpec $job, array $refresherDefs, string $band, int $startYear, int $horizonYears, ?DateTimeImmutable $vestingThrough): array
     {
-        $rows = [];
+        $rowsByGrantYear = [];
 
         foreach ($refresherDefs as $def) {
             $price = $this->sharePrice($job, $def['grantYearOffset'], $band);
@@ -95,22 +95,40 @@ final class EquityValuationService
                 continue;
             }
 
-            $byYear = VestingSchedule::sharesByYear($shares, $grantDate, $def['vestingMonths'], $def['cliffMonths'], $def['frequency']);
-            foreach ($byYear as $year => $vestedShares) {
+            $vestingGrant = [
+                'vestingYears' => $def['vestingMonths'] / 12,
+                'vestingFrequency' => $def['frequency'],
+                'cliffMonths' => $def['cliffMonths'],
+            ];
+            foreach (VestingSchedule::vestingEventsForGrant($shares, $grantDate, $vestingGrant) as $event) {
+                if ($vestingThrough instanceof DateTimeImmutable && $event['date'] > $vestingThrough) {
+                    continue;
+                }
+
+                $year = (int) $event['date']->format('Y');
                 if ($year < $startYear || $year >= $startYear + $horizonYears) {
                     continue;
                 }
 
-                $rows[] = [
-                    'grantId' => $def['grantId'],
-                    'type' => 'rsu',
-                    'year' => $year,
-                    'vestedShares' => round($vestedShares, 4),
-                    'exercisableShares' => 0.0,
-                    'source' => 'projected_refresher',
-                ];
+                $key = $def['grantId'].'|'.$year;
+                $rowsByGrantYear[$key] = MoneyMath::add((float) ($rowsByGrantYear[$key] ?? 0.0), $event['shares']);
             }
         }
+
+        $rows = [];
+        foreach ($rowsByGrantYear as $key => $vestedShares) {
+            [$grantId, $year] = explode('|', (string) $key, 2);
+            $rows[] = [
+                'grantId' => $grantId,
+                'type' => 'rsu',
+                'year' => (int) $year,
+                'vestedShares' => round($vestedShares, 4),
+                'exercisableShares' => 0.0,
+                'source' => 'projected_refresher',
+            ];
+        }
+
+        usort($rows, fn (array $left, array $right): int => [$left['year'], $left['grantId']] <=> [$right['year'], $right['grantId']]);
 
         return $rows;
     }

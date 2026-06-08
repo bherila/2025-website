@@ -24,6 +24,12 @@ export const modelAssumptionsSchema = z
         filingStatus: z.enum(['single', 'mfj']).default('single'),
       })
       .prefault({}),
+    careerTransition: z
+      .object({
+        currentJobNoticeWeeks: z.number().default(2),
+        timeOffBetweenJobsWeeks: z.number().default(0),
+      })
+      .prefault({}),
   })
   .prefault({})
 
@@ -107,6 +113,13 @@ export const grantTypesSchema = z
   })
   .prefault({})
 
+export const transitionOverrideSchema = z
+  .object({
+    currentJobNoticeWeeks: z.number().nullable().default(null),
+    timeOffBetweenJobsWeeks: z.number().nullable().default(null),
+  })
+  .prefault({})
+
 export const rsuGrantSchema = z.object({
   id: z.string(),
   kind: z.enum(['hire', 'refresher']),
@@ -140,6 +153,8 @@ export const jobSpecSchema = z.object({
   id: z.string(),
   name: z.string(),
   startDate: z.string().nullish().default(null),
+  priorJobResignationDate: z.string().nullish().default(null),
+  transitionOverride: transitionOverrideSchema,
   company: companySpecSchema,
   comp: cashCompSchema,
   grantTypes: grantTypesSchema,

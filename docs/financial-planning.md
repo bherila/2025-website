@@ -9,8 +9,9 @@ The `/financial-planning` section hosts public, standalone planning calculators.
 | `/financial-planning` | Landing page listing shipped calculators | Public |
 | `/financial-planning/solo-401k` | Solo 401(k) contribution calculator | Public |
 | `/financial-planning/rent-vs-buy` | Rent vs Buy home-cost comparison calculator | Public |
+| `/financial-planning/career-comparison` | Career offer compensation comparison calculator | Public page, authenticated save/share |
 
-Routes are defined in `routes/web.php` outside the `auth` middleware group. The site-wide navbar is data-driven from `resources/views/layouts/app.blade.php`; its public **Financial Planning** dropdown links to the overview, Solo 401(k), and Rent vs Buy pages for both logged-out and logged-in visitors.
+Routes are defined in `routes/web.php` outside the `auth` middleware group. The site-wide navbar is data-driven from `resources/views/layouts/app.blade.php`; its public **Financial Planning** dropdown links to the overview, Solo 401(k), Rent vs Buy, and Career Comparison pages for both logged-out and logged-in visitors.
 
 ## Solo 401(k) Calculator
 
@@ -53,6 +54,10 @@ Key files:
 Inputs include home price, down payment, mortgage rate and term, closing costs, property tax, HOA, insurance, maintenance, appreciation, selling costs, rent, renter's insurance, rent growth, investment return, marginal tax rate, filing status, inflation, and time horizon.
 
 The standalone page serializes scenarios into the URL query string using compact keys such as `price`, `down`, `rate`, `rent`, `invest`, and `horizon`.
+
+## Career Comparison
+
+See `docs/career-comparison.md` for the detailed Career Comparison tool architecture, input contract, and career-transition modeling behavior.
 
 ## Shared Tax Preview Integration
 

@@ -70,6 +70,11 @@ class CareerCompPersistenceTest extends TestCase
         $user = User::factory()->create();
         $inputs = CareerCompInputs::defaults();
         $inputs['hypotheticalJobs'][0]['startDate'] = '2026-07-01';
+        $inputs['hypotheticalJobs'][0]['priorJobResignationDate'] = '2026-06-15';
+        $inputs['hypotheticalJobs'][0]['transitionOverride'] = [
+            'currentJobNoticeWeeks' => 1,
+            'timeOffBetweenJobsWeeks' => 1,
+        ];
         $inputs['hypotheticalJobs'][0]['grantTypes'] = ['rsu' => false, 'options' => true];
         $inputs['hypotheticalJobs'][0]['refresher']['optionPctOfFullyDilutedShares'] = 0.75;
         $inputs['hypotheticalJobs'][0]['refresher']['optionType'] = 'iso';
@@ -80,6 +85,9 @@ class CareerCompPersistenceTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('inputs.hypotheticalJobs.0.startDate', '2026-07-01');
+        $response->assertJsonPath('inputs.hypotheticalJobs.0.priorJobResignationDate', '2026-06-15');
+        $response->assertJsonPath('inputs.hypotheticalJobs.0.transitionOverride.currentJobNoticeWeeks', 1);
+        $response->assertJsonPath('inputs.hypotheticalJobs.0.transitionOverride.timeOffBetweenJobsWeeks', 1);
         $response->assertJsonPath('inputs.hypotheticalJobs.0.grantTypes.rsu', false);
         $response->assertJsonPath('inputs.hypotheticalJobs.0.grantTypes.options', true);
         $response->assertJsonPath('inputs.hypotheticalJobs.0.refresher.optionPctOfFullyDilutedShares', 0.75);
@@ -93,6 +101,9 @@ class CareerCompPersistenceTest extends TestCase
         $this->assertFalse($stored->spec_json['grantTypes']['rsu']);
         $this->assertTrue($stored->spec_json['grantTypes']['options']);
         $this->assertSame('2026-07-01', $stored->spec_json['startDate']);
+        $this->assertSame('2026-06-15', $stored->spec_json['priorJobResignationDate']);
+        $this->assertSame(1, $stored->spec_json['transitionOverride']['currentJobNoticeWeeks']);
+        $this->assertSame(1, $stored->spec_json['transitionOverride']['timeOffBetweenJobsWeeks']);
         $this->assertSame(0.75, $stored->spec_json['refresher']['optionPctOfFullyDilutedShares']);
         $this->assertSame('iso', $stored->spec_json['refresher']['optionType']);
     }

@@ -141,6 +141,62 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.annual.3.bonus', 11000);
     }
 
+    public function test_compute_endpoint_applies_transition_assumptions_before_future_offer(): void
+    {
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 2,
+                'startYear' => 2026,
+                'currentJob' => $this->cashOnlyJob('current', 'Current job', 100000),
+                'hypotheticalJobs' => [[
+                    ...$this->cashOnlyJob('hyp-1', 'Future offer', 200000),
+                    'startDate' => '2027-01-01',
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.1.annual.0.salary', 100000);
+        $response->assertJsonPath('jobs.1.annual.1.salary', 200000);
+        $response->assertJsonPath('jobs.1.lifetime.totalCashComp', 300000);
+        $response->assertJsonPath('deltasVsCurrent.0.cashCompDelta', 100000);
+    }
+
+    public function test_compute_endpoint_transition_override_cuts_off_current_job_vesting(): void
+    {
+        $currentJob = $this->cashOnlyJob('current', 'Current job', 0);
+        $currentJob['company']['currentSharePrice'] = 10;
+        $currentJob['rsuGrants'] = [[
+            'id' => 'current-rsu',
+            'kind' => 'hire',
+            'grantDate' => '2026-01-01',
+            'shareCount' => 120,
+            'cliffMonths' => 0,
+            'vestingYears' => 1,
+            'vestingFrequency' => 'monthly',
+        ]];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 1,
+                'startYear' => 2026,
+                'currentJob' => $currentJob,
+                'hypotheticalJobs' => [[
+                    ...$this->cashOnlyJob('hyp-1', 'Midyear offer', 0),
+                    'startDate' => '2026-07-01',
+                    'transitionOverride' => [
+                        'currentJobNoticeWeeks' => 0,
+                        'timeOffBetweenJobsWeeks' => 0,
+                    ],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.1.annual.0.vestedLiquidEquity', 500);
+        $response->assertJsonPath('jobs.1.lifetime.totalEquityValue.medium', 500);
+    }
+
     public function test_compute_endpoint_keeps_projection_raise_offset_for_past_start_dates(): void
     {
         $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
@@ -359,6 +415,57 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.lifetime.totalPaperEquityValue.medium', 95000);
     }
 
+    public function test_compute_endpoint_carries_prior_current_private_paper_equity_into_future_offer(): void
+    {
+        $currentJob = $this->cashOnlyJob('current', 'Current private', 0);
+        $currentJob['company']['type'] = 'private';
+        $currentJob['company']['fullyDilutedShares'] = 1000000;
+        $currentJob['company']['valuationScenarios'] = [[
+            'id' => 'current-base',
+            'label' => 'Current base',
+            'outcome' => 'medium',
+            'stages' => [[
+                'year' => 2026,
+                'stage' => 'A',
+                'preferredPostMoneyValuation' => 100000000,
+                'capitalDilutionPct' => 0,
+                'employeePoolDilutionPct' => 0,
+                'commonFmv' => 20,
+                'commonFmvDiscountPct' => 0,
+                'liquidityEvent' => false,
+            ]],
+        ]];
+        $currentJob['optionGrants'] = [[
+            'id' => 'current-option',
+            'kind' => 'hire',
+            'type' => 'nso',
+            'grantDate' => '2025-01-01',
+            'shareCount' => 1000,
+            'strike' => 5,
+            'cliffMonths' => 0,
+            'vestingYears' => 1,
+            'vestingFrequency' => 'annual',
+            'earlyExercise83b' => false,
+        ]];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 1,
+                'startYear' => 2026,
+                'currentJob' => $currentJob,
+                'hypotheticalJobs' => [[
+                    ...$this->cashOnlyJob('hyp-1', 'Future public offer', 0),
+                    'startDate' => '2027-01-01',
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.1.lifetime.totalEquityValue.medium', 0);
+        $response->assertJsonPath('jobs.1.lifetime.totalPaperEquityValue.medium', 95000);
+        $response->assertJsonPath('jobs.1.paperEquity.totalsByOutcome.medium', 95000);
+    }
+
     public function test_compute_rejects_invalid_private_valuation_scenario_rows(): void
     {
         $inputs = CareerCompInputs::defaults();
@@ -382,5 +489,21 @@ class CareerCompComputeTest extends TestCase
             'inputs.hypotheticalJobs.0.company.valuationScenarios.0.outcome',
             'inputs.hypotheticalJobs.0.company.valuationScenarios.0.stages.0.preferredPostMoneyValuation',
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cashOnlyJob(string $id, string $name, float $baseSalary): array
+    {
+        return [
+            'id' => $id,
+            'name' => $name,
+            'company' => ['type' => 'public', 'currentSharePrice' => 0],
+            'comp' => ['baseSalary' => $baseSalary, 'cashBonus' => 0, 'annualRaisePct' => 0],
+            'rsuGrants' => [],
+            'optionGrants' => [],
+            'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+        ];
     }
 }
