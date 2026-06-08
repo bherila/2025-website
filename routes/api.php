@@ -127,6 +127,7 @@ Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/even
 Route::middleware(['web', 'auth'])->put('/finance/accounts/{account}/basis/events/{event}', [PartnershipBasisController::class, 'updateEvent']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/recompute', [PartnershipBasisController::class, 'recompute']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/lock', [PartnershipBasisController::class, 'lock']);
+Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/unlock', [PartnershipBasisController::class, 'unlock']);
 Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
 Route::middleware(['web', 'auth'])->get('/rsu', [FinanceRsuController::class, 'getRsuData']);
 Route::middleware(['web', 'auth'])->post('/rsu', [FinanceRsuController::class, 'upsertRsuGrants']);

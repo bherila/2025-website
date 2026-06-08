@@ -363,6 +363,43 @@ class PartnershipBasisApiTest extends TestCase
             ->assertJsonPath('interests.1.reviewStatus', 'locked');
     }
 
+    public function test_unlock_endpoint_reopens_a_locked_year(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Unlock Account']);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/initialization", [
+            'tax_year' => 2024,
+            'partnership_name' => 'Unlock LP',
+            'initial_cash_contribution_cents' => 100_00,
+        ])->assertCreated();
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/lock?year=2024")
+            ->assertOk()
+            ->assertJsonPath('interests.0.reviewStatus', 'locked');
+
+        // Locked years reject new events.
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/events", [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 10_00,
+        ])->assertStatus(422);
+
+        // Unlocking reopens the rollforward for amendment.
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/unlock?year=2024")
+            ->assertOk()
+            ->assertJsonPath('interests.0.reviewStatus', 'needs_review')
+            ->assertJsonPath('interests.0.lockedAt', null);
+
+        // The year is editable again.
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/events", [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 10_00,
+        ])->assertCreated();
+    }
+
     public function test_unknown_event_type_is_rejected(): void
     {
         $user = User::factory()->create();

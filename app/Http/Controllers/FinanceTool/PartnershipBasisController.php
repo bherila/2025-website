@@ -100,13 +100,10 @@ class PartnershipBasisController extends Controller
 
         $basisEvent->fill($payload)->save();
 
-        // Recompute every affected year (ascending) so a moved event no longer counts in the
-        // year it left and the destination year reflects it.
-        $years = array_unique([$originalYear, $newYear]);
-        sort($years);
-        foreach ($years as $affectedYear) {
-            $this->partnershipBasisService->recomputeInterestYear($interest, $affectedYear);
-        }
+        // Recompute the whole rollforward from the earliest affected year through the interest's
+        // latest year. A moved event no longer counts in the year it left, and every downstream
+        // year — including intervening ones — reads a refreshed carryforward instead of a stale one.
+        $this->partnershipBasisService->recomputeInterestYearRange($interest, min($originalYear, $newYear));
 
         return response()->json($this->partnershipBasisService->eventToArray($basisEvent->refresh()));
     }
@@ -125,6 +122,16 @@ class PartnershipBasisController extends Controller
         $year = $this->year($request);
         $financeAccount = $this->account($account);
         $basisYears = $this->partnershipBasisService->lockAccountYear($financeAccount, (int) Auth::id(), $year);
+        abort_if($basisYears->isEmpty(), 404);
+
+        return response()->json($this->partnershipBasisService->accountBasisData($financeAccount, (int) Auth::id(), $year));
+    }
+
+    public function unlock(Request $request, int $account): JsonResponse
+    {
+        $year = $this->year($request);
+        $financeAccount = $this->account($account);
+        $basisYears = $this->partnershipBasisService->unlockAccountYear($financeAccount, (int) Auth::id(), $year);
         abort_if($basisYears->isEmpty(), 404);
 
         return response()->json($this->partnershipBasisService->accountBasisData($financeAccount, (int) Auth::id(), $year));

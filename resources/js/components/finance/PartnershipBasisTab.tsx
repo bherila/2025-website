@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { AlertTriangle, CheckCircle2, Lock, Plus, RefreshCw, Settings2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Lock, LockOpen, Plus, RefreshCw, Settings2 } from 'lucide-react'
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { DetailsButton, InfoTooltip, type NavGlyph } from '@/components/finance/tax-preview-primitives'
@@ -270,6 +270,13 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
     void runMutation(() => fetchWrapper.post(`/api/finance/accounts/${accountId}/basis/lock?year=${year}`, {}))
   }, [runMutation, accountId, year])
 
+  const unlockYear = useCallback(() => {
+    if (!window.confirm(`Unlock ${year}? This re-opens the basis rollforward for amendment (e.g. an amended K-1) and recomputes it.`)) {
+      return
+    }
+    void runMutation(() => fetchWrapper.post(`/api/finance/accounts/${accountId}/basis/unlock?year=${year}`, {}))
+  }, [runMutation, accountId, year])
+
   const totals = useMemo(() => {
     const interests = data?.interests ?? []
     const sum = (pick: (interest: PartnershipBasisInterest) => number): number =>
@@ -354,7 +361,11 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
                   tooltip="Go to destination: Tax Preview (Schedule D & basis worksheet)"
                   onClick={() => { window.location.href = `/finance/tax-preview?year=${year}` }}
                 />
-                {interest.reviewStatus !== 'locked' && (
+                {interest.reviewStatus === 'locked' ? (
+                  <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" disabled={isBusy} onClick={unlockYear}>
+                    <LockOpen className="h-3 w-3" /> Unlock {year}
+                  </Button>
+                ) : (
                   <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" disabled={isBusy} onClick={lockYear}>
                     <Lock className="h-3 w-3" /> Lock {year}
                   </Button>

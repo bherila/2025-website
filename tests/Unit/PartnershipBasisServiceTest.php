@@ -697,12 +697,91 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame('long', $this->service->holdingPeriod($interest, 2024, collect([$rollforward])));
     }
 
+    public function test_section_179_reduces_computed_tax_basis_capital(): void
+    {
+        // Tax-basis capital method, no explicit ending capital → the fallback rollforward applies.
+        // Beginning tax capital 100 + Box 5 income 50 − Box 12 §179 20 = 130.
+        $basisYear = $this->basisFromK1(2024, 'Section179 Capital LP', ['5' => '50', '12' => '20'], [], [
+            'capitalAccount' => ['method' => 'tax', 'beginningCapital' => 100],
+        ]);
+
+        $this->assertSame(130_00, $basisYear->ending_tax_basis_capital_cents);
+    }
+
+    public function test_source_value_override_is_applied_to_basis_income(): void
+    {
+        // A reviewed All-in-One override on Box 1 must drive the rollforward, not the raw extraction.
+        $basisYear = $this->basisFromK1(2024, 'Override Income LP', ['1' => '100'], [], [], null, [
+            'field:1' => ['value' => '250'],
+        ]);
+
+        $this->assertSame(250_00, $basisYear->taxable_income_increase_cents);
+        $this->assertSame(250_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_source_value_override_is_applied_to_coded_box(): void
+    {
+        // Box 13 Code A raw 10, overridden to 40 → deductible loss of 40 against 100 income.
+        $basisYear = $this->basisFromK1(2024, 'Override Code LP', ['5' => '100'], [
+            '13' => [['code' => 'A', 'value' => '10']],
+        ], [], null, ['code:13:A' => ['value' => '40']]);
+
+        $this->assertSame(40_00, $basisYear->deductions_losses_decrease_cents);
+        $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_manual_interest_merges_with_later_k1_by_name(): void
+    {
+        // Manual opening basis is seeded before the K-1 arrives → interest with a null EIN.
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Merge LP',
+            'initial_cash_contribution_cents' => 100_00,
+            'initialization_review_status' => 'reviewed',
+        ]);
+        $this->assertDatabaseCount('fin_partnership_interests', 1);
+
+        // The K-1 later syncs for the same account+name carrying an EIN.
+        $this->k1Document(2024, 'Merge LP', '12-3456789', [
+            'A' => ['value' => '12-3456789'],
+            'B' => ['value' => 'Merge LP'],
+            'D' => ['value' => 'false'],
+            '5' => ['value' => '50'],
+        ], []);
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+
+        // Still ONE interest — it adopts the EIN and carries both the manual contribution and K-1 income.
+        $this->assertDatabaseCount('fin_partnership_interests', 1);
+        $interest = FinPartnershipInterest::query()->where('partnership_name', 'Merge LP')->firstOrFail();
+        $this->assertSame('123456789', $interest->partnership_ein);
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2024)->ending_outside_basis_cents);
+    }
+
+    public function test_recompute_interest_year_range_refreshes_intervening_and_future_years(): void
+    {
+        $interest = $this->interest('Span LP');
+        $this->manualEvent($interest, 2023, 'beginning_basis', 100_00);
+        foreach ([2023, 2024, 2025, 2026] as $rollforwardYear) {
+            $this->service->recomputeInterestYear($interest, $rollforwardYear);
+        }
+        $this->assertSame(100_00, $this->basisYearForInterest($interest, 2026)->ending_outside_basis_cents);
+
+        // Add income in 2024, then recompute the whole span from 2024 forward.
+        $this->manualEvent($interest, 2024, 'taxable_income', 50_00);
+        $this->service->recomputeInterestYearRange($interest, 2024);
+
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2024)->ending_outside_basis_cents);
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->beginning_outside_basis_cents);
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2026)->ending_outside_basis_cents);
+        $this->assertFalse($this->basisYearForInterest($interest, 2026)->is_stale);
+    }
+
     /**
      * @param  array<string, string>  $fields
      * @param  array<string, array<int, array<string, string>>>  $codes
      * @param  array<string, mixed>  $basis
      */
-    private function basisFromK1(int $year, string $name, array $fields, array $codes, array $basis = [], ?string $ein = null): FinPartnershipBasisYear
+    private function basisFromK1(int $year, string $name, array $fields, array $codes, array $basis = [], ?string $ein = null, array $overrides = []): FinPartnershipBasisYear
     {
         $ein ??= '47-'.str_pad((string) (abs(crc32($name)) % 10_000_000), 7, '0', STR_PAD_LEFT);
         $docFields = ['A' => ['value' => $ein], 'B' => ['value' => $name."\n123 Example Way"], 'D' => ['value' => 'false']];
@@ -710,7 +789,7 @@ class PartnershipBasisServiceTest extends TestCase
             $docFields[$box] = ['value' => $value];
         }
 
-        $this->k1Document($year, $name, $ein, $docFields, $codes, $basis);
+        $this->k1Document($year, $name, $ein, $docFields, $codes, $basis, $overrides);
         $this->service->recomputeForUserYear($this->user->id, $year);
 
         return $this->basisYearFor($name, $year);
@@ -720,8 +799,9 @@ class PartnershipBasisServiceTest extends TestCase
      * @param  array<string, array<string, mixed>>  $fields
      * @param  array<string, array<int, array<string, string>>>  $codes
      * @param  array<string, mixed>  $basis
+     * @param  array<string, array<string, mixed>>  $overrides
      */
-    private function k1Document(int $year, string $name, string $ein, array $fields, array $codes, array $basis = []): FileForTaxDocument
+    private function k1Document(int $year, string $name, string $ein, array $fields, array $codes, array $basis = [], array $overrides = []): FileForTaxDocument
     {
         if (! isset($fields['A'])) {
             // Union (not array_merge) so numeric box keys such as '5'/'19' are not reindexed.
@@ -729,6 +809,17 @@ class PartnershipBasisServiceTest extends TestCase
         }
 
         $slug = str_replace(' ', '-', strtolower($name));
+
+        $parsedData = [
+            'schemaVersion' => '2026.1',
+            'formType' => 'K-1-1065',
+            'fields' => $fields,
+            'codes' => $codes,
+            'basis' => $basis,
+        ];
+        if ($overrides !== []) {
+            $parsedData['sourceValueOverrides'] = $overrides;
+        }
 
         return FileForTaxDocument::create([
             'user_id' => $this->user->id,
@@ -740,14 +831,16 @@ class PartnershipBasisServiceTest extends TestCase
             'file_size_bytes' => 1,
             'file_hash' => sha1($slug.$ein),
             'is_reviewed' => true,
-            'parsed_data' => [
-                'schemaVersion' => '2026.1',
-                'formType' => 'K-1-1065',
-                'fields' => $fields,
-                'codes' => $codes,
-                'basis' => $basis,
-            ],
+            'parsed_data' => $parsedData,
         ]);
+    }
+
+    private function basisYearForInterest(FinPartnershipInterest $interest, int $year): FinPartnershipBasisYear
+    {
+        return FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->firstOrFail();
     }
 
     private function basisYearFor(string $name, int $year): FinPartnershipBasisYear

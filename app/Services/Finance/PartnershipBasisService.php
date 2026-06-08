@@ -406,6 +406,51 @@ class PartnershipBasisService
     }
 
     /**
+     * Clear the lock on an account's basis year(s) so the rollforward can be amended (e.g. after an
+     * amended K-1). Recomputes each affected interest from the unlocked year forward so the freshly
+     * editable year and everything downstream reflect current sources.
+     *
+     * @return EloquentCollection<int, FinPartnershipBasisYear>
+     */
+    public function unlockAccountYear(FinAccounts $account, int $userId, int $year): EloquentCollection
+    {
+        $basisYears = FinPartnershipBasisYear::query()
+            ->with('partnershipInterest')
+            ->where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->whereNotNull('locked_at')
+            ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
+            ->get();
+
+        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'needs_review', 'locked_at' => null]));
+
+        $basisYears->pluck('partnershipInterest')
+            ->filter(fn ($interest): bool => $interest instanceof FinPartnershipInterest)
+            ->unique('id')
+            ->each(fn (FinPartnershipInterest $interest) => $this->recomputeInterestYearRange($interest, $year));
+
+        return $basisYears->fresh();
+    }
+
+    /**
+     * Recompute an interest's rollforward for every year from $fromYear through its latest basis
+     * year (ascending). A single recomputeInterestYear() refreshes only one year, so moving an event
+     * across a gap requires re-walking the chain in order; intervening years feed the next year's
+     * beginning basis, and locked years are skipped (left frozen) by recomputeInterestYear().
+     */
+    public function recomputeInterestYearRange(FinPartnershipInterest $interest, int $fromYear): void
+    {
+        $maxYear = (int) FinPartnershipBasisYear::query()
+            ->where('user_id', $interest->user_id)
+            ->where('partnership_interest_id', $interest->id)
+            ->max('tax_year');
+
+        for ($currentYear = $fromYear; $currentYear <= max($fromYear, $maxYear); $currentYear++) {
+            $this->recomputeInterestYear($interest, $currentYear);
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function accountBasisData(FinAccounts $account, int $userId, int $year): array
@@ -553,17 +598,26 @@ class PartnershipBasisService
         // Lock the matching window so concurrent K-1 syncs cannot both miss and create a
         // duplicate when EIN is absent (the unique index does not cover NULL EINs).
         return DB::transaction(function () use ($userId, $accountId, $ein, $name, $normalizedName, $formType, $document, $link, $isPtp): FinPartnershipInterest {
-            $query = FinPartnershipInterest::query()
+            $base = fn () => FinPartnershipInterest::query()
                 ->where('user_id', $userId)
                 ->where('account_id', $accountId)
                 ->lockForUpdate();
+
+            // Match in priority order so a manual interest seeded before the K-1 (null EIN) and the
+            // later K-1 (with EIN) for the same account+name resolve to ONE interest, in both
+            // directions, instead of splitting opening basis onto a duplicate row:
+            //   1. exact EIN (when the K-1 carries one)
+            //   2. a null-EIN row with the same normalized name (manual init before the K-1 synced)
+            //   3. when no EIN is supplied (UI init), any row with the same name (init after sync)
+            $interest = null;
             if ($ein !== null) {
-                $query->where('partnership_ein', $ein);
+                $interest = $base()->where('partnership_ein', $ein)->first()
+                    ?? $base()->whereNull('partnership_ein')->where('normalized_partnership_name', $normalizedName)->first();
             } else {
-                $query->whereNull('partnership_ein')->where('normalized_partnership_name', $normalizedName);
+                $interest = $base()->whereNull('partnership_ein')->where('normalized_partnership_name', $normalizedName)->first()
+                    ?? $base()->where('normalized_partnership_name', $normalizedName)->first();
             }
 
-            $interest = $query->first();
             if (! $interest instanceof FinPartnershipInterest) {
                 /** @var FinPartnershipInterest $interest */
                 $interest = FinPartnershipInterest::query()->create([
@@ -635,7 +689,7 @@ class PartnershipBasisService
 
         // ── Distributive-share income/loss (flat boxes) — canonical income source ──
         foreach (self::K1_INCOME_BOXES as $box) {
-            $cents = $this->moneyToCents($data['fields'][$box]['value'] ?? null);
+            $cents = $this->k1FieldCents($data, $box);
             if ($cents === null || $cents === 0) {
                 continue;
             }
@@ -646,18 +700,18 @@ class PartnershipBasisService
         // ── Guaranteed payments: count once (4c else 4a+4b else 4). Guaranteed payments are
         //    ordinary income to the partner but are NOT a distributive share and do not adjust
         //    outside basis (IRC §707(c)), so they are recorded as a memorandum only. ──
-        $gp = $this->moneyToCents($data['fields']['4c']['value'] ?? null);
+        $gp = $this->k1FieldCents($data, '4c');
         if ($gp === null || $gp === 0) {
-            $gp4a = $this->moneyToCents($data['fields']['4a']['value'] ?? null) ?? 0;
-            $gp4b = $this->moneyToCents($data['fields']['4b']['value'] ?? null) ?? 0;
-            $gp = ($gp4a + $gp4b) ?: ($this->moneyToCents($data['fields']['4']['value'] ?? null) ?? 0);
+            $gp4a = $this->k1FieldCents($data, '4a') ?? 0;
+            $gp4b = $this->k1FieldCents($data, '4b') ?? 0;
+            $gp = ($gp4a + $gp4b) ?: ($this->k1FieldCents($data, '4') ?? 0);
         }
         if ($gp !== 0) {
             $push(PartnershipBasisEventType::Memorandum, 'k1_field', 'fields.4.guaranteed_payments', 'K-1 guaranteed payments (income; no outside-basis effect)', $gp, '4', null, $reviewStatus);
         }
 
         // ── Section 179 deduction (Box 12) — reduces basis ──
-        $box12 = $this->moneyToCents($data['fields']['12']['value'] ?? null);
+        $box12 = $this->k1FieldCents($data, '12');
         if ($box12 !== null && $box12 !== 0) {
             $push(PartnershipBasisEventType::Section179, 'k1_field', 'fields.12.value', 'K-1 Box 12 Section 179 deduction', $box12, '12', null, $reviewStatus);
         }
@@ -665,7 +719,7 @@ class PartnershipBasisService
         // ── Foreign taxes paid or accrued (Box 21, the flat field the rest of the app parses for
         //    foreign tax) — a §705(a)(2)(B) expenditure that reduces outside basis. The K-3 carries
         //    the country detail, but Box 21 reports the partner's total, which is the basis effect. ──
-        $box21 = $this->moneyToCents($data['fields']['21']['value'] ?? null);
+        $box21 = $this->k1FieldCents($data, '21');
         if ($box21 !== null && $box21 !== 0) {
             $push(PartnershipBasisEventType::ForeignTax, 'k1_field', 'fields.21.value', 'K-1 Box 21 foreign taxes paid or accrued', $box21, '21', null, $reviewStatus);
         }
@@ -692,17 +746,27 @@ class PartnershipBasisService
         }
 
         if (! $recordedDistribution && is_array($data['codes']['19'] ?? null) && $data['codes']['19'] !== []) {
-            foreach ($data['codes']['19'] as $index => $item) {
-                if (! is_array($item)) {
+            foreach ($this->groupCodeItems($data, '19') as $code => $entries) {
+                [$type, $label] = $this->distributionTypeForCode($code !== '' ? $code : 'A');
+
+                $override = $this->sourceOverrideCents($data, sprintf('code:19:%s', $code));
+                if ($override !== null) {
+                    if ($override !== 0) {
+                        $push($type, 'k1_code', "codes.19.{$code}.override", $label, $override, '19', $code !== '' ? $code : null, $reviewStatus);
+                        $recordedDistribution = true;
+                    }
+
                     continue;
                 }
-                $cents = $this->moneyToCents($item['value'] ?? null);
-                if ($cents === null || $cents === 0) {
-                    continue;
+
+                foreach ($entries as $entry) {
+                    $cents = $this->moneyToCents($entry['item']['value'] ?? null);
+                    if ($cents === null || $cents === 0) {
+                        continue;
+                    }
+                    $push($type, 'k1_code', "codes.19.{$entry['index']}.value", $label, $cents, '19', $code !== '' ? $code : null, $reviewStatus);
+                    $recordedDistribution = true;
                 }
-                [$type, $label] = $this->distributionTypeForCode((string) ($item['code'] ?? 'A'));
-                $push($type, 'k1_code', "codes.19.{$index}.value", $label, $cents, '19', (string) ($item['code'] ?? ''), $reviewStatus);
-                $recordedDistribution = true;
             }
         }
 
@@ -771,21 +835,54 @@ class PartnershipBasisService
     private function collectK1CodedEvents(array $data, string $reviewStatus, callable $push): void
     {
         foreach (['11', '13', '16', '17', '18', '20', '14', '15'] as $box) {
-            $items = is_array($data['codes'][$box] ?? null) ? $data['codes'][$box] : [];
-            foreach ($items as $index => $item) {
-                if (! is_array($item)) {
+            foreach ($this->groupCodeItems($data, $box) as $code => $entries) {
+                $codeLabel = $code !== '' ? " Code {$code}" : '';
+
+                // An All-in-One source override is an aggregate per box+code, so it replaces ALL raw
+                // items of that code with one reviewed amount rather than overriding each in turn.
+                $override = $this->sourceOverrideCents($data, sprintf('code:%s:%s', $box, $code));
+                if ($override !== null) {
+                    if ($override === 0) {
+                        continue;
+                    }
+                    [$type, $review] = $this->routeK1Code($box, $code, $override, $reviewStatus);
+                    $push($type, 'k1_code', "codes.{$box}.{$code}.override", "K-1 Box {$box}{$codeLabel} (reviewed override)", $override, $box, $code !== '' ? $code : null, $review);
+
                     continue;
                 }
-                $cents = $this->moneyToCents($item['value'] ?? null);
-                if ($cents === null || $cents === 0) {
-                    continue;
+
+                foreach ($entries as $entry) {
+                    $cents = $this->moneyToCents($entry['item']['value'] ?? null);
+                    if ($cents === null || $cents === 0) {
+                        continue;
+                    }
+                    [$type, $review] = $this->routeK1Code($box, $code, $cents, $reviewStatus);
+                    $push($type, 'k1_code', "codes.{$box}.{$entry['index']}.value", "K-1 Box {$box}{$codeLabel}", $cents, $box, $code !== '' ? $code : null, $review);
                 }
-                $code = strtoupper(trim((string) ($item['code'] ?? '')));
-                [$type, $review] = $this->routeK1Code($box, $code, $cents, $reviewStatus);
-                $label = "K-1 Box {$box}".($code !== '' ? " Code {$code}" : '');
-                $push($type, 'k1_code', "codes.{$box}.{$index}.value", $label, $cents, $box, $code !== '' ? $code : null, $review);
             }
         }
+    }
+
+    /**
+     * Group a coded box's raw items by normalized (uppercased) code so source-value overrides,
+     * which are keyed per box+code, can replace every raw row of a code at once.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, array<int, array{index: int|string, item: array<string, mixed>}>>
+     */
+    private function groupCodeItems(array $data, string $box): array
+    {
+        $items = is_array($data['codes'][$box] ?? null) ? $data['codes'][$box] : [];
+
+        $byCode = [];
+        foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $byCode[strtoupper(trim((string) ($item['code'] ?? '')))][] = ['index' => $index, 'item' => $item];
+        }
+
+        return $byCode;
     }
 
     /**
@@ -1090,8 +1187,27 @@ class PartnershipBasisService
             return $beginning;
         }
 
-        $currentYear = $events->whereIn('event_type', ['capital_contribution_cash', 'capital_contribution_property_basis', 'taxable_income', 'tax_exempt_income'])->sum('amount_cents')
-            - $events->whereIn('event_type', ['cash_distribution', 'property_distribution_basis', 'deductible_loss', 'nondeductible_expense', 'foreign_tax'])->sum('amount_cents');
+        // Tax-basis capital uses the same increase/decrease set as outside basis EXCEPT liability
+        // share changes (which affect outside basis but not tax-basis capital). §179 and depletion
+        // reduce capital even when basis-limited, so they must be subtracted here too.
+        $currentYear = $events->whereIn('event_type', [
+            'capital_contribution_cash',
+            'capital_contribution_property_basis',
+            'taxable_income',
+            'tax_exempt_income',
+            'manual_increase_to_outside_basis',
+        ])->sum('amount_cents')
+            - $events->whereIn('event_type', [
+                'cash_distribution',
+                'property_distribution_basis',
+                'marketable_securities_distribution',
+                'deductible_loss',
+                'nondeductible_expense',
+                'foreign_tax',
+                'section179',
+                'depletion',
+                'manual_decrease_to_outside_basis',
+            ])->sum('amount_cents');
 
         return $beginning + (int) $currentYear;
     }
@@ -1324,6 +1440,38 @@ class PartnershipBasisService
     private function dateToString(DateTimeInterface|string|null $value): ?string
     {
         return $value === null ? null : CarbonImmutable::parse($value)->toDateString();
+    }
+
+    /**
+     * Reviewed All-in-One source value for a K-1 key (e.g. `field:1`, `code:13:W`), in cents, or
+     * null when there is no override. Mirrors the override helpers the other tax-fact builders use
+     * so the basis rollforward reflects corrected K-1 values instead of the raw extraction.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function sourceOverrideCents(array $data, string $key): ?int
+    {
+        $overrides = $data['sourceValueOverrides'] ?? null;
+        if (! is_array($overrides)) {
+            return null;
+        }
+
+        $override = $overrides[$key] ?? null;
+        if (! is_array($override) || ! array_key_exists('value', $override)) {
+            return null;
+        }
+
+        return $this->moneyToCents($override['value']);
+    }
+
+    /**
+     * Override-aware read of a flat K-1 box value, in cents.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function k1FieldCents(array $data, string $box): ?int
+    {
+        return $this->sourceOverrideCents($data, "field:{$box}") ?? $this->moneyToCents($data['fields'][$box]['value'] ?? null);
     }
 
     private function moneyToCents(mixed $value): ?int
