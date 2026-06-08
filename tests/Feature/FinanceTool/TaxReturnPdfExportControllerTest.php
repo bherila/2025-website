@@ -136,11 +136,11 @@ class TaxReturnPdfExportControllerTest extends TestCase
         $user = User::factory()->create();
         FinTaxReturnProfile::factory()->for($user, 'user')->create([
             'tax_year' => 2025,
-            'taxpayer_first_name' => 'Ada',
-            'taxpayer_last_name' => 'Lovelace',
+            'taxpayer_first_name' => 'Taxpayer',
+            'taxpayer_last_name' => 'Example',
             'taxpayer_ssn' => '123-45-6789',
             'address_line1' => '1 Main St',
-            'city' => 'London',
+            'city' => 'Sampletown',
             'state' => 'CA',
             'postal_code' => '94105',
             'digital_assets_answer' => 'no',
@@ -167,7 +167,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
 
         $this->assertStringStartsWith('%PDF', $content);
         $this->assertSame(2, count((new Parser)->parseContent($content)->getPages()));
-        $this->assertStringContainsString('Ada', $content);
+        $this->assertStringContainsString('Taxpayer', $content);
         $this->assertStringContainsString('/AcroForm', $content);
         $this->assertFileDoesNotExist($unexpectedPath);
 
@@ -189,11 +189,11 @@ class TaxReturnPdfExportControllerTest extends TestCase
         $user = User::factory()->create();
         FinTaxReturnProfile::factory()->for($user, 'user')->create([
             'tax_year' => 2025,
-            'taxpayer_first_name' => 'Ada',
-            'taxpayer_last_name' => 'Lovelace',
+            'taxpayer_first_name' => 'Taxpayer',
+            'taxpayer_last_name' => 'Example',
             'taxpayer_ssn' => '123-45-6789',
             'address_line1' => '1 Main St',
-            'city' => 'London',
+            'city' => 'Sampletown',
             'state' => 'CA',
             'postal_code' => '94105',
             'digital_assets_answer' => 'no',
@@ -214,7 +214,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
 
         $this->assertStringStartsWith('%PDF', $content);
         $this->assertSame(2, count((new Parser)->parseContent($content)->getPages()));
-        $this->assertStringContainsString('Ada', $content);
+        $this->assertStringContainsString('Taxpayer', $content);
         $this->assertStringNotContainsString('/AcroForm', $content);
 
         $this->assertDatabaseHas('fin_tax_return_pdf_exports', [

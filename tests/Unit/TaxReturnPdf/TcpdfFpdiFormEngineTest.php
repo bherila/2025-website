@@ -22,8 +22,8 @@ class TcpdfFpdiFormEngineTest extends TestCase
 
         $this->assertStringStartsWith('%PDF', $content);
         $this->assertSame(2, $this->pageCount($content));
-        $this->assertStringContainsString('Ada', $content);
-        $this->assertStringContainsString('Lovelace', $content);
+        $this->assertStringContainsString('Taxpayer', $content);
+        $this->assertStringContainsString('Example', $content);
         $this->assertStringContainsString('/AcroForm', $content);
 
         preg_match_all('/\/T\s*\((trp_[^)]+)\)/', $content, $matches);
@@ -42,8 +42,8 @@ class TcpdfFpdiFormEngineTest extends TestCase
 
         $this->assertStringStartsWith('%PDF', $content);
         $this->assertSame(2, $this->pageCount($content));
-        $this->assertStringContainsString('Ada', $content);
-        $this->assertStringContainsString('Lovelace', $content);
+        $this->assertStringContainsString('Taxpayer', $content);
+        $this->assertStringContainsString('Example', $content);
         $this->assertStringNotContainsString('/AcroForm', $content);
     }
 
@@ -53,11 +53,11 @@ class TcpdfFpdiFormEngineTest extends TestCase
     private function fieldValues(): array
     {
         return [
-            'f1_14[0]' => 'Ada',
-            'f1_15[0]' => 'Lovelace',
+            'f1_14[0]' => 'Taxpayer',
+            'f1_15[0]' => 'Example',
             'f1_16[0]' => '123456789',
             'f1_20[0]' => '1 Main St',
-            'f1_22[0]' => 'London',
+            'f1_22[0]' => 'Sampletown',
             'f1_23[0]' => 'CA',
             'f1_24[0]' => '94105',
             'c1_8[0]' => '1',
