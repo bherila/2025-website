@@ -123,6 +123,82 @@ class IrsReturnPdfBuilderTest extends TestCase
         $this->assertSame(['schedule-d'], $result->formIds);
     }
 
+    public function test_schedule_d_part_iii_lines_18_and_19_are_capped_by_net_long_term_gain(): void
+    {
+        $user = User::factory()->create();
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn([
+                    'scheduleD' => [
+                        'line12Sources' => [
+                            ['sourceType' => 'k1_collectibles_gain', 'amount' => 17.0],
+                            ['sourceType' => 'k1_unrecaptured_1250_gain', 'amount' => 23.0],
+                        ],
+                        'line12GainLoss' => 40.0,
+                        'line15NetLongTerm' => 10.0,
+                        'line16Combined' => 8.0,
+                    ],
+                ]);
+        });
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms): bool {
+                    $this->assertSame('schedule-d', $forms[0]['formId']);
+                    $this->assertSame('8', $forms[0]['fieldValues']['f2_2[0]'] ?? null);
+                    $this->assertSame('8', $forms[0]['fieldValues']['f2_3[0]'] ?? null);
+
+                    return true;
+                })
+                ->andReturn("%PDF-1.4\n%schedule-d");
+        });
+
+        app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'print', 'schedule-d', 'schedule-d.pdf'),
+        );
+    }
+
+    public function test_schedule_d_part_iii_lines_18_and_19_are_blank_when_net_long_term_gain_is_offset(): void
+    {
+        $user = User::factory()->create();
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn([
+                    'scheduleD' => [
+                        'line12Sources' => [
+                            ['sourceType' => 'k1_collectibles_gain', 'amount' => 17.0],
+                            ['sourceType' => 'k1_unrecaptured_1250_gain', 'amount' => 23.0],
+                        ],
+                        'line12GainLoss' => 40.0,
+                        'line15NetLongTerm' => -10.0,
+                        'line16Combined' => 30.0,
+                    ],
+                ]);
+        });
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms): bool {
+                    $this->assertSame('schedule-d', $forms[0]['formId']);
+                    $this->assertNull($forms[0]['fieldValues']['f2_2[0]'] ?? null);
+                    $this->assertNull($forms[0]['fieldValues']['f2_3[0]'] ?? null);
+
+                    return true;
+                })
+                ->andReturn("%PDF-1.4\n%schedule-d");
+        });
+
+        app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'print', 'schedule-d', 'schedule-d.pdf'),
+        );
+    }
+
     public function test_schedule_3_line_6_details_are_filled_from_supported_sources(): void
     {
         $user = User::factory()->create();

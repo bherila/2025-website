@@ -156,6 +156,7 @@ class IrsReturnReadinessServiceTest extends TestCase
             facts: [
                 'form1040' => [
                     'filingStatus' => 'single',
+                    'line16' => 100,
                     'line20' => 25,
                 ],
                 'schedule3' => [
@@ -169,6 +170,9 @@ class IrsReturnReadinessServiceTest extends TestCase
                     'totalLine4b' => 0,
                     'totalSourcedByPartnerIncome' => 0,
                     'hasUserOverride' => false,
+                    'passiveIncomeSources' => [
+                        ['sourceType' => '1099_div_foreign_tax', 'amount' => 100, 'isReviewed' => true, 'reviewStatus' => 'reviewed'],
+                    ],
                     'foreignTaxSources' => [
                         ['sourceType' => '1099_div_foreign_tax', 'amount' => 25],
                     ],
@@ -179,6 +183,135 @@ class IrsReturnReadinessServiceTest extends TestCase
         $this->assertTrue($readiness->isReady());
         $this->assertSame(['form-1040', 'schedule-3'], $readiness->requiredForms);
         $this->assertNotContains('form-1116', $readiness->unsupportedForms);
+    }
+
+    public function test_direct_schedule_3_foreign_tax_is_limited_to_regular_tax(): void
+    {
+        $user = User::factory()->create();
+        $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
+
+        $readiness = app(IrsReturnReadinessService::class)->forRequest(
+            user: $user,
+            year: 2025,
+            scope: 'return',
+            formId: null,
+            mode: 'editable',
+            profile: $profile,
+            facts: [
+                'form1040' => [
+                    'filingStatus' => 'single',
+                    'line16' => 10,
+                    'line20' => 25,
+                ],
+                'schedule3' => [
+                    'line1ForeignTaxCredit' => 25,
+                    'line8TotalNonrefundableCredits' => 25,
+                ],
+                'form1116' => [
+                    'totalForeignTaxes' => 25,
+                    'creditValue' => 25,
+                    'totalGeneralIncome' => 0,
+                    'totalLine4b' => 0,
+                    'totalSourcedByPartnerIncome' => 0,
+                    'hasUserOverride' => false,
+                    'passiveIncomeSources' => [
+                        ['sourceType' => '1099_div_foreign_tax', 'amount' => 100, 'isReviewed' => true, 'reviewStatus' => 'reviewed'],
+                    ],
+                    'foreignTaxSources' => [
+                        ['sourceType' => '1099_div_foreign_tax', 'amount' => 25],
+                    ],
+                ],
+            ],
+        );
+
+        $this->assertFalse($readiness->isReady());
+        $this->assertContains('form-1116', $readiness->unsupportedForms);
+    }
+
+    public function test_k1_only_foreign_tax_still_requires_form_1116(): void
+    {
+        $user = User::factory()->create();
+        $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
+
+        $readiness = app(IrsReturnReadinessService::class)->forRequest(
+            user: $user,
+            year: 2025,
+            scope: 'return',
+            formId: null,
+            mode: 'editable',
+            profile: $profile,
+            facts: [
+                'form1040' => [
+                    'filingStatus' => 'single',
+                    'line16' => 100,
+                    'line20' => 25,
+                ],
+                'schedule3' => [
+                    'line1ForeignTaxCredit' => 25,
+                    'line8TotalNonrefundableCredits' => 25,
+                ],
+                'form1116' => [
+                    'totalForeignTaxes' => 25,
+                    'creditValue' => 25,
+                    'totalGeneralIncome' => 0,
+                    'totalLine4b' => 0,
+                    'totalSourcedByPartnerIncome' => 0,
+                    'hasUserOverride' => false,
+                    'passiveIncomeSources' => [
+                        ['sourceType' => 'k1_foreign_tax', 'amount' => 100, 'isReviewed' => true, 'reviewStatus' => 'reviewed'],
+                    ],
+                    'foreignTaxSources' => [
+                        ['sourceType' => 'k1_foreign_tax', 'amount' => 25],
+                    ],
+                ],
+            ],
+        );
+
+        $this->assertFalse($readiness->isReady());
+        $this->assertContains('form-1116', $readiness->unsupportedForms);
+    }
+
+    public function test_estimated_foreign_source_income_still_requires_form_1116(): void
+    {
+        $user = User::factory()->create();
+        $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
+
+        $readiness = app(IrsReturnReadinessService::class)->forRequest(
+            user: $user,
+            year: 2025,
+            scope: 'return',
+            formId: null,
+            mode: 'editable',
+            profile: $profile,
+            facts: [
+                'form1040' => [
+                    'filingStatus' => 'single',
+                    'line16' => 100,
+                    'line20' => 25,
+                ],
+                'schedule3' => [
+                    'line1ForeignTaxCredit' => 25,
+                    'line8TotalNonrefundableCredits' => 25,
+                ],
+                'form1116' => [
+                    'totalForeignTaxes' => 25,
+                    'creditValue' => 25,
+                    'totalGeneralIncome' => 0,
+                    'totalLine4b' => 0,
+                    'totalSourcedByPartnerIncome' => 0,
+                    'hasUserOverride' => false,
+                    'passiveIncomeSources' => [
+                        ['sourceType' => '1099_div_foreign_tax', 'amount' => 166.67, 'isReviewed' => false, 'reviewStatus' => 'needs_review'],
+                    ],
+                    'foreignTaxSources' => [
+                        ['sourceType' => '1099_div_foreign_tax', 'amount' => 25],
+                    ],
+                ],
+            ],
+        );
+
+        $this->assertFalse($readiness->isReady());
+        $this->assertContains('form-1116', $readiness->unsupportedForms);
     }
 
     public function test_foreign_tax_above_direct_schedule_3_threshold_still_requires_form_1116(): void

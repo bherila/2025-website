@@ -188,8 +188,8 @@ class IrsReturnPdfBuilder
         $facts['irsPdf'] = [
             'scheduleD' => [
                 'lines' => $this->scheduleDLineColumns($facts),
-                'line18TwentyEightPercentGain' => $this->scheduleDLine12SourceTotal($facts, 'k1_collectibles_gain'),
-                'line19UnrecapturedSection1250Gain' => $this->scheduleDLine12SourceTotal($facts, 'k1_unrecaptured_1250_gain'),
+                'line18TwentyEightPercentGain' => $this->scheduleDPartIIIWorksheetAmount($facts, 'k1_collectibles_gain'),
+                'line19UnrecapturedSection1250Gain' => $this->scheduleDPartIIIWorksheetAmount($facts, 'k1_unrecaptured_1250_gain'),
                 'line21LossOnly' => $this->scheduleDLine21LossOnly($facts),
             ],
             'schedule3' => [
@@ -290,6 +290,27 @@ class IrsReturnPdfBuilder
         }
 
         return $total;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function scheduleDPartIIIWorksheetAmount(array $facts, string $sourceType): float
+    {
+        $sourceTotal = $this->scheduleDLine12SourceTotal($facts, $sourceType);
+        if ($sourceTotal <= 0.004) {
+            return 0.0;
+        }
+
+        $scheduleD = is_array($facts['scheduleD'] ?? null) ? $facts['scheduleD'] : [];
+        $line16 = $this->numeric($scheduleD['line16Combined'] ?? 0.0);
+        $line15 = $this->numeric($scheduleD['line15NetLongTerm'] ?? $line16);
+
+        if ($line15 <= 0.004 || $line16 <= 0.004) {
+            return 0.0;
+        }
+
+        return min($sourceTotal, $line15, $line16);
     }
 
     /**

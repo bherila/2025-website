@@ -11,7 +11,6 @@ class IrsReturnFormSelector
     private const array DIRECT_SCHEDULE_3_FOREIGN_TAX_SOURCE_TYPES = [
         '1099_div_foreign_tax',
         '1099_int_foreign_tax',
-        'k1_foreign_tax',
     ];
 
     /**
@@ -182,7 +181,14 @@ class IrsReturnFormSelector
             return false;
         }
 
-        if ($this->nonZero($form1116['creditValue'] ?? 0.0) && abs($this->numeric($form1116['creditValue'] ?? 0.0) - $totalForeignTaxes) > 0.004) {
+        $regularTax = $this->numeric($this->value($facts, 'form1040.line16'));
+        $directCreditLimit = min($totalForeignTaxes, max(0.0, $regularTax));
+
+        if (abs($directCreditLimit - $totalForeignTaxes) > 0.004) {
+            return false;
+        }
+
+        if ($this->nonZero($form1116['creditValue'] ?? 0.0) && abs($this->numeric($form1116['creditValue'] ?? 0.0) - $directCreditLimit) > 0.004) {
             return false;
         }
 
@@ -196,6 +202,15 @@ class IrsReturnFormSelector
         $sources = is_array($form1116['foreignTaxSources'] ?? null) ? $form1116['foreignTaxSources'] : [];
         if ($sources === []) {
             return false;
+        }
+
+        foreach ($this->arrayValue($facts, 'form1116.passiveIncomeSources') as $source) {
+            if (! is_array($source)) {
+                return false;
+            }
+            if (($source['isReviewed'] ?? true) === false || ($source['reviewStatus'] ?? 'reviewed') !== 'reviewed') {
+                return false;
+            }
         }
 
         foreach ($sources as $source) {
