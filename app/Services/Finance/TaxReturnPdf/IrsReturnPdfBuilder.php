@@ -6,6 +6,7 @@ use App\Models\FinanceTool\FinTaxReturnProfile;
 use App\Models\User;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\Finance\TaxReturnPdf\Data\IrsFieldDefinition;
+use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfBuildResult;
 use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfOptions;
 use App\Services\Finance\TaxReturnPdf\Exceptions\TaxReturnPdfUnavailableException;
 
@@ -26,6 +27,11 @@ class IrsReturnPdfBuilder
 
     public function buildForUser(User $user, TaxReturnPdfOptions $options): string
     {
+        return $this->buildResultForUser($user, $options)->content;
+    }
+
+    public function buildResultForUser(User $user, TaxReturnPdfOptions $options): TaxReturnPdfBuildResult
+    {
         $facts = $this->withIrsPdfFacts($this->taxPreviewFactsService->arrayForYear((int) $user->id, $options->year));
         $profile = $this->profile($user, $options->year);
         $readiness = $this->readinessService->forRequest(
@@ -45,8 +51,9 @@ class IrsReturnPdfBuilder
         $formIds = $options->scope === 'return'
             ? $readiness->requiredForms
             : [$options->formId ?? 'form-1040'];
+        $content = $this->fillEngine->fillForms($this->formFillJobs($formIds, $options, $facts, $profile), $options);
 
-        return $this->fillEngine->fillForms($this->formFillJobs($formIds, $options, $facts, $profile), $options);
+        return new TaxReturnPdfBuildResult($content, array_values(array_filter($formIds)));
     }
 
     /**
@@ -181,6 +188,7 @@ class IrsReturnPdfBuilder
         $facts['irsPdf'] = [
             'scheduleD' => [
                 'lines' => $this->scheduleDLineColumns($facts),
+                'line21LossOnly' => $this->scheduleDLine21LossOnly($facts),
             ],
             'form8949' => [
                 'instances' => $this->form8949InstancesFromFacts($facts),
@@ -243,6 +251,20 @@ class IrsReturnPdfBuilder
         }
 
         return $lines;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function scheduleDLine21LossOnly(array $facts): float
+    {
+        $scheduleD = is_array($facts['scheduleD'] ?? null) ? $facts['scheduleD'] : [];
+
+        if ($this->numeric($scheduleD['line16Combined'] ?? 0.0) >= -0.004) {
+            return 0.0;
+        }
+
+        return $this->numeric($scheduleD['line21LimitedLossOrGain'] ?? 0.0);
     }
 
     /**

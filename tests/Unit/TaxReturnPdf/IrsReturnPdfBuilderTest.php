@@ -64,6 +64,7 @@ class IrsReturnPdfBuilderTest extends TestCase
                     $this->assertSame('return', $options->scope);
                     $this->assertSame(['form-1040', 'schedule-1', 'schedule-3', 'schedule-d', 'form-8949', 'form-8949'], array_column($forms, 'formId'));
                     $this->assertSame(array_column($forms, 'instanceKey'), array_values(array_unique(array_column($forms, 'instanceKey'))));
+                    $this->assertNull($forms[3]['fieldValues']['f2_4[0]'] ?? null);
                     $this->assertSame('Short lot', $forms[4]['fieldValues']['f1_03[0]'] ?? null);
                     $this->assertSame('Long lot', $forms[5]['fieldValues']['f2_03[0]'] ?? null);
 
@@ -72,12 +73,13 @@ class IrsReturnPdfBuilderTest extends TestCase
                 ->andReturn("%PDF-1.4\n%packet");
         });
 
-        $content = app(IrsReturnPdfBuilder::class)->buildForUser(
+        $result = app(IrsReturnPdfBuilder::class)->buildResultForUser(
             $user,
             new TaxReturnPdfOptions(2025, 'return', 'editable', null, 'packet.pdf'),
         );
 
-        $this->assertSame("%PDF-1.4\n%packet", $content);
+        $this->assertSame("%PDF-1.4\n%packet", $result->content);
+        $this->assertSame(['form-1040', 'schedule-1', 'schedule-3', 'schedule-d', 'form-8949'], $result->formIds);
     }
 
     /**

@@ -90,6 +90,29 @@ class IrsReturnReadinessServiceTest extends TestCase
         ));
     }
 
+    public function test_form_8949_requirement_also_requires_schedule_d_even_when_form_1040_line_7_is_zero(): void
+    {
+        $user = User::factory()->create();
+        $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
+
+        $readiness = app(IrsReturnReadinessService::class)->forRequest(
+            user: $user,
+            year: 2025,
+            scope: 'return',
+            formId: null,
+            mode: 'editable',
+            profile: $profile,
+            facts: [
+                'form1040' => ['line7' => 0],
+                'form8949' => ['rowCount' => 1],
+                'irsPdf' => ['form8949' => ['unsupportedRowCount' => 0]],
+            ],
+        );
+
+        $this->assertTrue($readiness->isReady());
+        $this->assertSame(['form-1040', 'schedule-d', 'form-8949'], $readiness->requiredForms);
+    }
+
     public function test_individual_form_reports_missing_profile_as_warnings_without_blocking_export(): void
     {
         $user = User::factory()->create();

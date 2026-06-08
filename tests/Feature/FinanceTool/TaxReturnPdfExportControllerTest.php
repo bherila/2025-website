@@ -6,6 +6,7 @@ use App\Models\FinanceTool\FinTaxReturnPdfExport;
 use App\Models\FinanceTool\FinTaxReturnProfile;
 use App\Models\User;
 use App\Services\Finance\TaxPreviewFactsService;
+use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfBuildResult;
 use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfOptions;
 use App\Services\Finance\TaxReturnPdf\IrsReturnPdfBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -49,11 +50,11 @@ class TaxReturnPdfExportControllerTest extends TestCase
     {
         $user = User::factory()->create();
         $this->mock(IrsReturnPdfBuilder::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('buildForUser')
+            $mock->shouldReceive('buildResultForUser')
                 ->once()
                 ->withArgs(static fn (User $user, TaxReturnPdfOptions $options): bool => $options->scope === 'form'
                     && $options->formId === 'schedule-1')
-                ->andReturn("%PDF-1.4\n%schedule");
+                ->andReturn(new TaxReturnPdfBuildResult("%PDF-1.4\n%schedule", ['schedule-1']));
         });
 
         $response = $this->actingAs($user)->postJson('/finance/tax-preview/export-pdf', [
@@ -71,7 +72,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
     {
         $user = User::factory()->create();
         $this->mock(IrsReturnPdfBuilder::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('buildForUser')
+            $mock->shouldReceive('buildResultForUser')
                 ->once()
                 ->andThrow(new RuntimeException('IRS PDF template file is missing for form-1040.'));
         });
@@ -107,7 +108,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
         $expectedFilename = str_repeat('a', 251).'.pdf';
 
         $this->mock(IrsReturnPdfBuilder::class, function (MockInterface $mock) use ($expectedFilename): void {
-            $mock->shouldReceive('buildForUser')
+            $mock->shouldReceive('buildResultForUser')
                 ->once()
                 ->withArgs(static fn (User $user, TaxReturnPdfOptions $options): bool => $options->filename === $expectedFilename)
                 ->andThrow(new RuntimeException('IRS PDF template file is missing for form-1040.'));
@@ -254,6 +255,9 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'status' => 'succeeded',
             'filename' => 'federal-return-packet.pdf',
         ]);
+
+        $audit = FinTaxReturnPdfExport::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
+        $this->assertSame(['form-1040', 'schedule-1'], $audit->form_ids);
     }
 
     public function test_individual_form_1040_print_export_returns_flat_pdf(): void

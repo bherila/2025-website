@@ -21,6 +21,7 @@ class IrsReturnFormSelector
     {
         $form1040 = $this->arrayValue($facts, 'form1040');
         $supported = [];
+        $requiresForm8949 = $this->requiresForm8949($facts);
 
         if ($this->nonZero($form1040['line8'] ?? 0) || $this->nonZero($form1040['line10'] ?? 0)) {
             $supported[] = 'schedule-1';
@@ -30,11 +31,11 @@ class IrsReturnFormSelector
             $supported[] = 'schedule-3';
         }
 
-        if ($this->nonZero($form1040['line7'] ?? 0)) {
+        if ($this->nonZero($form1040['line7'] ?? 0) || $requiresForm8949) {
             $supported[] = 'schedule-d';
         }
 
-        if ($this->requiresForm8949($facts)) {
+        if ($requiresForm8949) {
             $supported[] = 'form-8949';
         }
 
