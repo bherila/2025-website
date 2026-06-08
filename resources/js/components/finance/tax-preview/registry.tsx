@@ -607,7 +607,10 @@ interface TaxDocumentMutationResponse {
   taxFacts?: TaxPreviewFacts
 }
 
-function saveParsedDataOverride(state: FormRenderProps['state']): (docId: number, parsedData: FK1StructuredData) => Promise<void> {
+function saveParsedDataOverride(
+  state: FormRenderProps['state'],
+  options: { alwaysRefreshTaxFacts?: boolean } = {},
+): (docId: number, parsedData: FK1StructuredData) => Promise<void> {
   return async (docId, parsedData) => {
     const response = (await fetchWrapper.put(`/api/finance/tax-documents/${docId}?include_tax_facts=1`, {
       parsed_data: parsedData,
@@ -621,7 +624,11 @@ function saveParsedDataOverride(state: FormRenderProps['state']): (docId: number
       return
     }
 
-    if (response.taxFacts) {
+    // The mutation response computes taxFacts for the EDITED document's year. From the
+    // multi-year column the edited K-1 may belong to a different year than the page, so
+    // applying it directly would overwrite page-wide facts with the wrong year. In that
+    // case refresh for the page's selected year instead.
+    if (response.taxFacts && !options.alwaysRefreshTaxFacts) {
       state.setTaxFacts(response.taxFacts)
     } else {
       await state.refreshAll({ includeTaxFacts: true })
@@ -651,7 +658,7 @@ function K1MultiYearAdapter({ state }: FormRenderProps): React.ReactElement {
       k1Docs={state.allK1Documents}
       availableYears={state.availableYears}
       onReviewDoc={reviewK1Doc}
-      onSaveParsedData={saveParsedDataOverride(state)}
+      onSaveParsedData={saveParsedDataOverride(state, { alwaysRefreshTaxFacts: true })}
     />
   )
 }
