@@ -6,6 +6,7 @@ use App\Listeners\UpdateLastLoginDate;
 use App\Models\ClientManagement\ClientCompany;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
@@ -33,6 +34,13 @@ class AppServiceProvider extends ServiceProvider
         if (config('csp.nonce_enabled', true)) {
             Vite::useCspNonce(app('csp-nonce'));
         }
+
+        // Register a safe JSON-encode helper for client-portal hydration <script> blocks.
+        // JSON_HEX_TAG prevents </script> breakout; the other HEX flags close the
+        // remaining XSS vectors via HTML attribute/entity injection.
+        Blade::directive('portalJson', function (string $expression): string {
+            return "<?php echo json_encode($expression, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>";
+        });
 
         // Register login event listener
         Event::listen(Login::class, UpdateLastLoginDate::class);
