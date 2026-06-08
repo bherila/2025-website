@@ -215,12 +215,17 @@ class Form6251FactsBuilder extends TaxPreviewFactBuilder
         $amtRateSplitThreshold = $this->amtTableValue(self::AMT_RATE_SPLIT_THRESHOLD, $year, $isMarried);
         $amtBeforeForeignCredit = $this->amtTaxBeforeForeignCredit($amtTaxBase, $amtRateSplitThreshold);
         if ($preferentialIncome > 0.0) {
+            $regularTaxableIncome = max(0.0, $taxableIncome);
+            $regularPreferentialIncome = min($regularTaxableIncome, max(0.0, $preferentialIncome));
+            // Form 6251 Part III lines 20 and 27 use the regular QD/CG worksheet ordinary-income stack.
+            $preferentialRateStackIncome = MoneyMath::subtract($regularTaxableIncome, $regularPreferentialIncome);
             $preferentialAmt = FederalIncomeTax::taxWithPreferentialIncome(
                 taxableIncome: $amtTaxBase,
                 preferentialIncome: $preferentialIncome,
                 year: $year,
                 isMarried: $isMarried,
                 ordinaryTaxCalculator: fn (float $ordinaryIncome): float => $this->amtTaxBeforeForeignCredit($ordinaryIncome, $amtRateSplitThreshold),
+                preferentialRateStackIncome: $preferentialRateStackIncome,
             );
             $amtBeforeForeignCredit = min($amtBeforeForeignCredit, $preferentialAmt);
         }
