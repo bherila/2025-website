@@ -10,6 +10,7 @@ use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinDocumentAccount;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Models\FinanceTool\FinStatement;
+use App\Services\FileStorageService;
 use App\Services\Finance\DocumentCapabilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -436,6 +437,72 @@ class FinanceDocumentControllerTest extends TestCase
     {
         $response = $this->getJson('/api/finance/documents');
         $response->assertUnauthorized();
+    }
+
+    // ─── Download: path guard (FIX 1 – IDOR hardening) ───────────────────────
+
+    /**
+     * A FinDocument row whose s3_path was persisted outside the owner's expected
+     * prefix (poisoned/legacy row) must never produce a signed URL via download().
+     * The endpoint must return 404 without calling FileStorageService.
+     */
+    public function test_download_aborts_when_s3_path_is_outside_owner_prefix(): void
+    {
+        $owner = $this->createUser();
+        $otherUser = $this->createUser();
+
+        // Simulate a poisoned row: user_id is owner but s3_path belongs to otherUser.
+        $poisonedDoc = $this->makeDocument($owner->id, [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            's3_path' => "fin_documents/{$otherUser->id}/statement/secret.pdf",
+            'original_filename' => 'secret.pdf',
+            'mime_type' => 'application/pdf',
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock): void {
+            $mock->shouldNotReceive('getSignedViewUrl');
+            $mock->shouldNotReceive('getSignedDownloadUrl');
+        });
+
+        $response = $this->actingAs($owner)->getJson("/api/finance/documents/{$poisonedDoc->id}/download");
+
+        $response->assertNotFound();
+    }
+
+    /**
+     * A FinDocument with a valid, owner-scoped s3_path must produce signed URLs
+     * normally — confirming the path guard does not block legitimate downloads.
+     */
+    public function test_download_returns_signed_urls_for_valid_owner_path(): void
+    {
+        $user = $this->createUser();
+
+        $doc = $this->makeDocument($user->id, [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            's3_path' => "fin_documents/{$user->id}/statement/jan.pdf",
+            'original_filename' => 'jan.pdf',
+            'mime_type' => 'application/pdf',
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock) use ($doc): void {
+            $mock->shouldReceive('getSignedViewUrl')
+                ->once()
+                ->with($doc->s3_path, 'application/pdf')
+                ->andReturn('https://signed.example/view');
+            $mock->shouldReceive('getSignedDownloadUrl')
+                ->once()
+                ->with($doc->s3_path, 'jan.pdf')
+                ->andReturn('https://signed.example/download');
+        });
+
+        $response = $this->actingAs($user)->getJson("/api/finance/documents/{$doc->id}/download");
+
+        $response->assertOk()
+            ->assertJson([
+                'view_url' => 'https://signed.example/view',
+                'download_url' => 'https://signed.example/download',
+                'filename' => 'jan.pdf',
+            ]);
     }
 
     // ─── Blocker 1: impact hash isolation ────────────────────────────────────

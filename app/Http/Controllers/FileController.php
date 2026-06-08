@@ -721,12 +721,14 @@ class FileController extends Controller
         }
 
         // Third try: canonical finance document linked to the statement.
+        // Accept any owned document kind (csv_import, json_import, toon_import, statement, …)
+        // so that import-pipeline documents are not incorrectly 404'd.
         $document = $statement->document_id
             ? FinDocument::whereKey($statement->document_id)
                 ->where('user_id', $userId)
                 ->first()
             : null;
-        if ($document instanceof FinDocument && $document->s3_path) {
+        if ($document instanceof FinDocument && $this->isValidStatementDocumentPath($document, (int) $userId)) {
             $filename = $document->original_filename
                 ?? $document->stored_filename
                 ?? basename($document->s3_path);
@@ -748,6 +750,19 @@ class FileController extends Controller
         }
 
         return response()->json(['error' => 'No file found for this statement.'], 404);
+    }
+
+    private function isValidStatementDocumentPath(FinDocument $document, int $userId): bool
+    {
+        if (! is_string($document->s3_path) || $document->s3_path === '') {
+            return false;
+        }
+
+        return FinDocument::isValidS3PathForOwner(
+            $document->s3_path,
+            $userId,
+            $document->document_kind,
+        );
     }
 
     /**

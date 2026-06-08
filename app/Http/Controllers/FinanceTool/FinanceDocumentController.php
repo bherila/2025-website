@@ -239,6 +239,16 @@ class FinanceDocumentController extends Controller
             return response()->json(['message' => 'No file associated with this document.'], 404);
         }
 
+        // Guard against poisoned/legacy rows whose s3_path sits outside the
+        // owner's expected prefix for this document kind (IDOR hardening).
+        if (! FinDocument::isValidS3PathForOwner(
+            $document->s3_path,
+            (int) Auth::id(),
+            $document->document_kind,
+        )) {
+            abort(404);
+        }
+
         $document->recordDownload();
 
         $filename = $document->original_filename ?? 'document';
@@ -381,9 +391,9 @@ class FinanceDocumentController extends Controller
 
     private function storeStatement(Request $request): JsonResponse
     {
-        $request->validate($this->statementValidationRules());
+        $validated = $this->validatedStatementPayload($request);
 
-        $result = $this->documentIngestionService->ingestStatementDocument((int) Auth::id(), $request->all());
+        $result = $this->documentIngestionService->ingestStatementDocument((int) Auth::id(), $validated);
 
         $this->markGenAiResultImported($request, (int) Auth::id());
 
@@ -396,9 +406,9 @@ class FinanceDocumentController extends Controller
 
     private function storeCsv(Request $request): JsonResponse
     {
-        $request->validate($this->statementValidationRules());
+        $validated = $this->validatedStatementPayload($request);
 
-        $result = $this->documentIngestionService->ingestCsvDocument((int) Auth::id(), $request->all());
+        $result = $this->documentIngestionService->ingestCsvDocument((int) Auth::id(), $validated);
 
         $this->markGenAiResultImported($request, (int) Auth::id());
 
@@ -407,6 +417,27 @@ class FinanceDocumentController extends Controller
             'document' => $result['document'],
             'accounts' => $result['accounts'],
         ], 201);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validatedStatementPayload(Request $request): array
+    {
+        $validated = $request->validate($this->statementValidationRules());
+        $s3Key = $validated['s3_key'] ?? null;
+
+        if (is_string($s3Key) && $s3Key !== '') {
+            $validatedS3 = $this->validateS3Key(
+                $s3Key,
+                (int) Auth::id(),
+                (string) $validated['document_kind'],
+            );
+            $validated['s3_key'] = $validatedS3['s3_key'];
+            $validated['stored_filename'] = $validatedS3['stored_filename'];
+        }
+
+        return $validated;
     }
 
     /**
@@ -570,20 +601,13 @@ class FinanceDocumentController extends Controller
      */
     private function validateS3Key(string $s3Key, int $userId, string $documentKind): array
     {
-        $expectedPrefix = FinDocument::generateS3Path($userId, '', $documentKind);
-        if (! str_starts_with($s3Key, $expectedPrefix)) {
-            abort(422, 'Invalid upload key for this document kind.');
-        }
-
-        $keySuffix = substr($s3Key, strlen($expectedPrefix));
-        $storedFilename = basename($s3Key);
-        if ($storedFilename === '' || $storedFilename === '.' || $storedFilename === '..' || $keySuffix !== $storedFilename) {
+        if (! FinDocument::isValidS3PathForOwner($s3Key, $userId, $documentKind)) {
             abort(422, 'Invalid upload key for this document kind.');
         }
 
         return [
             's3_key' => $s3Key,
-            'stored_filename' => $storedFilename,
+            'stored_filename' => basename($s3Key),
         ];
     }
 

@@ -89,6 +89,68 @@ class DocumentIngestionServiceTest extends TestCase
         ]);
     }
 
+    public function test_statement_upload_rejects_s3_key_outside_expected_user_prefix(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'jan-statement.pdf',
+            's3_key' => "fin_documents/{$otherUser->id}/statement/statement.pdf",
+            'file_hash' => str_repeat('a', 64),
+            'mime_type' => 'application/pdf',
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => [
+                    'periodEnd' => '2025-01-31',
+                    'closingBalance' => 1234.56,
+                ],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertDatabaseMissing('fin_documents', [
+            'user_id' => $user->id,
+            's3_path' => "fin_documents/{$otherUser->id}/statement/statement.pdf",
+        ]);
+    }
+
+    public function test_statement_upload_ignores_unvalidated_s3_path_payload(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+        $accountId = $this->createAccount($user->id, 'Brokerage');
+
+        $response = $this->actingAs($user)->postJson('/api/finance/documents', [
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'jan-statement.pdf',
+            's3_path' => "fin_documents/{$otherUser->id}/statement/statement.pdf",
+            'mime_type' => 'application/pdf',
+            'accounts' => [[
+                'acct_id' => $accountId,
+                'statementInfo' => [
+                    'periodEnd' => '2025-01-31',
+                    'closingBalance' => 1234.56,
+                ],
+                'statementDetails' => [],
+                'transactions' => [],
+                'lots' => [],
+            ]],
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('fin_documents', [
+            'id' => (int) $response->json('document.id'),
+            'user_id' => $user->id,
+            's3_path' => null,
+        ]);
+    }
+
     public function test_csv_upload_uses_csv_lot_origin(): void
     {
         $user = $this->createUser();
