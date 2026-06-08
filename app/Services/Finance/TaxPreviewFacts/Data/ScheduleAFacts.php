@@ -53,6 +53,11 @@ readonly class ScheduleAFacts
     public array $otherItemizedSources;
 
     /**
+     * @var TaxPreviewTransaction[]
+     */
+    public array $otherItemizedTransactions;
+
+    /**
      * @param  TaxFactSource[]  $stateIncomeTaxSources
      * @param  TaxFactSource[]  $salesTaxSources
      * @param  TaxFactSource[]  $realEstateTaxSources
@@ -62,6 +67,7 @@ readonly class ScheduleAFacts
      * @param  TaxFactSource[]  $charitableCashSources
      * @param  TaxFactSource[]  $charitableNoncashSources
      * @param  TaxFactSource[]  $otherItemizedSources
+     * @param  TaxPreviewTransaction[]  $otherItemizedTransactions
      */
     public function __construct(
         array $stateIncomeTaxSources,
@@ -93,6 +99,7 @@ readonly class ScheduleAFacts
         public float $charitableNoncashTotal,
         public float $charitableTotal,
         array $otherItemizedSources,
+        array $otherItemizedTransactions,
         public float $otherItemizedTotal,
         public float $totalItemizedDeductions,
         public float $standardDeductionSingle,
@@ -109,6 +116,7 @@ readonly class ScheduleAFacts
         $this->charitableCashSources = $charitableCashSources;
         $this->charitableNoncashSources = $charitableNoncashSources;
         $this->otherItemizedSources = $otherItemizedSources;
+        $this->otherItemizedTransactions = $otherItemizedTransactions;
     }
 
     /**
@@ -146,6 +154,7 @@ readonly class ScheduleAFacts
             'charitableNoncashTotal' => $this->charitableNoncashTotal,
             'charitableTotal' => $this->charitableTotal,
             'otherItemizedSources' => array_map(static fn (TaxFactSource $source): array => $source->toArray(), $this->otherItemizedSources),
+            'otherItemizedTransactions' => array_map(static fn (TaxPreviewTransaction $transaction): array => $transaction->toArray(), $this->otherItemizedTransactions),
             'otherItemizedTotal' => $this->otherItemizedTotal,
             'totalItemizedDeductions' => $this->totalItemizedDeductions,
             'standardDeductionSingle' => $this->standardDeductionSingle,

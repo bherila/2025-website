@@ -307,4 +307,50 @@ describe('ScheduleCPreview', () => {
     })
     expect(screen.queryByText(/No tax data found/)).not.toBeInTheDocument()
   })
+
+  it('renders flagged Schedule C expense rows with review reasons', async () => {
+    const response = {
+      available_years: ['2026'],
+      years: [
+        {
+          year: 2026,
+          entities: [
+            {
+              entity_id: 1,
+              entity_name: 'Flagged Entity',
+              schedule_c_income: {},
+              schedule_c_expense: {},
+              schedule_c_home_office: {},
+              flagged_expense_rows: [
+                {
+                  t_id: 500,
+                  t_date: '2026-02-01',
+                  t_description: 'Positive rent row',
+                  t_amt: 3600,
+                  t_account: 9,
+                  tax_characteristic: 'sce_rent_property',
+                  label: 'Rent',
+                  category: 'sch_c_expense',
+                  reason: 'Positive amount tagged as a Schedule C expense; excluded from computed expenses until reviewed.',
+                },
+              ],
+              ordinary_income: [],
+              w2_income: [],
+            },
+          ],
+        },
+      ],
+      entities: [{ id: 1, display_name: 'Flagged Entity', type: 'sch_c' }],
+    };
+
+    (fetchWrapper.get as jest.Mock).mockResolvedValueOnce(response)
+
+    render(<ScheduleCPreview selectedYear={2026} onAvailableYearsChange={mockOnAvailableYearsChange} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Review positive expense-tagged rows')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Positive rent row')).toBeInTheDocument()
+    expect(screen.getByText('Positive amount tagged as a Schedule C expense; excluded from computed expenses until reviewed.')).toBeInTheDocument()
+  })
 })

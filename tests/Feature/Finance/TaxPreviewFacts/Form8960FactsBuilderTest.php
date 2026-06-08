@@ -169,6 +169,7 @@ class Form8960FactsBuilderTest extends TestCase
             charitableNoncashTotal: 0.0,
             charitableTotal: 0.0,
             otherItemizedSources: [],
+            otherItemizedTransactions: [],
             otherItemizedTotal: 0.0,
             totalItemizedDeductions: min(40000.0, $stateIncomeTaxTotal),
             standardDeductionSingle: 15000.0,

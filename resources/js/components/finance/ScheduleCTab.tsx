@@ -1,16 +1,25 @@
 'use client'
 
 import currency from 'currency.js'
-import { CalendarDays, Pencil } from 'lucide-react'
+import { CalendarDays, ExternalLink, Pencil } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import {
+  TransactionList,
+  type TransactionListColumn,
+} from '@/components/finance/tax-preview/TransactionList'
 import { Callout, FormBlock, FormLine, FormTotalLine } from '@/components/finance/tax-preview-primitives'
 import { Button } from '@/components/ui/button'
 import { fetchWrapper } from '@/fetchWrapper'
 import { getDocAmounts, getPayerName } from '@/lib/finance/taxDocumentUtils'
+import { transactionsUrl } from '@/lib/financeRouteBuilder'
 import type { TaxDocument } from '@/types/finance/tax-document'
 import { FORM_TYPE_LABELS } from '@/types/finance/tax-document'
-import type { Form8829Facts, ScheduleCFacts } from '@/types/generated/tax-preview-facts'
+import type {
+  Form8829Facts,
+  ScheduleCFacts,
+  ScheduleCFlaggedExpenseRowFact,
+} from '@/types/generated/tax-preview-facts'
 
 import EmploymentEntityEditDialog, {
   type EmploymentEntity,
@@ -37,6 +46,53 @@ function sumCategories(cats: Record<string, CategoryTotal>): number {
 
 function formatDate(dateStr: string): string {
   return dateStr.split(/[ T]/)[0] ?? dateStr
+}
+
+const flaggedExpenseColumns: TransactionListColumn<ScheduleCFlaggedExpenseRowFact>[] = [
+  {
+    key: 'date',
+    label: 'Date',
+    render: (row) => row.date,
+    className: 'font-mono text-muted-foreground',
+  },
+  {
+    key: 'description',
+    label: 'Description',
+    render: (row) => row.description ?? 'Transaction',
+    className: 'truncate text-muted-foreground',
+  },
+  {
+    key: 'amount',
+    label: 'Amount',
+    align: 'right',
+    render: (row) => currency(row.amount).format(),
+    className: 'font-mono text-muted-foreground',
+  },
+  {
+    key: 'reason',
+    label: 'Reason',
+    render: (row) => row.reason,
+    className: 'text-muted-foreground',
+  },
+]
+
+function flaggedExpenseAction(row: ScheduleCFlaggedExpenseRowFact) {
+  if (row.accountId === null) {
+    return null
+  }
+
+  return (
+    <a
+      href={transactionsUrl(row.accountId, { hash: `t_id=${row.transactionId}` })}
+      target="_blank"
+      rel="noreferrer"
+      title="Go to transaction"
+    >
+      <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Go to transaction">
+        <ExternalLink className="h-4 w-4" />
+      </Button>
+    </a>
+  )
 }
 
 function adjustmentControl(taxYear: number, entityId: number | null, lineRef: string, onRefresh?: (() => Promise<void>) | undefined) {
@@ -322,14 +378,16 @@ export default function ScheduleCTab({ selectedYear, scheduleCData, reviewed1099
 
                   {backendEntity && (backendEntity.flaggedExpenseRows ?? []).length > 0 && (
                     <Callout kind="warn" title="Review positive expense-tagged rows">
-                      <div className="space-y-1">
-                        {(backendEntity.flaggedExpenseRows ?? []).map((row) => (
-                          <div key={row.transactionId} className="flex justify-between gap-3 text-xs">
-                            <span>{row.date} · {row.label} · {row.description ?? 'Transaction'}</span>
-                            <span className="font-mono">{currency(row.amount).format()}</span>
-                          </div>
-                        ))}
-                      </div>
+                      <TransactionList
+                        rows={backendEntity.flaggedExpenseRows ?? []}
+                        columns={flaggedExpenseColumns}
+                        getRowKey={(row) => row.transactionId}
+                        rowAction={flaggedExpenseAction}
+                        total={currency((backendEntity.flaggedExpenseRows ?? []).reduce((sum, row) => sum.add(row.amount), currency(0)).value).format()}
+                        totalColumnKey="amount"
+                        columnTemplate="5.5rem minmax(0,1.4fr) minmax(5rem,0.75fr) minmax(0,1.6fr) 2rem"
+                        className="bg-background"
+                      />
                     </Callout>
                   )}
 

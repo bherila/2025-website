@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleAFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleAFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewTransaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -116,14 +117,56 @@ class ScheduleAFactsBuilderTest extends TestCase
 
         $this->assertArrayHasKey('personalPropertyTaxTotal', $array);
         $this->assertArrayHasKey('personalPropertyTaxSources', $array);
+        $this->assertArrayHasKey('otherItemizedTransactions', $array);
         $this->assertSame(27.0, $array['personalPropertyTaxTotal']);
         $this->assertCount(1, $array['personalPropertyTaxSources']);
+        $this->assertSame([], $array['otherItemizedTransactions']);
+    }
+
+    public function test_other_itemized_transactions_roll_into_line16_total(): void
+    {
+        $facts = $this->buildScheduleAFacts([], otherItemizedTransactions: [
+            new TaxPreviewTransaction(
+                transactionId: 123,
+                date: '2025-02-01',
+                description: 'Ledger fee',
+                amount: 12.5,
+                accountId: 9,
+            ),
+            new TaxPreviewTransaction(
+                transactionId: 124,
+                date: '2025-02-02',
+                description: 'Ledger fee credit',
+                amount: -2.5,
+                accountId: 9,
+            ),
+        ]);
+
+        $this->assertSame(10.0, $facts->otherItemizedTotal);
+        $this->assertSame(10.0, $facts->totalItemizedDeductions);
+        $this->assertSame([
+            [
+                'transactionId' => 123,
+                'date' => '2025-02-01',
+                'description' => 'Ledger fee',
+                'amount' => 12.5,
+                'accountId' => 9,
+            ],
+            [
+                'transactionId' => 124,
+                'date' => '2025-02-02',
+                'description' => 'Ledger fee credit',
+                'amount' => -2.5,
+                'accountId' => 9,
+            ],
+        ], $facts->toArray()['otherItemizedTransactions']);
     }
 
     /**
      * @param  UserDeduction[]  $userDeductions
+     * @param  TaxPreviewTransaction[]  $otherItemizedTransactions
      */
-    private function buildScheduleAFacts(array $userDeductions, int $year = 2025): ScheduleAFacts
+    private function buildScheduleAFacts(array $userDeductions, int $year = 2025, array $otherItemizedTransactions = []): ScheduleAFacts
     {
         return app(ScheduleAFactsBuilder::class)->build(
             k1Docs: [],
@@ -131,6 +174,7 @@ class ScheduleAFactsBuilderTest extends TestCase
             userDeductions: $userDeductions,
             form4952: $this->emptyForm4952Facts(),
             year: $year,
+            otherItemizedTransactions: $otherItemizedTransactions,
         );
     }
 

@@ -3,14 +3,13 @@ import currency from 'currency.js'
 import { ExternalLink } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 
+import {
+  TransactionList,
+  type TransactionListColumn,
+  TransactionListDialog,
+} from '@/components/finance/tax-preview/TransactionList'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
@@ -36,6 +35,13 @@ export interface ScheduleCTransaction {
   t_account: number
 }
 
+export interface ScheduleCFlaggedExpenseTransaction extends ScheduleCTransaction {
+  tax_characteristic: string
+  label: string
+  category: string
+  reason: string
+}
+
 export interface CategoryTotal {
   label: string
   total: number
@@ -48,6 +54,7 @@ export interface EntityData {
   schedule_c_income?: Record<string, CategoryTotal>
   schedule_c_expense: Record<string, CategoryTotal>
   schedule_c_home_office: Record<string, CategoryTotal>
+  flagged_expense_rows?: ScheduleCFlaggedExpenseTransaction[]
   ordinary_income?: Record<string, CategoryTotal>
   w2_income?: Record<string, CategoryTotal>
 }
@@ -196,79 +203,116 @@ export function computeScheduleCNetIncome(allData: YearData[], selectedYear: num
 interface TransactionListModalProps {
   label: string
   transactions: ScheduleCTransaction[]
+  total: number
   onClose: () => void
 }
 
-function TransactionListModal({ label, transactions, onClose }: TransactionListModalProps) {
+function OpenLedgerAction({ accountId, transactionId }: { accountId: number | null; transactionId: number }) {
+  if (accountId === null) {
+    return null
+  }
+
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{label}</DialogTitle>
-        </DialogHeader>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="w-12" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {transactions.map((t) => (
-              <TableRow key={t.t_id}>
-                <TableCell className="text-sm font-mono">{t.t_date}</TableCell>
-                <TableCell className="text-sm">{t.t_description ?? '—'}</TableCell>
-                <TableCell className="text-right text-sm font-mono">{formatCurrency(t.t_amt)}</TableCell>
-                <TableCell>
-                  <a
-                    href={transactionsUrl(t.t_account, { hash: `t_id=${t.t_id}` })}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Go to transaction"
-                  >
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  </a>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </DialogContent>
-    </Dialog>
+    <a
+      href={transactionsUrl(accountId, { hash: `t_id=${transactionId}` })}
+      target="_blank"
+      rel="noreferrer"
+      title="Go to transaction"
+    >
+      <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Go to transaction">
+        <ExternalLink className="h-4 w-4" />
+      </Button>
+    </a>
   )
 }
 
-/** Inline transaction rows rendered beneath a category row when showInline is true */
-function InlineTransactions({ transactions }: { transactions: ScheduleCTransaction[] }) {
+const scheduleCTransactionColumns: TransactionListColumn<ScheduleCTransaction>[] = [
+  {
+    key: 'date',
+    label: 'Date',
+    render: (transaction) => transaction.t_date,
+    className: 'font-mono text-muted-foreground',
+  },
+  {
+    key: 'description',
+    label: 'Description',
+    render: (transaction) => transaction.t_description ?? '—',
+    className: 'truncate text-muted-foreground',
+  },
+  {
+    key: 'amount',
+    label: 'Amount',
+    align: 'right',
+    render: (transaction) => formatCurrency(transaction.t_amt),
+    className: 'font-mono text-muted-foreground',
+  },
+]
+
+const flaggedExpenseColumns: TransactionListColumn<ScheduleCFlaggedExpenseTransaction>[] = [
+  ...scheduleCTransactionColumns,
+  {
+    key: 'reason',
+    label: 'Reason',
+    render: (transaction) => transaction.reason,
+    className: 'text-muted-foreground',
+  },
+]
+
+function transactionAction(transaction: ScheduleCTransaction) {
+  return <OpenLedgerAction accountId={transaction.t_account} transactionId={transaction.t_id} />
+}
+
+function TransactionListModal({ label, transactions, total, onClose }: TransactionListModalProps) {
   return (
-    <>
-      {transactions.map((t) => (
-        <TableRow key={`inline-${t.t_id}`} className="bg-muted/30 hover:bg-muted/30">
-          <TableCell className="pl-8 text-xs font-mono text-muted-foreground">{t.t_date}</TableCell>
-          <TableCell className="text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              {t.t_description ?? '—'}
-              <a
-                href={transactionsUrl(t.t_account, { hash: `t_id=${t.t_id}` })}
-                target="_blank"
-                rel="noreferrer"
-                title="Go to transaction"
-                className="ml-1 shrink-0"
-              >
-                <ExternalLink className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-              </a>
-            </span>
-          </TableCell>
-          <TableCell className="text-right text-xs font-mono text-muted-foreground">
-            {formatCurrency(t.t_amt)}
-          </TableCell>
-        </TableRow>
-      ))}
-    </>
+    <TransactionListDialog
+      title={label}
+      rows={transactions}
+      columns={scheduleCTransactionColumns}
+      getRowKey={(transaction) => transaction.t_id}
+      rowAction={transactionAction}
+      total={formatCurrency(total)}
+      emptyMessage="No transactions found for this category."
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose()
+        }
+      }}
+    />
+  )
+}
+
+function InlineTransactions({ transactions, total }: { transactions: ScheduleCTransaction[]; total: number }) {
+  return (
+    <TransactionList
+      rows={transactions}
+      columns={scheduleCTransactionColumns}
+      getRowKey={(transaction) => transaction.t_id}
+      rowAction={transactionAction}
+      total={formatCurrency(total)}
+      emptyMessage="No transactions found for this category."
+    />
+  )
+}
+
+function FlaggedExpenseTransactions({ transactions }: { transactions: ScheduleCFlaggedExpenseTransaction[] }) {
+  const total = transactions.reduce((sum, transaction) => sum.add(transaction.t_amt), currency(0)).value
+
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-800/70 dark:bg-amber-950/20">
+      <div className="mb-2 text-sm font-semibold text-amber-800 dark:text-amber-200">
+        Review positive expense-tagged rows
+      </div>
+      <TransactionList
+        rows={transactions}
+        columns={flaggedExpenseColumns}
+        getRowKey={(transaction) => transaction.t_id}
+        rowAction={transactionAction}
+        total={formatCurrency(total)}
+        totalColumnKey="amount"
+        columnTemplate="5.5rem minmax(0,1.4fr) minmax(5rem,0.75fr) minmax(0,1.6fr) 2rem"
+        className="border-amber-200 bg-background/80 dark:border-amber-800/70"
+      />
+    </div>
   )
 }
 
@@ -279,9 +323,9 @@ interface CategoryTableProps {
 }
 
 function CategoryTable({ title, categories, showInline }: CategoryTableProps) {
-  const [selectedEntry, setSelectedEntry] = useState<{ label: string; transactions: ScheduleCTransaction[] } | null>(null)
+  const [selectedEntry, setSelectedEntry] = useState<{ label: string; total: number; transactions: ScheduleCTransaction[] } | null>(null)
   const entries = Object.entries(categories)
-  const total = entries.reduce((sum, [, cat]) => sum + cat.total, 0)
+  const total = entries.reduce((sum, [, cat]) => sum.add(cat.total), currency(0)).value
 
   return (
     <div className="w-full">
@@ -304,7 +348,7 @@ function CategoryTable({ title, categories, showInline }: CategoryTableProps) {
                 <Fragment key={key}>
                   <TableRow
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setSelectedEntry({ label: cat.label, transactions: cat.transactions ?? [] })}
+                    onClick={() => setSelectedEntry({ label: cat.label, total: cat.total, transactions: cat.transactions ?? [] })}
                     title="Click to view transactions"
                   >
                     <TableCell className="text-sm">{cat.label}</TableCell>
@@ -313,7 +357,11 @@ function CategoryTable({ title, categories, showInline }: CategoryTableProps) {
                     </TableCell>
                   </TableRow>
                   {showInline && cat.transactions && cat.transactions.length > 0 && (
-                    <InlineTransactions transactions={cat.transactions} />
+                    <TableRow className="bg-muted/20 hover:bg-muted/20">
+                      <TableCell colSpan={2} className="p-2">
+                        <InlineTransactions transactions={cat.transactions} total={cat.total} />
+                      </TableCell>
+                    </TableRow>
                   )}
                 </Fragment>
               ))}
@@ -331,6 +379,7 @@ function CategoryTable({ title, categories, showInline }: CategoryTableProps) {
         <TransactionListModal
           label={selectedEntry.label}
           transactions={selectedEntry.transactions}
+          total={selectedEntry.total}
           onClose={() => setSelectedEntry(null)}
         />
       )}
@@ -540,7 +589,8 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange,
                 .filter((entity) =>
                   Object.keys(entity.schedule_c_income ?? {}).length > 0 ||
                   Object.keys(entity.schedule_c_expense).length > 0 ||
-                  Object.keys(entity.schedule_c_home_office).length > 0,
+                  Object.keys(entity.schedule_c_home_office).length > 0 ||
+                  (entity.flagged_expense_rows ?? []).length > 0,
                 )
                 .map((entity, idx) => {
                   const hasHomeOffice = Object.keys(entity.schedule_c_home_office).length > 0
@@ -623,6 +673,11 @@ export default function ScheduleCPreview({ selectedYear, onAvailableYearsChange,
                           </Card>
                         )}
                       </div>
+                      {(entity.flagged_expense_rows ?? []).length > 0 && (
+                        <div className="mt-4">
+                          <FlaggedExpenseTransactions transactions={entity.flagged_expense_rows ?? []} />
+                        </div>
+                      )}
                     </div>
                   )
                 })}

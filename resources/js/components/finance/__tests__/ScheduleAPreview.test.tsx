@@ -38,6 +38,7 @@ function makeFacts(overrides: Partial<ScheduleAFacts> = {}): ScheduleAFacts {
     charitableCashSources: [],
     charitableNoncashSources: [],
     otherItemizedSources: [],
+    otherItemizedTransactions: [],
     stateIncomeTaxTotal: 0,
     salesTaxTotal: 0,
     selectedLine5aType: 'state_income_tax',
@@ -121,5 +122,34 @@ describe('ScheduleAPreview', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Investment Interest Expense — Data Sources' }))
     expect(onOpenDetail).toHaveBeenCalledWith('sch-a:line-9')
+  })
+
+  it('expands Schedule A line 16 ledger transactions separately from source details', () => {
+    render(
+      <ScheduleAPreview
+        selectedYear={2025}
+        scheduleAFacts={makeFacts({
+          otherItemizedTransactions: [
+            {
+              transactionId: 42,
+              date: '2025-02-01',
+              description: 'Personal advisory fee',
+              amount: 30,
+              accountId: 9,
+            },
+          ],
+          otherItemizedTotal: 30,
+          totalItemizedDeductions: 30,
+        })}
+      />,
+    )
+
+    expect(screen.queryByText('No other itemized deductions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Personal advisory fee')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /show/i }))
+
+    expect(screen.getByText('Personal advisory fee')).toBeInTheDocument()
+    expect(screen.getByTitle('Go to transaction')).toHaveAttribute('href', '/finance/account/9/transactions#t_id=42')
   })
 })
