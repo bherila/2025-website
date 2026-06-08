@@ -125,6 +125,11 @@ class IrsReturnPdfBuilderTest extends TestCase
 
     public function test_schedule_d_part_iii_lines_18_and_19_are_capped_by_net_long_term_gain(): void
     {
+        // With source18=17, source19=23, line15=10, line16=8:
+        //   ceiling = min(10, 8) = 8, combined = 40
+        //   line18 = round(8 * 17 / 40) = round(3.4) = 3
+        //   line19 = round(8 * 23 / 40) = round(4.6) = 5
+        //   sum = 8 == ceiling  ✓
         $user = User::factory()->create();
         $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
             $mock->shouldReceive('arrayForYear')
@@ -147,8 +152,8 @@ class IrsReturnPdfBuilderTest extends TestCase
                 ->once()
                 ->withArgs(function (array $forms): bool {
                     $this->assertSame('schedule-d', $forms[0]['formId']);
-                    $this->assertSame('8', $forms[0]['fieldValues']['f2_2[0]'] ?? null);
-                    $this->assertSame('8', $forms[0]['fieldValues']['f2_3[0]'] ?? null);
+                    $this->assertSame('3', $forms[0]['fieldValues']['f2_2[0]'] ?? null);
+                    $this->assertSame('5', $forms[0]['fieldValues']['f2_3[0]'] ?? null);
 
                     return true;
                 })
@@ -159,6 +164,56 @@ class IrsReturnPdfBuilderTest extends TestCase
             $user,
             new TaxReturnPdfOptions(2025, 'form', 'print', 'schedule-d', 'schedule-d.pdf'),
         );
+    }
+
+    public function test_schedule_d_part_iii_lines_18_and_19_sum_never_exceeds_shared_ceiling(): void
+    {
+        // Invariant test: line18 + line19 must never exceed min(line15, line16).
+        // Uses the adversarial-review example: source18=17, source19=23, line15=10, line16=8.
+        // Independent capping (the bug) would yield 8+8=16 against a ceiling of 8.
+        // Proportional apportionment must yield 3+5=8.
+        $user = User::factory()->create();
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn([
+                    'scheduleD' => [
+                        'line12Sources' => [
+                            ['sourceType' => 'k1_collectibles_gain', 'amount' => 17.0],
+                            ['sourceType' => 'k1_unrecaptured_1250_gain', 'amount' => 23.0],
+                        ],
+                        'line12GainLoss' => 40.0,
+                        'line15NetLongTerm' => 10.0,
+                        'line16Combined' => 8.0,
+                    ],
+                ]);
+        });
+        $capturedLine18 = null;
+        $capturedLine19 = null;
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock) use (&$capturedLine18, &$capturedLine19): void {
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms) use (&$capturedLine18, &$capturedLine19): bool {
+                    $capturedLine18 = isset($forms[0]['fieldValues']['f2_2[0]']) ? (int) $forms[0]['fieldValues']['f2_2[0]'] : 0;
+                    $capturedLine19 = isset($forms[0]['fieldValues']['f2_3[0]']) ? (int) $forms[0]['fieldValues']['f2_3[0]'] : 0;
+
+                    return true;
+                })
+                ->andReturn("%PDF-1.4\n%schedule-d");
+        });
+
+        app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'print', 'schedule-d', 'schedule-d.pdf'),
+        );
+
+        $ceiling = min(10, 8); // min(line15, line16)
+        $this->assertLessThanOrEqual($ceiling, $capturedLine18 + $capturedLine19, 'line18 + line19 must not exceed min(line15, line16)');
+        $this->assertSame(3, $capturedLine18, 'line18 should be proportional share of ceiling (round(8 * 17/40) = 3)');
+        $this->assertSame(5, $capturedLine19, 'line19 should be proportional share of ceiling (round(8 * 23/40) = 5)');
+        $this->assertLessThanOrEqual(17, $capturedLine18, 'line18 must not exceed its own source total');
+        $this->assertLessThanOrEqual(23, $capturedLine19, 'line19 must not exceed its own source total');
     }
 
     public function test_schedule_d_part_iii_lines_18_and_19_are_blank_when_net_long_term_gain_is_offset(): void

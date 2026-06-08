@@ -185,11 +185,13 @@ class IrsReturnPdfBuilder
      */
     private function withIrsPdfFacts(array $facts): array
     {
+        [$line18, $line19] = $this->scheduleDPartIIILines18And19($facts);
+
         $facts['irsPdf'] = [
             'scheduleD' => [
                 'lines' => $this->scheduleDLineColumns($facts),
-                'line18TwentyEightPercentGain' => $this->scheduleDPartIIIWorksheetAmount($facts, 'k1_collectibles_gain'),
-                'line19UnrecapturedSection1250Gain' => $this->scheduleDPartIIIWorksheetAmount($facts, 'k1_unrecaptured_1250_gain'),
+                'line18TwentyEightPercentGain' => $line18,
+                'line19UnrecapturedSection1250Gain' => $line19,
                 'line21LossOnly' => $this->scheduleDLine21LossOnly($facts),
             ],
             'schedule3' => [
@@ -293,13 +295,24 @@ class IrsReturnPdfBuilder
     }
 
     /**
+     * Compute Schedule D Part III lines 18 (28%-rate gain) and 19 (unrecaptured §1250 gain)
+     * as a pair, ensuring their sum never exceeds the shared ceiling min(line15, line16).
+     *
+     * When the combined source totals exceed the shared ceiling the ceiling is apportioned
+     * proportionally between the two buckets (each bucket = round(ceiling × source / combined)),
+     * and each result is additionally capped at its own source total so apportionment can never
+     * inflate a bucket above what was actually reported.
+     *
      * @param  array<string, mixed>  $facts
+     * @return array{0: float, 1: float} [line18, line19]
      */
-    private function scheduleDPartIIIWorksheetAmount(array $facts, string $sourceType): float
+    private function scheduleDPartIIILines18And19(array $facts): array
     {
-        $sourceTotal = $this->scheduleDLine12SourceTotal($facts, $sourceType);
-        if ($sourceTotal <= 0.004) {
-            return 0.0;
+        $source18 = $this->scheduleDLine12SourceTotal($facts, 'k1_collectibles_gain');
+        $source19 = $this->scheduleDLine12SourceTotal($facts, 'k1_unrecaptured_1250_gain');
+
+        if ($source18 <= 0.004 && $source19 <= 0.004) {
+            return [0.0, 0.0];
         }
 
         $scheduleD = is_array($facts['scheduleD'] ?? null) ? $facts['scheduleD'] : [];
@@ -307,10 +320,28 @@ class IrsReturnPdfBuilder
         $line15 = $this->numeric($scheduleD['line15NetLongTerm'] ?? $line16);
 
         if ($line15 <= 0.004 || $line16 <= 0.004) {
-            return 0.0;
+            return [0.0, 0.0];
         }
 
-        return min($sourceTotal, $line15, $line16);
+        $ceiling = min($line15, $line16);
+        $combined = $source18 + $source19;
+
+        if ($combined <= $ceiling + 0.004) {
+            // Combined totals are within the shared ceiling — each bucket is bounded only by its source.
+            return [
+                $source18 > 0.004 ? (float) (int) round(min($source18, $ceiling)) : 0.0,
+                $source19 > 0.004 ? (float) (int) round(min($source19, $ceiling)) : 0.0,
+            ];
+        }
+
+        // Proportionally apportion the ceiling across both buckets so that
+        // line18 + line19 <= ceiling.  Each bucket is also capped at its own
+        // source total to prevent the apportionment from inflating a bucket
+        // above what was actually reported.
+        $line18 = (float) (int) round(min($source18, $ceiling * $source18 / $combined));
+        $line19 = (float) (int) round(min($source19, $ceiling * $source19 / $combined));
+
+        return [$line18, $line19];
     }
 
     /**
