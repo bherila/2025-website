@@ -25,6 +25,7 @@ class TaxPreviewWorkbookBuilder
         'form8949' => 'Form 8949',
         'form8960' => 'Form 8960',
         'form8995' => 'Form 8995',
+        'partnershipBasis' => 'Partnership Basis',
     ];
 
     private const array SUMMARY_ROWS = [
@@ -74,7 +75,11 @@ class TaxPreviewWorkbookBuilder
         foreach (self::SHEET_NAMES as $key => $name) {
             $slice = $facts[$key] ?? null;
             if (is_array($slice)) {
-                $sheets[] = $this->factSheet($name, $slice);
+                if ($key === 'partnershipBasis') {
+                    array_push($sheets, ...$this->partnershipBasisSheets($slice));
+                } else {
+                    $sheets[] = $this->factSheet($name, $slice);
+                }
             }
         }
 
@@ -82,6 +87,127 @@ class TaxPreviewWorkbookBuilder
             'filename' => $this->filename($filename, $year),
             'sheets' => $sheets,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array<int, array{name: string, rows: array<int, array<string, mixed>>}>
+     */
+    private function partnershipBasisSheets(array $facts): array
+    {
+        $interests = is_array($facts['interests'] ?? null) ? $facts['interests'] : [];
+
+        return [
+            ['name' => 'Partnership Basis Summary', 'rows' => $this->partnershipBasisSummaryRows($interests)],
+            ['name' => 'Outside Basis Rollforward', 'rows' => $this->partnershipBasisWorksheetRows($interests)],
+            ['name' => 'Inside Basis / Capital Reconciliation', 'rows' => $this->partnershipBasisCapitalRows($interests)],
+            ['name' => 'Distribution & Liquidation Analysis', 'rows' => $this->partnershipBasisDistributionRows($interests)],
+            ['name' => 'Basis Source Lines', 'rows' => $this->partnershipBasisSourceRows($interests)],
+        ];
+    }
+
+    /** @param array<int, mixed> $interests */
+    private function partnershipBasisSummaryRows(array $interests): array
+    {
+        $rows = [['description' => 'Partnership basis summary', 'isHeader' => true]];
+        foreach ($interests as $interest) {
+            if (! is_array($interest)) {
+                continue;
+            }
+            $worksheet = is_array($interest['worksheet'] ?? null) ? $interest['worksheet'] : [];
+            $rows[] = [
+                'description' => (string) ($interest['partnershipName'] ?? 'Partnership'),
+                'amount' => $this->numericAtPath(['worksheet' => $worksheet], 'worksheet.endingOutsideBasis') ?? 0.0,
+                'note' => (string) ($interest['reviewStatus'] ?? 'needs_review'),
+                'isTotal' => true,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /** @param array<int, mixed> $interests */
+    private function partnershipBasisWorksheetRows(array $interests): array
+    {
+        $rows = [['description' => 'Outside basis rollforward', 'isHeader' => true]];
+        foreach ($interests as $interest) {
+            if (! is_array($interest) || ! is_array($interest['worksheet'] ?? null)) {
+                continue;
+            }
+            $rows[] = ['description' => (string) ($interest['partnershipName'] ?? 'Partnership'), 'isHeader' => true];
+            $this->appendScalarRows($rows, $interest['worksheet']);
+        }
+
+        return $rows;
+    }
+
+    /** @param array<int, mixed> $interests */
+    private function partnershipBasisCapitalRows(array $interests): array
+    {
+        $rows = [['description' => 'Inside basis / capital reconciliation', 'isHeader' => true]];
+        foreach ($interests as $interest) {
+            if (! is_array($interest)) {
+                continue;
+            }
+            $rows[] = ['description' => (string) ($interest['partnershipName'] ?? 'Partnership'), 'isHeader' => true];
+            foreach (['beginningTaxBasisCapital', 'endingTaxBasisCapital', 'beginningBookCapital', 'endingBookCapital', 'insideBasisConfidence'] as $key) {
+                $value = $interest[$key] ?? null;
+                $rows[] = is_numeric($value)
+                    ? ['line' => $key, 'description' => $this->humanizePath($key), 'amount' => (float) $value]
+                    : ['line' => $key, 'description' => $this->humanizePath($key), 'note' => $this->stringValue($value)];
+            }
+        }
+
+        return $rows;
+    }
+
+    /** @param array<int, mixed> $interests */
+    private function partnershipBasisDistributionRows(array $interests): array
+    {
+        $rows = [['description' => 'Distribution & liquidation analysis', 'isHeader' => true]];
+        foreach ($interests as $interest) {
+            if (! is_array($interest) || ! is_array($interest['worksheet'] ?? null)) {
+                continue;
+            }
+            $worksheet = $interest['worksheet'];
+            $rows[] = ['description' => (string) ($interest['partnershipName'] ?? 'Partnership'), 'isHeader' => true];
+            foreach (['cashDistributions', 'propertyDistributionsBasis', 'distributionGain', 'liquidationGainLoss', 'suspendedLossCarryforward'] as $key) {
+                $value = $worksheet[$key] ?? null;
+                if ($value !== null) {
+                    $rows[] = ['line' => $key, 'description' => $this->humanizePath($key), 'amount' => (float) $value];
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /** @param array<int, mixed> $interests */
+    private function partnershipBasisSourceRows(array $interests): array
+    {
+        $rows = [['description' => 'Basis source lines', 'isHeader' => true]];
+        foreach ($interests as $interest) {
+            if (! is_array($interest) || ! is_array($interest['events'] ?? null)) {
+                continue;
+            }
+            foreach ($interest['events'] as $event) {
+                if (! is_array($event)) {
+                    continue;
+                }
+                $rows[] = [
+                    'line' => (string) ($event['sourcePath'] ?? $event['eventType'] ?? ''),
+                    'description' => (string) ($event['sourceLabel'] ?? $event['eventType'] ?? 'Basis event'),
+                    'amount' => is_numeric($event['amount'] ?? null) ? (float) $event['amount'] : 0.0,
+                    'note' => trim(implode(' ', array_filter([
+                        $event['sourceType'] ?? null,
+                        isset($event['taxDocumentId']) ? 'tax_document#'.$event['taxDocumentId'] : null,
+                        $event['reviewStatus'] ?? null,
+                    ], 'is_string'))),
+                ];
+            }
+        }
+
+        return $rows;
     }
 
     /**

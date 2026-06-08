@@ -62,6 +62,7 @@ const TAB_ITEMS = [
   { value: 'lots', title: 'Lots', showYearSelector: false },
   { value: 'summary', title: 'Summary', showYearSelector: true },
   { value: 'fees', title: 'Fees', showYearSelector: true },
+  { value: 'basis', title: 'Basis', showYearSelector: true },
 ]
 
 export default function AccountNavigation({

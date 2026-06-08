@@ -96,6 +96,13 @@ class FinanceAccountsController extends Controller
         return view('finance.lots', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
     }
 
+    public function basis(Request $request, int $account_id): View
+    {
+        $account = $this->resolveOwnedAccount($account_id);
+
+        return view('finance.basis', ['account_id' => $account_id, 'accountName' => $account->acct_name]);
+    }
+
     public function maintenance(Request $request, int $account_id): View
     {
         $account = $this->resolveOwnedAccount($account_id);

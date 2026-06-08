@@ -490,6 +490,59 @@ thresholdMarriedFilingJointly: number;
 aboveThreshold: boolean;
 form8995A: Form8995AFacts | null;
 };
+export type PartnershipBasisEventFact = {
+id: number;
+taxYear: number;
+eventType: string;
+basisSide: string;
+amount: number;
+sourceType: string;
+taxDocumentId: number | null;
+taxDocumentAccountId: number | null;
+accountId: number | null;
+k1Box: string | null;
+k1Code: string | null;
+sourcePath: string | null;
+sourceLabel: string | null;
+reviewStatus: string;
+};
+export type PartnershipBasisFacts = {
+interests: Array<PartnershipBasisInterestFacts>;
+year: number;
+};
+export type PartnershipBasisInterestFacts = {
+events: Array<PartnershipBasisEventFact>;
+interestId: number;
+partnershipName: string;
+partnershipEin: string | null;
+accountId: number | null;
+taxYear: number;
+beginningTaxBasisCapital: number;
+endingTaxBasisCapital: number;
+beginningBookCapital: number;
+endingBookCapital: number;
+insideBasisConfidence: string;
+reviewStatus: string;
+isStale: boolean;
+worksheet: PartnershipBasisWorksheetFacts;
+};
+export type PartnershipBasisWorksheetFacts = {
+beginningOutsideBasis: number;
+capitalContributions: number;
+taxableIncomeIncrease: number;
+taxExemptIncomeIncrease: number;
+liabilityIncrease: number;
+cashDistributions: number;
+propertyDistributionsBasis: number;
+liabilityDecrease: number;
+deductionsLossesDecrease: number;
+nondeductibleExpensesDecrease: number;
+foreignTaxesDecrease: number;
+distributionGain: number;
+suspendedLossCarryforward: number;
+endingOutsideBasis: number;
+liquidationGainLoss: number | null;
+};
 export type QuarterTotals = {
 q1: number;
 q2: number;
@@ -802,6 +855,7 @@ form8995: Form8995Facts;
 form6251: Form6251Facts;
 form8582: Form8582Facts;
 form1040: Form1040Facts;
+partnershipBasis: PartnershipBasisFacts;
 };
 export type TaxPreviewTransaction = {
 transactionId: number;

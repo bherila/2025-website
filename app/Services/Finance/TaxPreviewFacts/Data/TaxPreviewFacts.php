@@ -31,6 +31,7 @@ readonly class TaxPreviewFacts
         public Form6251Facts $form6251,
         public Form8582Facts $form8582,
         public Form1040Facts $form1040,
+        public PartnershipBasisFacts $partnershipBasis,
     ) {}
 
     /**
@@ -62,6 +63,7 @@ readonly class TaxPreviewFacts
             'form6251' => $this->form6251->toArray(),
             'form8582' => $this->form8582->toArray(),
             'form1040' => $this->form1040->toArray(),
+            'partnershipBasis' => $this->partnershipBasis->toArray(),
         ];
     }
 }
