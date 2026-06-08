@@ -1,4 +1,4 @@
-import { ClipboardList, FileSpreadsheet, Search } from 'lucide-react'
+import { ClipboardList, FileSpreadsheet, FileText, Search } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ interface DockHeaderBarProps {
   selectedYear: number
   availableYears: number[]
   isExportXlsxDisabled: boolean
+  isExportPdfDisabled: boolean
   isLoadingYears: boolean
   pendingReviewCount: number
   onYearChange: (year: number | 'all') => void
@@ -25,11 +26,12 @@ export function DockHeaderBar({
   selectedYear,
   availableYears,
   isExportXlsxDisabled,
+  isExportPdfDisabled,
   isLoadingYears,
   pendingReviewCount,
   onYearChange,
 }: DockHeaderBarProps): React.ReactElement {
-  const { exportXlsx, isExportingXlsx, openReviewQueue, setPaletteOpen } = useDockActions()
+  const { exportXlsx, isExportingXlsx, openTaxReturnPdfExport, isExportingPdf, openReviewQueue, setPaletteOpen } = useDockActions()
   const meta = navigatorMeta()
 
   return (
@@ -63,6 +65,17 @@ export function DockHeaderBar({
             </Badge>
           </Button>
         )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 px-2.5 text-xs"
+          onClick={openTaxReturnPdfExport}
+          disabled={isExportingPdf || isExportPdfDisabled}
+        >
+          <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+          {isExportingPdf ? 'Generating...' : 'IRS PDF'}
+        </Button>
         <Button
           type="button"
           variant="outline"

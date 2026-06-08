@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\ClientManagement\ClientCompany;
+use App\Services\Finance\TaxReturnPdf\IrsAcroFormFillEngine;
+use App\Services\Finance\TaxReturnPdf\TcpdfFpdiFormEngine;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
@@ -16,6 +18,14 @@ use Symfony\Component\Mailer\Transport\Dsn;
 
 class AppServiceProvider extends ServiceProvider
 {
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        $this->app->singleton(IrsAcroFormFillEngine::class, TcpdfFpdiFormEngine::class);
+    }
+
     /**
      * Bootstrap any application services.
      */

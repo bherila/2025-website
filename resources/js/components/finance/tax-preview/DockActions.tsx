@@ -16,6 +16,10 @@ interface DockActionsValue {
   exportXlsx: TaxPreviewXlsxExporter
   /** True while the current tax preview workbook is being generated. */
   isExportingXlsx: boolean
+  /** Open the IRS PDF export dialog. */
+  openTaxReturnPdfExport: () => void
+  /** True while the current IRS PDF export is being generated. */
+  isExportingPdf: boolean
   /** Open the document review modal for a specific K-1 document by id. */
   reviewK1Doc: (docId: number, focusFieldId?: string) => void
   /** Open the document review modal for any tax document by id. */
@@ -42,9 +46,12 @@ interface DockActionsProviderProps {
   children: ReactNode
   exportXlsx?: TaxPreviewXlsxExporter
   isExportingXlsx?: boolean
+  openTaxReturnPdfExport?: () => void
+  isExportingPdf?: boolean
 }
 
 const noopExportXlsx = (): void => {}
+const noopOpenTaxReturnPdfExport = (): void => {}
 
 /**
  * Manages imperative dock-mode actions (modal opening, bulk K-1 mutations)
@@ -52,7 +59,13 @@ const noopExportXlsx = (): void => {}
  * `useDockActions()` so they can wire up callbacks without threading
  * handlers through the registry shape.
  */
-export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: DockActionsProviderProps): React.ReactElement {
+export function DockActionsProvider({
+  children,
+  exportXlsx,
+  isExportingXlsx,
+  openTaxReturnPdfExport,
+  isExportingPdf,
+}: DockActionsProviderProps): React.ReactElement {
   const { accountDocuments, w2Documents, refreshAll, year: selectedYear, isLoading } = useTaxPreview()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
@@ -159,6 +172,8 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
     () => ({
       exportXlsx: exportXlsx ?? noopExportXlsx,
       isExportingXlsx: isExportingXlsx ?? false,
+      openTaxReturnPdfExport: openTaxReturnPdfExport ?? noopOpenTaxReturnPdfExport,
+      isExportingPdf: isExportingPdf ?? false,
       reviewK1Doc,
       openTaxDocumentDetail,
       openReviewQueue,
@@ -168,7 +183,7 @@ export function DockActionsProvider({ children, exportXlsx, isExportingXlsx }: D
       paletteOpen,
       setPaletteOpen,
     }),
-    [exportXlsx, isExportingXlsx, reviewK1Doc, openTaxDocumentDetail, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
+    [exportXlsx, isExportingXlsx, openTaxReturnPdfExport, isExportingPdf, reviewK1Doc, openTaxDocumentDetail, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
   )
 
   return (
