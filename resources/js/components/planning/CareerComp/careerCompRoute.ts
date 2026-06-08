@@ -59,6 +59,7 @@ export interface CareerCompLiquidityRouteParams {
 export const CAREER_COMP_DETAIL_COLUMN_IDS = [
   'grant-rsu',
   'grant-opt',
+  'offer-notes',
   'valuation-timeline',
   ...CAREER_COMP_LIQUIDITY_DETAIL_COLUMN_IDS,
   ...CAREER_COMP_LTV_DETAIL_COLUMN_IDS,

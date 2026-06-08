@@ -66,6 +66,8 @@ class ComputeCareerCompRequest extends FormRequest
         return [
             "{$prefix}.id" => [$required, 'string', 'max:120'],
             "{$prefix}.name" => [$required, 'string', 'max:200'],
+            "{$prefix}.notesMarkdown" => ['nullable', 'string', 'max:200000'],
+            "{$prefix}.archived" => ['nullable', 'boolean'],
             "{$prefix}.startDate" => ['nullable', 'date_format:Y-m-d'],
             "{$prefix}.priorJobResignationDate" => ['nullable', 'date_format:Y-m-d'],
             "{$prefix}.transitionOverride" => ['nullable', 'array'],

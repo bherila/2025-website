@@ -1,10 +1,11 @@
 import currency from 'currency.js'
-import { Briefcase, Building2, ChevronRight, Copy, LineChart, type LucideIcon, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Briefcase, Building2, ChevronRight, Copy, FileText, LineChart, type LucideIcon, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactElement, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { Input } from '@/components/ui/input'
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,7 @@ export type GrantType = 'rsu' | 'opt'
 /** Opens a dedicated Miller column to add (no grantId) or edit (with grantId) a single grant. */
 export type OpenGrantEditor = (jobId: string, grantType: GrantType, grantId?: string) => void
 export type OpenValuationTimeline = (jobId: string) => void
+export type OpenOfferNotes = (jobId: string) => void
 
 export interface CareerCompFormSectionMeta {
   id: CareerCompFormSectionId
@@ -48,6 +50,7 @@ interface CareerCompFormProps {
   onChange: (inputs: CareerCompInputs) => void
   onOpenGrantEditor: OpenGrantEditor
   onOpenValuationTimeline: OpenValuationTimeline
+  onOpenOfferNotes: OpenOfferNotes
   onOpenModelAssumptions: () => void
   activeGrant?: ActiveGrantSelection | null | undefined
 }
@@ -966,6 +969,44 @@ export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange,
   )
 }
 
+export function OfferNotesColumn({ inputs, jobId, onChange }: {
+  inputs: CareerCompInputs
+  jobId: string
+  onChange: (inputs: CareerCompInputs) => void
+}): ReactElement {
+  const labelId = useId()
+  const job = findJob(inputs, jobId)
+
+  if (!job) {
+    return <p className="text-sm text-muted-foreground">This offer is no longer available.</p>
+  }
+
+  function updateNotes(notesMarkdown: string): void {
+    onChange(updateJob(inputs, jobId, (current) => ({
+      ...current,
+      notesMarkdown: notesMarkdown === '' ? null : notesMarkdown,
+    })))
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p id={labelId} className="text-sm font-semibold">Offer notes</p>
+        <p className="text-xs text-muted-foreground">{job.name}</p>
+      </div>
+      <CodeEditor
+        value={job.notesMarkdown ?? ''}
+        onChange={updateNotes}
+        language="markdown"
+        height="60vh"
+        ariaLabelledBy={labelId}
+        placeholder={'# Notes\n\nCapture assumptions, negotiation context, and follow-up questions.'}
+        className="overflow-hidden rounded-md border border-border"
+      />
+    </div>
+  )
+}
+
 export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
   inputs: CareerCompInputs
   jobId: string
@@ -1252,12 +1293,32 @@ function transitionOverrideActive(job: JobSpec): boolean {
     || job.transitionOverride.timeOffBetweenJobsWeeks !== null
 }
 
-function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssumptions, showCareerTransition = false, onChange, onRemove, removeLabel, onOpenGrantEditor, onOpenValuationTimeline, onOpenModelAssumptions, activeGrant }: { job: JobSpec; currentJobs?: JobSpec[]; startYear: number; horizonYears: number; modelAssumptions: ModelAssumptions; showCareerTransition?: boolean; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; onOpenValuationTimeline: OpenValuationTimeline; onOpenModelAssumptions: () => void; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
+interface JobEditorProps {
+  job: JobSpec
+  currentJobs?: JobSpec[]
+  startYear: number
+  horizonYears: number
+  modelAssumptions: ModelAssumptions
+  showCareerTransition?: boolean
+  onChange: (job: JobSpec) => void
+  onRemove?: (() => void) | undefined
+  removeLabel?: string | undefined
+  onArchive?: (() => void) | undefined
+  onOpenGrantEditor: OpenGrantEditor
+  onOpenValuationTimeline: OpenValuationTimeline
+  onOpenOfferNotes?: OpenOfferNotes | undefined
+  onOpenModelAssumptions: () => void
+  activeGrant?: ActiveGrantSelection | null | undefined
+}
+
+function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssumptions, showCareerTransition = false, onChange, onRemove, removeLabel, onArchive, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant }: JobEditorProps): ReactElement {
   const nameId = useId()
   const rsuGrantTypeId = useId()
   const optionGrantTypeId = useId()
   const isPrivate = job.company.type === 'private'
   const removeText = removeLabel ?? `Remove ${job.name}`
+  const archiveText = `Archive ${job.name}`
+  const notesText = `Open notes for ${job.name}`
   const hasProjectedRefreshers = job.grantTypes.rsu || job.grantTypes.options
   const hasTransitionOverride = transitionOverrideActive(job)
   const effectiveNoticeWeeks = job.transitionOverride.currentJobNoticeWeeks ?? modelAssumptions.careerTransition.currentJobNoticeWeeks
@@ -1291,7 +1352,11 @@ function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssump
           <CardTitle className="text-base">{job.name}</CardTitle>
           <CardDescription>{isPrivate ? 'Private company inputs include 409A, dilution, and liquidity date.' : 'Public company inputs use current share price.'}</CardDescription>
         </div>
-        {onRemove ? <Button type="button" variant="ghost" size="sm" aria-label={removeText} title={removeText} onClick={onRemove}><Trash2 className="size-4" /></Button> : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {onOpenOfferNotes ? <Button type="button" variant="ghost" size="sm" aria-label={notesText} title={notesText} onClick={() => onOpenOfferNotes(job.id)}><FileText className="size-4" /></Button> : null}
+          {onArchive ? <Button type="button" variant="ghost" size="sm" aria-label={archiveText} title={archiveText} onClick={onArchive}><Archive className="size-4" /></Button> : null}
+          {onRemove ? <Button type="button" variant="ghost" size="sm" aria-label={removeText} title={removeText} onClick={onRemove}><Trash2 className="size-4" /></Button> : null}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1398,7 +1463,7 @@ function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssump
   )
 }
 
-export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenModelAssumptions, activeGrant }: CareerCompFormSectionProps): ReactElement {
+export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant }: CareerCompFormSectionProps): ReactElement {
   if (section === 'basics') {
     return (
       <Card>
@@ -1469,9 +1534,12 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
     )
   }
 
+  const activeOffers = inputs.hypotheticalJobs.filter((job) => !job.archived)
+  const archivedOffers = inputs.hypotheticalJobs.filter((job) => job.archived)
+
   return (
     <div className="space-y-4">
-      {inputs.hypotheticalJobs.map((job) => (
+      {activeOffers.map((job) => (
         <JobEditor
           key={job.id}
           activeGrant={activeGrant}
@@ -1483,11 +1551,47 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           showCareerTransition
           onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
           onRemove={inputs.hypotheticalJobs.length > 1 ? () => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) }) : undefined}
+          onArchive={() => onChange(updateJob(inputs, job.id, (current) => ({ ...current, archived: true })))}
           onOpenGrantEditor={onOpenGrantEditor}
           onOpenValuationTimeline={onOpenValuationTimeline}
+          onOpenOfferNotes={onOpenOfferNotes}
           onOpenModelAssumptions={onOpenModelAssumptions}
         />
       ))}
+      {activeOffers.length === 0 ? (
+        <Card className="border-dashed">
+          <CardHeader>
+            <CardTitle>No active offers</CardTitle>
+            <CardDescription>Archived offers are saved but excluded from charts, tables, and exports.</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+      {archivedOffers.length > 0 ? (
+        <div className="space-y-3 border-t pt-4">
+          <div>
+            <Label className="text-sm font-semibold">Archived offers</Label>
+            <p className="text-xs text-muted-foreground">Saved for recovery and excluded from projections and XLSX export.</p>
+          </div>
+          <div className="space-y-2">
+            {archivedOffers.map((job) => (
+              <div key={job.id} className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{job.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{job.notesMarkdown ? 'Notes saved' : 'No notes yet'}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button type="button" variant="ghost" size="sm" aria-label={`Open notes for ${job.name}`} title={`Open notes for ${job.name}`} onClick={() => onOpenOfferNotes(job.id)}>
+                    <FileText className="size-4" />
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" aria-label={`Unarchive ${job.name}`} onClick={() => onChange(updateJob(inputs, job.id, (current) => ({ ...current, archived: false })))}>
+                    <ArchiveRestore className="size-4" /> Unarchive
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <Button
         type="button"
         variant="outline"

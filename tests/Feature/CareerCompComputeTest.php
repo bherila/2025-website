@@ -52,6 +52,29 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.id', 'hyp-1');
     }
 
+    public function test_compute_endpoint_excludes_archived_hypothetical_jobs(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $inputs['hypotheticalJobs'] = [
+            $this->cashOnlyJob('active-offer', 'Active offer', 100000),
+            [
+                ...$this->cashOnlyJob('archived-offer', 'Archived offer', 999999),
+                'archived' => true,
+                'notesMarkdown' => "# No early exercise\n\nExercise cost is too high.",
+            ],
+        ];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'jobs');
+        $response->assertJsonPath('jobs.0.id', 'active-offer');
+        $response->assertJsonPath('deltasVsCurrent', []);
+    }
+
     public function test_compute_endpoint_preserves_raise_and_refresher_inputs(): void
     {
         $response = $this->postJson('/api/financial-planning/career-comparison/compute', [

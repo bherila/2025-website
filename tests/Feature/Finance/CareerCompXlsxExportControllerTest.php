@@ -3,6 +3,7 @@
 namespace Tests\Feature\Finance;
 
 use App\Services\Planning\CareerComp\CareerCompInputs;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
@@ -49,6 +50,51 @@ class CareerCompXlsxExportControllerTest extends TestCase
         $this->assertSame('Current role Low', $afterTaxLiquiditySheet?->getCell('B1')->getValue());
         $this->assertSame(DataType::TYPE_NUMERIC, $afterTaxLiquiditySheet?->getCell('B2')->getDataType());
         $this->assertIsNumeric($afterTaxLiquiditySheet?->getCell('B2')->getValue());
+    }
+
+    public function test_archived_hypothetical_jobs_are_omitted_from_export(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = null;
+        $active = $inputs['hypotheticalJobs'][0];
+        $active['id'] = 'active-offer';
+        $active['name'] = 'Active offer';
+        $archived = $active;
+        $archived['id'] = 'archived-offer';
+        $archived['name'] = 'Archived offer';
+        $archived['archived'] = true;
+        $archived['notesMarkdown'] = "# No early exercise\n\nExercise cost is too high.";
+        $inputs['hypotheticalJobs'] = [$active, $archived];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/export-xlsx', [
+            'inputs' => $inputs,
+            'filename' => 'career-comparison.xlsx',
+        ]);
+
+        $response->assertOk();
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'cc-export-test');
+        file_put_contents($tempPath, $response->getContent());
+        $spreadsheet = IOFactory::load($tempPath);
+        @unlink($tempPath);
+
+        $values = [];
+        foreach ($spreadsheet->getAllSheets() as $sheet) {
+            $lastColumn = Coordinate::columnIndexFromString($sheet->getHighestColumn());
+            for ($row = 1; $row <= $sheet->getHighestRow(); $row++) {
+                for ($column = 1; $column <= $lastColumn; $column++) {
+                    $value = $sheet->getCell(Coordinate::stringFromColumnIndex($column).$row)->getValue();
+                    if ($value !== null && $value !== '') {
+                        $values[] = (string) $value;
+                    }
+                }
+            }
+        }
+
+        $workbookText = implode("\n", $values);
+        $this->assertStringContainsString('Active offer', $workbookText);
+        $this->assertStringNotContainsString('Archived offer', $workbookText);
+        $this->assertStringNotContainsString('No early exercise', $workbookText);
     }
 
     public function test_oversized_planning_horizon_is_rejected(): void

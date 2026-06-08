@@ -35,6 +35,8 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
   return {
     id,
     name,
+    notesMarkdown: null,
+    archived: false,
     startDate: null,
     priorJobResignationDate: null,
     transitionOverride: {

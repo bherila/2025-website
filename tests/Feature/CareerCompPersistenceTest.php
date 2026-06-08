@@ -146,6 +146,45 @@ class CareerCompPersistenceTest extends TestCase
         $this->assertSame('iso', $stored->spec_json['refresher']['optionType']);
     }
 
+    public function test_autosave_persists_offer_notes_and_archived_specs_but_omits_archived_projection(): void
+    {
+        $user = User::factory()->create();
+        $inputs = CareerCompInputs::defaults();
+        $active = $inputs['hypotheticalJobs'][0];
+        $active['id'] = 'active-offer';
+        $active['name'] = 'Active offer';
+        $archived = $active;
+        $archived['id'] = 'archived-offer';
+        $archived['name'] = 'Archived offer';
+        $archived['archived'] = true;
+        $archived['notesMarkdown'] = "# No early exercise\n\nExercise cost is too high.";
+        $inputs['hypotheticalJobs'] = [$active, $archived];
+
+        $response = $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('inputs.hypotheticalJobs.1.archived', true);
+        $response->assertJsonPath('inputs.hypotheticalJobs.1.notesMarkdown', "# No early exercise\n\nExercise cost is too high.");
+        $this->assertSame(['current', 'active-offer'], array_column($response->json('projection.jobs'), 'id'));
+
+        $stored = CareerJob::query()
+            ->where('user_id', $user->id)
+            ->where('kind', 'hypothetical')
+            ->get()
+            ->keyBy(fn (CareerJob $job): string => (string) $job->spec_json['id']);
+
+        $this->assertCount(2, $stored);
+        $storedArchived = $stored->get('archived-offer');
+        $storedActive = $stored->get('active-offer');
+        $this->assertInstanceOf(CareerJob::class, $storedArchived);
+        $this->assertInstanceOf(CareerJob::class, $storedActive);
+        $this->assertSame("# No early exercise\n\nExercise cost is too high.", $storedArchived->spec_json['notesMarkdown']);
+        $this->assertTrue($storedArchived->spec_json['archived']);
+        $this->assertFalse($storedActive->spec_json['archived']);
+    }
+
     public function test_share_requires_login(): void
     {
         $this->postJson('/api/financial-planning/career-comparison/share', [

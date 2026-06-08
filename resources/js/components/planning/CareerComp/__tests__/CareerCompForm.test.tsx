@@ -3,9 +3,35 @@ import '@testing-library/jest-dom'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { type ReactElement, useState } from 'react'
 
-import { CareerCompFormSection, GrantEditorColumn, type GrantType, ValuationTimelineColumn } from '../CareerCompForm'
+import { CareerCompFormSection, GrantEditorColumn, type GrantType, OfferNotesColumn, ValuationTimelineColumn } from '../CareerCompForm'
 import { buildDefaultJob, DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
 import type { CareerCompInputs } from '../types'
+
+jest.mock('@/components/ui/code-editor', () => ({
+  CodeEditor({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+    ariaLabelledBy,
+  }: {
+    value: string
+    onChange: (value: string) => void
+    placeholder?: string
+    ariaLabel?: string
+    ariaLabelledBy?: string
+  }) {
+    return (
+      <textarea
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    )
+  },
+}))
 
 function makeInputs(type: 'public' | 'private'): CareerCompInputs {
   const job = buildDefaultJob('hyp-1', 'Offer 1')
@@ -30,6 +56,7 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
   const [inputs, setInputs] = useState(initial)
   const [editor, setEditor] = useState<GrantEditorTarget | null>(null)
   const [timelineJobId, setTimelineJobId] = useState<string | null>(null)
+  const [notesJobId, setNotesJobId] = useState<string | null>(null)
   return (
     <>
       <CareerCompFormSection
@@ -38,6 +65,7 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
         onChange={setInputs}
         onOpenGrantEditor={(jobId, grantType, grantId) => setEditor({ jobId, grantType, grantId })}
         onOpenValuationTimeline={setTimelineJobId}
+        onOpenOfferNotes={setNotesJobId}
         onOpenModelAssumptions={jest.fn()}
         activeGrant={editor}
       />
@@ -46,6 +74,9 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
       ) : null}
       {timelineJobId ? (
         <ValuationTimelineColumn inputs={inputs} jobId={timelineJobId} onChange={setInputs} />
+      ) : null}
+      {notesJobId ? (
+        <OfferNotesColumn inputs={inputs} jobId={notesJobId} onChange={setInputs} />
       ) : null}
     </>
   )
@@ -63,6 +94,7 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
           onChange={setInputs}
           onOpenGrantEditor={jest.fn()}
           onOpenValuationTimeline={jest.fn()}
+          onOpenOfferNotes={jest.fn()}
           onOpenModelAssumptions={jest.fn()}
         />
       )
@@ -239,5 +271,34 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
     expect(screen.getByText('83(b) early exercise')).toBeInTheDocument()
+  })
+
+  it('opens and edits markdown notes in a dedicated column', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open notes for Offer 1' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Offer notes' }), { target: { value: '# No early exercise\n\nExercise cost is too high.' } })
+
+    expect(screen.getByRole('textbox', { name: 'Offer notes' })).toHaveValue('# No early exercise\n\nExercise cost is too high.')
+    expect(screen.getAllByText('Offer 1')).not.toHaveLength(0)
+  })
+
+  it('archives and restores offers without deleting their notes', () => {
+    render(<Harness initial={makeInputs('public')} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open notes for Offer 1' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Offer notes' }), { target: { value: 'Archived note' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Offer 1' }))
+
+    expect(screen.getByText('No active offers')).toBeInTheDocument()
+    expect(screen.getByText('Archived offers')).toBeInTheDocument()
+    expect(screen.getByText('Notes saved')).toBeInTheDocument()
+    expect(screen.queryByText('Base salary')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unarchive Offer 1' }))
+
+    expect(screen.getByText('Base salary')).toBeInTheDocument()
+    expect(screen.queryByText('No active offers')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Offer notes' })).toHaveValue('Archived note')
   })
 })

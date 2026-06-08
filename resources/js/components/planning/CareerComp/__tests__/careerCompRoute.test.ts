@@ -33,10 +33,11 @@ describe('careerCompRoute', () => {
   })
 
   it('parses grant and valuation detail instances', () => {
-    expect(parseCareerCompHash('#/offers/grant-rsu:hyp-1%3Ahyp-1-rsu-1/valuation-timeline:hyp-1')).toEqual({
+    expect(parseCareerCompHash('#/offers/grant-rsu:hyp-1%3Ahyp-1-rsu-1/offer-notes:hyp-1/valuation-timeline:hyp-1')).toEqual({
       columns: [
         { id: 'offers' },
         { id: 'grant-rsu', instance: 'hyp-1:hyp-1-rsu-1' },
+        { id: 'offer-notes', instance: 'hyp-1' },
         { id: 'valuation-timeline', instance: 'hyp-1' },
       ],
     })

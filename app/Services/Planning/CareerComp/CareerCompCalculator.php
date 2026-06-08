@@ -43,6 +43,10 @@ final class CareerCompCalculator
             $warnings = array_merge($warnings, $projected['warnings']);
         }
         foreach ($inputs->hypotheticalJobs() as $job) {
+            if ($job->archived()) {
+                continue;
+            }
+
             $projected = $this->projectOfferScenario($currentJobs, $job, $startYear, $horizonYears, $modelAssumptions);
             $jobs[] = $projected['job'];
             $warnings = array_merge($warnings, $projected['warnings']);
