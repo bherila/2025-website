@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { sampleCareerCompProjection } from '../__fixtures__/sampleProjection'
 import {
@@ -114,6 +114,7 @@ function projectionWithAfterTax(projection: CareerCompProjection): CareerCompPro
 
 describe('CareerCompPage', () => {
   beforeEach(() => {
+    jest.useRealTimers()
     jest.clearAllMocks()
     mockCompute.mockResolvedValue(sampleCareerCompProjection)
     mockSaveLatest.mockResolvedValue(workflowResponse())
@@ -355,6 +356,25 @@ describe('CareerCompPage', () => {
     await waitFor(() => expect(mockShare).toHaveBeenCalledTimes(1))
     expect(mockShare.mock.calls[0][1]).toBe(true)
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(sharedFork.shareUrl)
+  })
+
+  it('flushes model assumption edits as soon as the field blurs', async () => {
+    jest.useFakeTimers()
+    window.history.replaceState(null, '', '/financial-planning/career-comparison#/model-assumptions')
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
+
+    await act(async () => {
+      jest.advanceTimersByTime(350)
+    })
+    await waitFor(() => expect(mockSaveLatest).toHaveBeenCalledTimes(1))
+    mockSaveLatest.mockClear()
+
+    fireEvent.change(screen.getByLabelText('Current job notice period'), { target: { value: '6' } })
+    fireEvent.blur(screen.getByLabelText('Current job notice period'))
+
+    expect(mockSaveLatest).toHaveBeenCalledTimes(1)
+    const savedInputs = mockSaveLatest.mock.calls[0]?.[0] as CareerCompInputs
+    expect(savedInputs.modelAssumptions.careerTransition.currentJobNoticeWeeks).toBe(6)
   })
 
   it('autosaves edits on a shared fork to that link', async () => {

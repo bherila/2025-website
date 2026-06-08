@@ -1,5 +1,5 @@
 import { AlertTriangle, BarChart3, Briefcase, ChevronRight, Download, LineChart, type LucideIcon, ReceiptText, Settings2, Share2, Table2, Trash2, Upload } from 'lucide-react'
-import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import Container from '@/components/container'
 import { Badge } from '@/components/ui/badge'
@@ -425,6 +425,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
 
   const [inputs, setInputs] = useState<CareerCompInputs>(() => initialInputs(initialData))
   const normalizedInputs = useMemo(() => normalizeCareerCompInputs(inputs), [inputs])
+  const normalizedInputsSignature = useMemo(() => JSON.stringify(normalizedInputs), [normalizedInputs])
   const [projection, setProjection] = useState<CareerCompProjection | null>(initialData.projection)
   const [loading, setLoading] = useState(initialData.projection === null)
   const [status, setStatus] = useState<string | null>(null)
@@ -434,6 +435,8 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   const [isExporting, setIsExporting] = useState(false)
   const [shareDeleted, setShareDeleted] = useState(false)
   const [selectedWarning, setSelectedWarning] = useState<string | null>(null)
+  const projectionRequestIdRef = useRef(0)
+  const lastStartedProjectionSignatureRef = useRef<string | null>(null)
 
   // Share dialog (private latest only).
   const [shareOpen, setShareOpen] = useState(false)
@@ -481,59 +484,79 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     }
   }, [isShareView, initialData.authenticated, normalizedInputs])
 
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    const timeout = window.setTimeout(() => {
-      if (canAutosave) {
-        setSaveState('saving')
-        const persist = isShareView && shareCode !== null ? saveSharedCareerComparison(shareCode, normalizedInputs) : saveLatestCareerComparison(normalizedInputs)
-        persist
-          .then((response) => {
-            if (active) {
-              setProjection(response.projection)
-              setSaveState('saved')
-              setStatus(null)
-            }
-          })
-          .catch((error: unknown) => {
-            if (active) {
-              setSaveState('error')
-              setStatus(error instanceof Error ? error.message : String(error))
-            }
-          })
-          .finally(() => {
-            if (active) {
-              setLoading(false)
-            }
-          })
-        return
-      }
+  const runProjection = useCallback((nextInputs: CareerCompInputs, signature: string): void => {
+    if (lastStartedProjectionSignatureRef.current === signature) {
+      return
+    }
 
-      computeCareerComp(normalizedInputs)
-        .then((nextProjection) => {
-          if (active) {
-            setProjection(nextProjection)
+    lastStartedProjectionSignatureRef.current = signature
+    const requestId = projectionRequestIdRef.current + 1
+    projectionRequestIdRef.current = requestId
+
+    if (canAutosave) {
+      setLoading(true)
+      setSaveState('saving')
+      const persist = isShareView && shareCode !== null ? saveSharedCareerComparison(shareCode, nextInputs) : saveLatestCareerComparison(nextInputs)
+      persist
+        .then((response) => {
+          if (projectionRequestIdRef.current === requestId) {
+            setProjection(response.projection)
+            setSaveState('saved')
             setStatus(null)
           }
         })
         .catch((error: unknown) => {
-          if (active) {
+          if (projectionRequestIdRef.current === requestId) {
+            lastStartedProjectionSignatureRef.current = null
+            setSaveState('error')
             setStatus(error instanceof Error ? error.message : String(error))
           }
         })
         .finally(() => {
-          if (active) {
+          if (projectionRequestIdRef.current === requestId) {
             setLoading(false)
           }
         })
+      return
+    }
+
+    setLoading(true)
+    computeCareerComp(nextInputs)
+      .then((nextProjection) => {
+        if (projectionRequestIdRef.current === requestId) {
+          setProjection(nextProjection)
+          setStatus(null)
+        }
+      })
+      .catch((error: unknown) => {
+        if (projectionRequestIdRef.current === requestId) {
+          lastStartedProjectionSignatureRef.current = null
+          setStatus(error instanceof Error ? error.message : String(error))
+        }
+      })
+      .finally(() => {
+        if (projectionRequestIdRef.current === requestId) {
+          setLoading(false)
+        }
+      })
+  }, [canAutosave, isShareView, shareCode])
+
+  useEffect(() => {
+    setLoading(true)
+    const timeout = window.setTimeout(() => {
+      runProjection(normalizedInputs, normalizedInputsSignature)
     }, 350)
 
     return () => {
-      active = false
       window.clearTimeout(timeout)
     }
-  }, [normalizedInputs, canAutosave, isShareView, shareCode])
+  }, [normalizedInputs, normalizedInputsSignature, runProjection])
+
+  function handleFormBlur(): void {
+    if (canAutosave) {
+      runProjection(normalizedInputs, normalizedInputsSignature)
+    }
+  }
 
   async function handleCreateShare(): Promise<void> {
     setCreatingShare(true)
@@ -813,7 +836,11 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         id: column.id,
         label: section.label,
         shortLabel: section.shortLabel,
-        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} onOpenValuationTimeline={openValuationTimeline} onOpenOfferNotes={openOfferNotes} onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })} activeGrant={activeGrant} onOpenJobEditor={openJobEditor} />,
+        children: (
+          <div onBlurCapture={handleFormBlur}>
+            <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} onOpenValuationTimeline={openValuationTimeline} onOpenOfferNotes={openOfferNotes} onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })} activeGrant={activeGrant} onOpenJobEditor={openJobEditor} />
+          </div>
+        ),
       }
     }
 
