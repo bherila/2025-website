@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Finance;
 
+use App\Services\Finance\MoneyMath;
 use App\Services\Tax\PureTaxMath\FederalBrackets;
 use App\Services\Tax\PureTaxMath\FilingStatus;
 use App\Support\Finance\FederalIncomeTax;
@@ -38,6 +39,20 @@ class FederalIncomeTaxTest extends TestCase
             FederalIncomeTax::ordinaryTax($taxableIncome, 2025, true),
             FederalIncomeTax::regularTax($taxableIncome, 2025, true),
         );
+    }
+
+    public function test_preferential_tax_can_use_form6251_part_iii_regular_rate_stack(): void
+    {
+        $tax = FederalIncomeTax::taxWithPreferentialIncome(
+            taxableIncome: 131900.0,
+            preferentialIncome: 120000.0,
+            year: 2025,
+            isMarried: false,
+            ordinaryTaxCalculator: static fn (float $ordinaryIncome): float => MoneyMath::multiply($ordinaryIncome, 0.26),
+            preferentialRateStackIncome: 0.0,
+        );
+
+        $this->assertSame(13841.5, $tax);
     }
 
     public function test_modern_year_ordinary_tax_matches_pure_tax_math(): void

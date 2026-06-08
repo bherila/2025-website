@@ -2,8 +2,10 @@
 
 namespace Tests\Unit\Finance;
 
+use App\Services\Finance\K1CodeCharacterResolver;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Builders\EquityCompensationFactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form6251FactsBuilder;
 use App\Services\Planning\CareerComp\JobSpec;
 use App\Support\Finance\FederalIncomeTax;
 use PHPUnit\Framework\TestCase;
@@ -318,5 +320,41 @@ class EquityCompensationFactsBuilderTest extends TestCase
         $this->assertSame(600000.0, $form6251['line1TaxableIncome']);
         $this->assertSame(200000.0, $form6251['line3OtherAdjustments']);
         $this->assertSame(800000.0, $form6251['amti']);
+    }
+
+    public function test_form6251_amt_preferential_income_uses_regular_stack_without_exemption_phaseout(): void
+    {
+        $facts = (new Form6251FactsBuilder(new K1CodeCharacterResolver))->buildFromOtherAdjustments(
+            taxableIncome: 120000.0,
+            line3OtherAdjustments: 100000.0,
+            year: 2025,
+            isMarried: false,
+            regularTax: FederalIncomeTax::regularTax(120000.0, 2025, false, 0.0, 120000.0),
+            preferentialIncome: 120000.0,
+        );
+
+        $this->assertSame(220000.0, $facts->amti);
+        $this->assertSame(88100.0, $facts->exemption);
+        $this->assertSame(131900.0, $facts->amtTaxBase);
+        $this->assertSame(13841.5, $facts->amtBeforeForeignCredit);
+        $this->assertSame(3094.0, $facts->amt);
+    }
+
+    public function test_form6251_amt_preferential_income_uses_regular_stack_with_exemption_phaseout(): void
+    {
+        $facts = (new Form6251FactsBuilder(new K1CodeCharacterResolver))->buildFromOtherAdjustments(
+            taxableIncome: 600000.0,
+            line3OtherAdjustments: 200000.0,
+            year: 2025,
+            isMarried: false,
+            regularTax: FederalIncomeTax::regularTax(600000.0, 2025, false, 0.0, 600000.0),
+            preferentialIncome: 600000.0,
+        );
+
+        $this->assertSame(800000.0, $facts->amti);
+        $this->assertSame(44687.5, $facts->exemption);
+        $this->assertSame(755312.5, $facts->amtTaxBase);
+        $this->assertSame(126458.75, $facts->amtBeforeForeignCredit);
+        $this->assertSame(40381.25, $facts->amt);
     }
 }

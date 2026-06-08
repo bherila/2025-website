@@ -103,8 +103,9 @@ final class FederalIncomeTax
 
     /**
      * @param  callable(float): float  $ordinaryTaxCalculator
+     * @param  float|null  $preferentialRateStackIncome  Taxable ordinary-income stack used to locate preferential-rate bands; defaults to regular-tax worksheet behavior.
      */
-    public static function taxWithPreferentialIncome(float $taxableIncome, float $preferentialIncome, int $year, bool $isMarried, callable $ordinaryTaxCalculator): float
+    public static function taxWithPreferentialIncome(float $taxableIncome, float $preferentialIncome, int $year, bool $isMarried, callable $ordinaryTaxCalculator, ?float $preferentialRateStackIncome = null): float
     {
         $taxableIncome = max(0.0, $taxableIncome);
         $preferentialIncome = min($taxableIncome, max(0.0, $preferentialIncome));
@@ -116,7 +117,7 @@ final class FederalIncomeTax
         $ordinaryIncome = max(0.0, MoneyMath::subtract($taxableIncome, $preferentialIncome));
         $tax = MoneyMath::round((float) $ordinaryTaxCalculator($ordinaryIncome));
         $remainingPreferentialIncome = $preferentialIncome;
-        $stackPosition = $ordinaryIncome;
+        $stackPosition = max(0.0, $preferentialRateStackIncome ?? $ordinaryIncome);
 
         $zeroRateAmount = min($remainingPreferentialIncome, max(0.0, MoneyMath::subtract($thresholds['zero'], $stackPosition)));
         $remainingPreferentialIncome = MoneyMath::subtract($remainingPreferentialIncome, $zeroRateAmount);
