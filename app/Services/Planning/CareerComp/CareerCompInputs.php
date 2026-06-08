@@ -97,6 +97,7 @@ final class CareerCompInputs
                     'cliffMonths' => 12,
                     'vestingYears' => 4,
                     'vestingFrequency' => 'monthly',
+                    'vestingEvents' => [],
                 ]],
                 'optionGrants' => [],
                 'growthBands' => [

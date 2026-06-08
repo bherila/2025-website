@@ -9,6 +9,7 @@ use App\Services\Planning\CareerComp\JobSpec;
 use App\Services\Planning\CareerComp\OptionsVestingService;
 use App\Services\Planning\CareerComp\RsuVestingExpander;
 use App\Support\Finance\FederalIncomeTax;
+use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 
 class CareerCompCalculatorTest extends TestCase
@@ -283,6 +284,30 @@ class CareerCompCalculatorTest extends TestCase
 
         // Synthetic schedule: 400 shares vest at the 1-year mark → 2027.
         $this->assertSame([2027 => 400.0], $this->sharesByYear($rows));
+    }
+
+    public function test_rsu_valid_vesting_events_filtered_by_cutoff_do_not_fall_back_to_synthetic_schedule(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'rsu-cutoff-job',
+            'name' => 'RSU cutoff job',
+            'rsuGrants' => [[
+                'id' => 'rsu-cutoff',
+                'kind' => 'hire',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 400,
+                'cliffMonths' => 0,
+                'vestingYears' => 1,
+                'vestingFrequency' => 'annual',
+                'vestingEvents' => [
+                    ['shareCount' => 400, 'vestDate' => '2027-01-01'],
+                ],
+            ]],
+        ], false);
+
+        $rows = (new RsuVestingExpander)->expand($job, 2026, 3, new DateTimeImmutable('2026-12-31'));
+
+        $this->assertSame([], $this->sharesByYear($rows));
     }
 
     public function test_multiple_option_grants_pool_iso_100k_limit_within_a_year(): void

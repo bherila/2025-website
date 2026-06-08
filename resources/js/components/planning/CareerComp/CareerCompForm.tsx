@@ -341,6 +341,14 @@ function nextGrantId(existing: { id: string }[], jobId: string, kind: 'rsu' | 'o
   return id
 }
 
+export function rsuScheduleEditPatch(patch: Partial<RsuGrant>): Partial<RsuGrant> {
+  return { ...patch, vestingEvents: [] }
+}
+
+export function duplicateRsuGrant(original: RsuGrant, existing: RsuGrant[], jobId: string): RsuGrant {
+  return { ...original, id: nextGrantId(existing, jobId, 'rsu'), vestingEvents: [] }
+}
+
 function nextScenarioId(existing: { id: string }[]): string {
   const used = new Set(existing.map((scenario) => scenario.id))
   let ordinal = existing.length + 1
@@ -635,7 +643,7 @@ function RsuGrantsList({ job, onChange, onOpenGrantEditor, activeGrant }: { job:
       return
     }
     const next = [...job.rsuGrants]
-    next.splice(index + 1, 0, { ...original, id: nextGrantId(job.rsuGrants, job.id, 'rsu') })
+    next.splice(index + 1, 0, duplicateRsuGrant(original, job.rsuGrants, job.id))
     setGrants(next)
   }
 
@@ -922,18 +930,22 @@ function ModelAssumptionsEditor({ inputs, onChange }: { inputs: CareerCompInputs
 }
 
 function RsuGrantFields({ grant, onChange }: { grant: RsuGrant; onChange: (patch: Partial<RsuGrant>) => void }): ReactElement {
+  function updateSchedule(patch: Partial<RsuGrant>): void {
+    onChange(rsuScheduleEditPatch(patch))
+  }
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => onChange({ kind })} />
-      <DateField label="Grant date" value={grant.grantDate} onChange={(value) => onChange({ grantDate: value })} />
-      <DateField label="Vesting start" value={grant.vestingStartDate ?? ''} onChange={(value) => onChange({ vestingStartDate: value || null })} />
-      <NumberField label="Share count" value={grant.shareCount ?? 0} min={0} onChange={(value) => onChange({ shareCount: value })} />
-      <MoneyField label="Grant value (optional)" value={grant.grantValue ?? 0} onChange={(value) => onChange({ grantValue: value > 0 ? value : undefined })} />
-      <MoneyField label="Grant price (optional)" value={grant.grantPrice ?? 0} onChange={(value) => onChange({ grantPrice: value > 0 ? value : undefined })} />
-      <SelectField label="Vesting schedule" value={vestingSchedulePresetValue(grant)} options={VESTING_SCHEDULE_OPTIONS} onChange={(presetId) => onChange(vestingSchedulePatchForPreset(presetId))} />
-      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value, vestingSchedule: null })} />
-      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => onChange({ vestingYears: value, vestingSchedule: null })} />
-      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ vestingFrequency, vestingSchedule: null })} />
+      <DateField label="Grant date" value={grant.grantDate} onChange={(value) => updateSchedule({ grantDate: value })} />
+      <DateField label="Vesting start" value={grant.vestingStartDate ?? ''} onChange={(value) => updateSchedule({ vestingStartDate: value || null })} />
+      <NumberField label="Share count" value={grant.shareCount ?? 0} min={0} onChange={(value) => updateSchedule({ shareCount: value })} />
+      <MoneyField label="Grant value (optional)" value={grant.grantValue ?? 0} onChange={(value) => updateSchedule({ grantValue: value > 0 ? value : undefined })} />
+      <MoneyField label="Grant price (optional)" value={grant.grantPrice ?? 0} onChange={(value) => updateSchedule({ grantPrice: value > 0 ? value : undefined })} />
+      <SelectField label="Vesting schedule" value={vestingSchedulePresetValue(grant)} options={VESTING_SCHEDULE_OPTIONS} onChange={(presetId) => updateSchedule(vestingSchedulePatchForPreset(presetId))} />
+      <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => updateSchedule({ cliffMonths: value, vestingSchedule: null })} />
+      <NumberField label="Vesting years" value={grant.vestingYears} min={0} onChange={(value) => updateSchedule({ vestingYears: value, vestingSchedule: null })} />
+      <SelectField label="Vesting frequency" value={grant.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => updateSchedule({ vestingFrequency, vestingSchedule: null })} />
     </div>
   )
 }

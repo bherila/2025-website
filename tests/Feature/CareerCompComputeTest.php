@@ -67,6 +67,19 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.0.id', 'hyp-1');
     }
 
+    public function test_compute_endpoint_honors_legacy_current_job_edit_when_frontend_current_jobs_matches_defaults(): void
+    {
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob']['name'] = 'Edited current role';
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.name', 'Edited current role');
+    }
+
     public function test_compute_endpoint_excludes_archived_hypothetical_jobs(): void
     {
         $inputs = CareerCompInputs::defaults();

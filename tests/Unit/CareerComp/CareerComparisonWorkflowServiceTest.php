@@ -235,6 +235,14 @@ class CareerComparisonWorkflowServiceTest extends TestCase
         );
     }
 
+    public function test_php_rsu_defaults_include_empty_vesting_events_to_match_frontend_defaults(): void
+    {
+        $defaults = CareerCompInputs::defaults();
+
+        $this->assertSame([], $defaults['currentJobs'][0]['rsuGrants'][0]['vestingEvents']);
+        $this->assertSame([], $defaults['currentJob']['rsuGrants'][0]['vestingEvents']);
+    }
+
     private function latestInputs(string $tag): CareerCompInputs
     {
         $defaults = CareerCompInputs::defaults();

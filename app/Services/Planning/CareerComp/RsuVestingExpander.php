@@ -80,18 +80,20 @@ final class RsuVestingExpander
         }
 
         $sharesByYear = [];
+        $hasValidExplicitEvent = false;
         foreach (array_values(array_filter($events, 'is_array')) as $event) {
             $vestDate = $this->date((string) ($event['vestDate'] ?? ''));
             if (! $vestDate instanceof DateTimeImmutable) {
                 continue;
             }
 
-            if ($vestingThrough instanceof DateTimeImmutable && $vestDate > $vestingThrough) {
+            $shares = is_numeric($event['shareCount'] ?? null) ? (float) $event['shareCount'] : 0.0;
+            if ($shares <= 0.0) {
                 continue;
             }
 
-            $shares = is_numeric($event['shareCount'] ?? null) ? (float) $event['shareCount'] : 0.0;
-            if ($shares <= 0.0) {
+            $hasValidExplicitEvent = true;
+            if ($vestingThrough instanceof DateTimeImmutable && $vestDate > $vestingThrough) {
                 continue;
             }
 
@@ -101,11 +103,9 @@ final class RsuVestingExpander
 
         ksort($sharesByYear);
 
-        // Only treat explicit events as authoritative when at least one valid event
-        // contributed shares. An empty result here means every event was filtered out
-        // (zero shareCount, unparseable vestDate, or past the cutoff), so return null
-        // to let sharesByYear() fall back to the synthetic schedule.
-        if ($sharesByYear === []) {
+        // Fall back only when all explicit rows are structurally invalid. Valid rows
+        // filtered out by vestingThrough still mean the explicit schedule vests nothing.
+        if (! $hasValidExplicitEvent) {
             return null;
         }
 
