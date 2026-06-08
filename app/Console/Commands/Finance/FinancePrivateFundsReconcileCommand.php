@@ -16,40 +16,9 @@ use Illuminate\Support\Str;
 
 class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
 {
-    /** @var array<string, array{account: string, aliases: list<string>}> */
-    private const array FOLDER_MAP = [
-        'aqr' => [
-            'account' => 'aqr',
-            'aliases' => ['aqr', 'delphi plus', 'aqr delphi plus'],
-        ],
-        'tau' => [
-            'account' => 'tau',
-            'aliases' => ['tau', 'tau ventures ca', 'tau ventures'],
-        ],
-        'pioneer af24' => [
-            'account' => 'pioneer af24',
-            'aliases' => ['pioneer af24', 'pioneer fund af 24'],
-        ],
-        'pioneer af25' => [
-            'account' => 'pioneer af25',
-            'aliases' => ['pioneer af25', 'pioneer fund af 25'],
-        ],
-        'pioneer af26' => [
-            'account' => 'pioneer af26',
-            'aliases' => ['pioneer af26', 'pioneer fund af 26'],
-        ],
-        'pioneer iv (not countersigned)' => [
-            'account' => 'pioneer iv',
-            'aliases' => ['pioneer iv', 'pioneer fund iv'],
-        ],
-        'pioneer prime (not countersigned)' => [
-            'account' => 'pioneer prime',
-            'aliases' => ['pioneer prime', 'pioneer fund prime'],
-        ],
-    ];
-
     protected $signature = 'finance:private-funds:reconcile
         {--root= : Financial document root; defaults to FINANCE_PRIVATE_FUNDS_ROOT}
+        {--map= : Folder-to-account map JSON file; defaults to FINANCE_PRIVATE_FUNDS_MAP}
         {--user= : User ID; defaults to FINANCE_CLI_USER_ID, then 1}
         {--apply : Write account/document changes and upload files to configured storage}
         {--format=table : Output format: table or json}';
@@ -86,10 +55,15 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
             return 1;
         }
 
+        $folderMap = $this->loadFolderMap();
+        if ($folderMap === null) {
+            return 1;
+        }
+
         $apply = (bool) $this->option('apply');
         $events = [];
-        $documents = $this->scanDocuments($root, $events);
-        $accounts = $this->ensureAccounts((int) $user->id, $apply, $events);
+        $documents = $this->scanDocuments($root, $folderMap, $events);
+        $accounts = $this->ensureAccounts((int) $user->id, $folderMap, $apply, $events);
 
         foreach ($documents as $document) {
             $account = $accounts[$document['account_name']] ?? null;
@@ -158,14 +132,86 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
     }
 
     /**
+     * Load the folder-to-account map from the JSON file given by --map or
+     * FINANCE_PRIVATE_FUNDS_MAP. The map keeps confidential fund, partnership,
+     * and account names out of the repository.
+     *
+     * Expected JSON shape (object keyed by folder name):
+     *
+     *   {
+     *     "folder name": {
+     *       "account": "canonical account name",
+     *       "aliases": ["existing account name", "..."],
+     *       "date_prefixed": false
+     *     }
+     *   }
+     *
+     * @return array<string, array{account: string, aliases: list<string>, date_prefixed: bool}>|null
+     */
+    private function loadFolderMap(): ?array
+    {
+        $mapOption = $this->option('map') ?: getenv('FINANCE_PRIVATE_FUNDS_MAP');
+        if (! is_string($mapOption) || trim($mapOption) === '') {
+            $this->error('Folder map is required. Pass --map or set FINANCE_PRIVATE_FUNDS_MAP.');
+
+            return null;
+        }
+
+        if (! is_file($mapOption)) {
+            $this->error("Folder map not found: {$mapOption}");
+
+            return null;
+        }
+
+        $raw = file_get_contents($mapOption);
+        $decoded = is_string($raw) ? json_decode($raw, true) : null;
+        if (! is_array($decoded)) {
+            $this->error("Folder map is not valid JSON: {$mapOption}");
+
+            return null;
+        }
+
+        $map = [];
+        foreach ($decoded as $folder => $config) {
+            if (! is_string($folder) || ! is_array($config) || ! isset($config['account']) || ! is_string($config['account'])) {
+                $this->error('Folder map entries must be keyed by folder name and contain a string "account".');
+
+                return null;
+            }
+
+            $aliases = $config['aliases'] ?? [$config['account']];
+            if (! is_array($aliases)) {
+                $this->error("Folder map \"aliases\" for {$folder} must be a list of strings.");
+
+                return null;
+            }
+
+            $map[$folder] = [
+                'account' => $config['account'],
+                'aliases' => array_values(array_filter($aliases, 'is_string')),
+                'date_prefixed' => (bool) ($config['date_prefixed'] ?? false),
+            ];
+        }
+
+        if ($map === []) {
+            $this->error('Folder map is empty.');
+
+            return null;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, array{account: string, aliases: list<string>, date_prefixed: bool}>  $folderMap
      * @param  list<array{area: string, target: string, status: string, details: string}>  $events
      * @return list<array<string, mixed>>
      */
-    private function scanDocuments(string $root, array &$events): array
+    private function scanDocuments(string $root, array $folderMap, array &$events): array
     {
         $documents = [];
 
-        foreach (self::FOLDER_MAP as $folder => $config) {
+        foreach ($folderMap as $folder => $config) {
             $folderPath = $root.DIRECTORY_SEPARATOR.$folder;
             if (! is_dir($folderPath)) {
                 $events[] = $this->event('folder', $folder, 'missing', 'folder not found');
@@ -179,7 +225,7 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
                     continue;
                 }
 
-                $parsed = $this->parseFilename($file->getFilename(), $folder, $config['account']);
+                $parsed = $this->parseFilename($file->getFilename(), $config['date_prefixed'], $config['account']);
                 if ($parsed === null) {
                     $events[] = $this->event('document', $file->getFilename(), 'unparsed', 'filename did not match supported patterns');
 
@@ -211,7 +257,7 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
     /**
      * @return array<string, string>|null
      */
-    private function parseFilename(string $filename, string $folder, string $accountName): ?array
+    private function parseFilename(string $filename, bool $datePrefixed, string $accountName): ?array
     {
         $nameWithoutExtension = preg_replace('/\.(pdf|docx)$/i', '', $filename);
         if (! is_string($nameWithoutExtension)) {
@@ -225,7 +271,7 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
             return $date === null ? null : $this->parsedMetadata($label, $date);
         }
 
-        if ($folder === 'aqr' && preg_match('/^(\d{4}\.\d{2}(?:\.\d{2})?)\s+(.+)$/', $nameWithoutExtension, $matches) === 1) {
+        if ($datePrefixed && preg_match('/^(\d{4}\.\d{2}(?:\.\d{2})?)\s+(.+)$/', $nameWithoutExtension, $matches) === 1) {
             $date = $this->parseDateToken($matches[1]);
             $label = $this->cleanLabel($matches[2]);
             $label = trim((string) preg_replace('/^'.preg_quote($accountName, '/').'\s+/i', '', $label));
@@ -318,14 +364,15 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
     }
 
     /**
+     * @param  array<string, array{account: string, aliases: list<string>, date_prefixed: bool}>  $folderMap
      * @param  list<array{area: string, target: string, status: string, details: string}>  $events
      * @return array<string, FinAccounts>
      */
-    private function ensureAccounts(int $userId, bool $apply, array &$events): array
+    private function ensureAccounts(int $userId, array $folderMap, bool $apply, array &$events): array
     {
         $resolved = [];
 
-        foreach (self::FOLDER_MAP as $config) {
+        foreach ($folderMap as $config) {
             $canonicalName = $config['account'];
             $account = $this->accountByName($userId, $canonicalName);
 
@@ -374,7 +421,7 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
         $accounts = FinAccounts::query()
             ->withoutGlobalScopes()
             ->where('acct_owner', (string) $userId)
-            ->whereIn('acct_name', array_map(static fn (array $config): string => $config['account'], self::FOLDER_MAP))
+            ->whereIn('acct_name', array_map(static fn (array $config): string => $config['account'], $folderMap))
             ->get()
             ->keyBy('acct_name')
             ->all();

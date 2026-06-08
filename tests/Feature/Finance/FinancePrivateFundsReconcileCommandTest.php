@@ -17,6 +17,8 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
 
     private string $root;
 
+    private string $mapPath;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -25,10 +27,13 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
         $this->user = User::factory()->create();
         putenv("FINANCE_CLI_USER_ID={$this->user->id}");
         $this->root = storage_path('framework/testing/private-funds-'.uniqid());
+        $this->mapPath = $this->root.'/map.json';
 
-        foreach ($this->folders() as $folder) {
+        File::ensureDirectoryExists($this->root);
+        foreach (array_keys($this->folderMap()) as $folder) {
             File::ensureDirectoryExists($this->root.'/'.$folder);
         }
+        File::put($this->mapPath, (string) json_encode($this->folderMap()));
     }
 
     protected function tearDown(): void
@@ -41,11 +46,12 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
 
     public function test_dry_run_reports_changes_without_writing(): void
     {
-        $this->insertAccount('delphi plus');
-        $this->writeDocument('aqr/2025.09.30 aqr statement.pdf', '%PDF dry run');
+        $this->insertAccount('fund a legacy');
+        $this->writeDocument('folder-a/2025.09.30 fund-a statement.pdf', '%PDF dry run');
 
         $this->artisan('finance:private-funds:reconcile', [
             '--root' => $this->root,
+            '--map' => $this->mapPath,
         ])
             ->assertExitCode(0)
             ->expectsOutputToContain('Mode: dry-run')
@@ -54,28 +60,27 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
 
         $this->assertDatabaseHas('fin_accounts', [
             'acct_owner' => (string) $this->user->id,
-            'acct_name' => 'delphi plus',
+            'acct_name' => 'fund a legacy',
         ]);
         $this->assertDatabaseMissing('fin_accounts', [
             'acct_owner' => (string) $this->user->id,
-            'acct_name' => 'aqr',
+            'acct_name' => 'fund-a',
         ]);
         $this->assertDatabaseCount('fin_documents', 0);
     }
 
     public function test_apply_renames_accounts_creates_missing_accounts_imports_and_uploads_documents(): void
     {
-        $this->insertAccount('delphi plus');
-        $this->insertAccount('tau ventures ca');
-        $this->insertAccount('pioneer fund af 24');
-        $this->insertAccount('pioneer fund af 25');
+        $this->insertAccount('fund a legacy');
+        $this->insertAccount('fund b legacy');
 
-        $this->writeDocument('aqr/2025.09.30 aqr statement.pdf', '%PDF aqr statement');
-        $this->writeDocument('tau/schedule k-1 - tau - 2024.12.31.pdf', '%PDF tau k1');
-        $this->writeDocument('pioneer prime (not countersigned)/subscription agreement - pioneer prime - 2025.12.02.docx', 'docx prime subscription');
+        $this->writeDocument('folder-a/2025.09.30 fund-a statement.pdf', '%PDF fund-a statement');
+        $this->writeDocument('folder-b/schedule k-1 - fund-b - 2024.12.31.pdf', '%PDF fund-b k1');
+        $this->writeDocument('folder-c/subscription agreement - fund-c - 2025.12.02.docx', 'docx fund-c subscription');
 
         $this->artisan('finance:private-funds:reconcile', [
             '--root' => $this->root,
+            '--map' => $this->mapPath,
             '--user' => $this->user->id,
             '--apply' => true,
         ])
@@ -85,60 +90,60 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
             ->expectsOutputToContain('created')
             ->expectsOutputToContain('imported');
 
-        foreach (['aqr', 'tau', 'pioneer af24', 'pioneer af25', 'pioneer af26', 'pioneer iv', 'pioneer prime'] as $name) {
+        foreach (['fund-a', 'fund-b', 'fund-c'] as $name) {
             $this->assertDatabaseHas('fin_accounts', [
                 'acct_owner' => (string) $this->user->id,
                 'acct_name' => $name,
             ]);
         }
 
-        $aqrAccountId = (int) DB::table('fin_accounts')
+        $fundAAccountId = (int) DB::table('fin_accounts')
             ->where('acct_owner', (string) $this->user->id)
-            ->where('acct_name', 'aqr')
+            ->where('acct_name', 'fund-a')
             ->value('acct_id');
 
-        $aqrDocument = DB::table('fin_documents')
+        $fundADocument = DB::table('fin_documents')
             ->where('user_id', $this->user->id)
-            ->where('original_filename', '2025.09.30 aqr statement.pdf')
+            ->where('original_filename', '2025.09.30 fund-a statement.pdf')
             ->first();
 
-        $this->assertNotNull($aqrDocument);
-        $this->assertSame('statement', $aqrDocument->document_kind);
-        $this->assertSame('statement', $aqrDocument->document_type);
-        $this->assertSame('2025-09-30', substr((string) $aqrDocument->document_date, 0, 10));
-        Storage::disk('s3')->assertExists($aqrDocument->s3_path);
+        $this->assertNotNull($fundADocument);
+        $this->assertSame('statement', $fundADocument->document_kind);
+        $this->assertSame('statement', $fundADocument->document_type);
+        $this->assertSame('2025-09-30', substr((string) $fundADocument->document_date, 0, 10));
+        Storage::disk('s3')->assertExists($fundADocument->s3_path);
 
         $statement = DB::table('fin_statements')
-            ->where('document_id', $aqrDocument->id)
-            ->where('acct_id', $aqrAccountId)
+            ->where('document_id', $fundADocument->id)
+            ->where('acct_id', $fundAAccountId)
             ->first();
 
         $this->assertNotNull($statement);
         $this->assertSame('2025-09-30', substr((string) $statement->statement_closing_date, 0, 10));
 
-        $tauK1 = DB::table('fin_documents')
+        $fundBK1 = DB::table('fin_documents')
             ->where('user_id', $this->user->id)
-            ->where('original_filename', 'schedule k-1 - tau - 2024.12.31.pdf')
+            ->where('original_filename', 'schedule k-1 - fund-b - 2024.12.31.pdf')
             ->first();
 
-        $this->assertNotNull($tauK1);
-        $this->assertSame('tax_form', $tauK1->document_kind);
-        $this->assertSame('schedule_k1', $tauK1->document_type);
+        $this->assertNotNull($fundBK1);
+        $this->assertSame('tax_form', $fundBK1->document_kind);
+        $this->assertSame('schedule_k1', $fundBK1->document_type);
         $this->assertDatabaseHas('fin_tax_documents', [
-            'document_id' => $tauK1->id,
+            'document_id' => $fundBK1->id,
             'form_type' => 'k1',
             'tax_year' => 2024,
         ]);
 
-        $primeDoc = DB::table('fin_documents')
+        $fundCDoc = DB::table('fin_documents')
             ->where('user_id', $this->user->id)
-            ->where('original_filename', 'subscription agreement - pioneer prime - 2025.12.02.docx')
+            ->where('original_filename', 'subscription agreement - fund-c - 2025.12.02.docx')
             ->first();
 
-        $this->assertNotNull($primeDoc);
-        $this->assertSame('manual', $primeDoc->document_kind);
-        $this->assertSame('subscription_agreement', $primeDoc->document_type);
-        Storage::disk('s3')->assertExists($primeDoc->s3_path);
+        $this->assertNotNull($fundCDoc);
+        $this->assertSame('manual', $fundCDoc->document_kind);
+        $this->assertSame('subscription_agreement', $fundCDoc->document_type);
+        Storage::disk('s3')->assertExists($fundCDoc->s3_path);
 
         $documentCount = DB::table('fin_documents')->count();
         $statementCount = DB::table('fin_statements')->count();
@@ -146,6 +151,7 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
 
         $this->artisan('finance:private-funds:reconcile', [
             '--root' => $this->root,
+            '--map' => $this->mapPath,
             '--user' => $this->user->id,
             '--apply' => true,
             '--format' => 'json',
@@ -154,6 +160,17 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
         $this->assertSame($documentCount, DB::table('fin_documents')->count());
         $this->assertSame($statementCount, DB::table('fin_statements')->count());
         $this->assertSame($taxDocumentCount, DB::table('fin_tax_documents')->count());
+    }
+
+    public function test_missing_map_option_fails(): void
+    {
+        putenv('FINANCE_PRIVATE_FUNDS_MAP=');
+
+        $this->artisan('finance:private-funds:reconcile', [
+            '--root' => $this->root,
+        ])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('Folder map is required');
     }
 
     private function insertAccount(string $name): void
@@ -177,17 +194,28 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
         File::put($path, $contents);
     }
 
-    /** @return list<string> */
-    private function folders(): array
+    /**
+     * Generic folder-to-account map used to drive the command in tests. Real
+     * fund/account names never live in the repo; see confidential-no-fund-names.
+     *
+     * @return array<string, array{account: string, aliases: list<string>, date_prefixed?: bool}>
+     */
+    private function folderMap(): array
     {
         return [
-            'aqr',
-            'tau',
-            'pioneer af24',
-            'pioneer af25',
-            'pioneer af26',
-            'pioneer iv (not countersigned)',
-            'pioneer prime (not countersigned)',
+            'folder-a' => [
+                'account' => 'fund-a',
+                'aliases' => ['fund-a', 'fund a legacy'],
+                'date_prefixed' => true,
+            ],
+            'folder-b' => [
+                'account' => 'fund-b',
+                'aliases' => ['fund-b', 'fund b legacy'],
+            ],
+            'folder-c' => [
+                'account' => 'fund-c',
+                'aliases' => ['fund-c'],
+            ],
         ];
     }
 }
