@@ -566,7 +566,7 @@ function SelectField<T extends string>({ label, value, options, compact = false,
 
 function GrantTypeCheckbox({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (checked: boolean) => void }): ReactElement {
   return (
-    <label htmlFor={id} className="flex items-center gap-2 rounded-md border p-3 text-sm font-medium">
+    <label htmlFor={id} className="flex items-center gap-2 rounded-md border border-muted p-3 text-sm font-medium">
       <Checkbox id={id} checked={checked} onCheckedChange={(next) => onChange(next === true)} />
       <span>{label}</span>
     </label>
@@ -1333,7 +1333,7 @@ function RetainedCurrentJobsSelector({ currentJobs, selectedIds, onChange }: {
   }
 
   return (
-    <div className="space-y-3 rounded-md border p-3 sm:col-span-2">
+    <div className="space-y-3 rounded-md border border-muted p-3 sm:col-span-2">
       <div>
         <Label className="text-sm font-semibold">Retained current jobs</Label>
         <p className="text-sm text-muted-foreground">{selectedIds.length === 0 ? 'None retained; this offer quits every current job.' : `${selectedIds.length} retained alongside this offer.`}</p>
@@ -1343,7 +1343,7 @@ function RetainedCurrentJobsSelector({ currentJobs, selectedIds, onChange }: {
           const checkboxId = `${selectorId}-retain-${currentJob.id}`
 
           return (
-            <label key={currentJob.id} htmlFor={checkboxId} className="flex min-h-11 items-center gap-2 rounded-md border p-3 text-sm">
+            <label key={currentJob.id} htmlFor={checkboxId} className="flex min-h-11 items-center gap-2 rounded-md border border-muted p-3 text-sm">
               <Checkbox id={checkboxId} checked={selected.has(currentJob.id)} onCheckedChange={(checked) => toggle(currentJob.id, checked === true)} />
               <span className="min-w-0 truncate">{currentJob.name}</span>
             </label>
@@ -1440,7 +1440,7 @@ function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssump
             />
           ) : null}
           {showCareerTransition ? (
-            <div className="space-y-3 rounded-md border p-3 sm:col-span-2">
+            <div className="space-y-3 rounded-md border border-muted p-3 sm:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <Label className="text-sm font-semibold">Career transition</Label>
