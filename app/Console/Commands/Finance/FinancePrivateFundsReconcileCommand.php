@@ -305,7 +305,8 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
 
     private function parseDateToken(string $token, bool $monthOnlyAsEndOfMonth = false): ?CarbonImmutable
     {
-        $format = substr_count($token, '.') === 1 ? 'Y.m' : 'Y.m.d';
+        $bareFormat = substr_count($token, '.') === 1 ? 'Y.m' : 'Y.m.d';
+        $format = '!'.$bareFormat;
 
         try {
             $date = CarbonImmutable::createFromFormat($format, $token);
@@ -321,11 +322,11 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
         if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
             return null;
         }
-        if ($date->format($format) !== $token) {
+        if ($date->format($bareFormat) !== $token) {
             return null;
         }
 
-        if ($format !== 'Y.m') {
+        if ($bareFormat !== 'Y.m') {
             return $date;
         }
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Finance;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -189,30 +190,37 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
 
     public function test_month_only_statement_dates_use_month_end(): void
     {
-        $this->writeDocument('folder-a/2025.09 fund-a statement.pdf', '%PDF month statement');
+        // Pin the clock to a day-31 that would overflow September (30 days) without the '!' fix.
+        CarbonImmutable::setTestNow('2025-08-31');
 
-        $this->artisan('finance:private-funds:reconcile', [
-            '--root' => $this->root,
-            '--map' => $this->mapPath,
-            '--user' => $this->user->id,
-            '--apply' => true,
-        ])->assertExitCode(0);
+        try {
+            $this->writeDocument('folder-a/2025.09 fund-a statement.pdf', '%PDF month statement');
 
-        $document = DB::table('fin_documents')
-            ->where('user_id', $this->user->id)
-            ->where('original_filename', '2025.09 fund-a statement.pdf')
-            ->first();
+            $this->artisan('finance:private-funds:reconcile', [
+                '--root' => $this->root,
+                '--map' => $this->mapPath,
+                '--user' => $this->user->id,
+                '--apply' => true,
+            ])->assertExitCode(0);
 
-        $this->assertNotNull($document);
-        $this->assertSame('2025-09-30', substr((string) $document->document_date, 0, 10));
-        $this->assertSame('2025-09-30', substr((string) $document->period_end, 0, 10));
+            $document = DB::table('fin_documents')
+                ->where('user_id', $this->user->id)
+                ->where('original_filename', '2025.09 fund-a statement.pdf')
+                ->first();
 
-        $statement = DB::table('fin_statements')
-            ->where('document_id', $document->id)
-            ->first();
+            $this->assertNotNull($document);
+            $this->assertSame('2025-09-30', substr((string) $document->document_date, 0, 10));
+            $this->assertSame('2025-09-30', substr((string) $document->period_end, 0, 10));
 
-        $this->assertNotNull($statement);
-        $this->assertSame('2025-09-30', substr((string) $statement->statement_closing_date, 0, 10));
+            $statement = DB::table('fin_statements')
+                ->where('document_id', $document->id)
+                ->first();
+
+            $this->assertNotNull($statement);
+            $this->assertSame('2025-09-30', substr((string) $statement->statement_closing_date, 0, 10));
+        } finally {
+            CarbonImmutable::setTestNow(null);
+        }
     }
 
     public function test_existing_documents_refresh_derived_dates(): void
