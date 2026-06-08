@@ -120,9 +120,12 @@ function renderForm1040(facts: Form1040Facts = makeFacts(), options: RenderForm1
 
 function getLineRow(label: string): HTMLElement {
   const row = screen.getByText(label).closest('div.grid')
-  expect(row).not.toBeNull()
 
-  return row!
+  if (!(row instanceof HTMLElement)) {
+    throw new Error(`Could not find Form 1040 line row for ${label}`)
+  }
+
+  return row
 }
 
 describe('Form1040Preview', () => {

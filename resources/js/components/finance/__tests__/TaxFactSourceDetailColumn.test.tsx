@@ -155,6 +155,27 @@ describe('TaxFactSourceDetailColumn', () => {
     expect(onGoToSource).toHaveBeenCalledWith(source)
   })
 
+  it('renders Form 1040 source field context when explicit notes are absent', () => {
+    render(
+      <TaxFactSourceDetailColumn
+        facts={makeFacts({
+          form1040: {
+            line1zSources: [
+              makeSource({ id: 'w2-box-1', label: 'Employer A', amount: 100_000, formType: 'w2', box: '1' }),
+              makeSource({ id: 'routing-note', label: 'Employer B', amount: 5_000, routingReason: 'Routed to wages from document classification' }),
+            ],
+            line1z: 105_000,
+          },
+        })}
+        instanceKey="form-1040:line-1z"
+        onGoToSource={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText('w2 box 1')).toBeInTheDocument()
+    expect(screen.getByText('Routed to wages from document classification')).toBeInTheDocument()
+  })
+
   it('shows an unreviewed estimate as a review-required absolute deduction', () => {
     render(
       <TaxFactSourceDetailColumn

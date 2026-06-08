@@ -236,6 +236,18 @@ function toneClass(amount: number, tone: AmountTone): string {
   return tone === 'destructive' ? 'text-destructive' : 'text-success'
 }
 
+function sourceDetailNote(source: TaxFactSource): string | null {
+  if (source.notes) {
+    return source.notes
+  }
+
+  if (source.formType && source.box) {
+    return `${source.formType} box ${source.box}`
+  }
+
+  return source.routingReason
+}
+
 function goToLabel(source: TaxFactSource): string {
   const target = source.formType ? source.formType.replaceAll('_', '-').toUpperCase() : 'source'
   return `Go to ${target}`
@@ -282,6 +294,7 @@ export default function TaxFactSourceDetailColumn({
         <div className="space-y-3">
           {sources.map((source, index) => {
             const isReviewed = source.isReviewed !== false
+            const detailNote = sourceDetailNote(source)
 
             return (
               <div
@@ -292,7 +305,7 @@ export default function TaxFactSourceDetailColumn({
                   <div className="min-w-0 space-y-1">
                     <div className="text-sm font-medium leading-snug">{source.label}</div>
                     {!isReviewed && <div className="text-xs font-medium text-warning">Estimated — review required</div>}
-                    {source.notes && <div className="text-xs leading-snug text-muted-foreground">{source.notes}</div>}
+                    {detailNote && <div className="text-xs leading-snug text-muted-foreground">{detailNote}</div>}
                     {!isReviewed && source.reviewAction && (
                       <div className="text-xs leading-snug text-warning">{source.reviewAction}</div>
                     )}
