@@ -80,7 +80,9 @@ export function DetailsButton({
           {glyph ? <NavGlyphIcon glyph={glyph} /> : <Search className="h-3.5 w-3.5" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
+      <TooltipContent side="left" sideOffset={8} collisionPadding={12} className="max-w-56 text-xs leading-snug">
+        {tooltip}
+      </TooltipContent>
     </Tooltip>
   )
 }
@@ -118,7 +120,9 @@ export function IconActionButton({
           {icon}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
+      <TooltipContent side="left" sideOffset={8} collisionPadding={12} className="max-w-56 text-xs leading-snug">
+        {tooltip}
+      </TooltipContent>
     </Tooltip>
   )
 }
