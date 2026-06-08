@@ -216,6 +216,54 @@ class IrsReturnPdfBuilderTest extends TestCase
         $this->assertLessThanOrEqual(23, $capturedLine19, 'line19 must not exceed its own source total');
     }
 
+    public function test_schedule_d_part_iii_lines_18_and_19_sum_does_not_exceed_odd_ceiling(): void
+    {
+        // Regression for the rounding edge case from the PR review:
+        // source18=source19=10, line15=line16=9 → ceiling=9, combined=20
+        // Both proportional shares are round(9*10/20)=round(4.5)=5, which would sum to 10>9.
+        // line19 must be capped at ceiling−line18=9−5=4 so the sum stays at 9.
+        $user = User::factory()->create();
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn([
+                    'scheduleD' => [
+                        'line12Sources' => [
+                            ['sourceType' => 'k1_collectibles_gain', 'amount' => 10.0],
+                            ['sourceType' => 'k1_unrecaptured_1250_gain', 'amount' => 10.0],
+                        ],
+                        'line12GainLoss' => 20.0,
+                        'line15NetLongTerm' => 9.0,
+                        'line16Combined' => 9.0,
+                    ],
+                ]);
+        });
+        $capturedLine18 = null;
+        $capturedLine19 = null;
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock) use (&$capturedLine18, &$capturedLine19): void {
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms) use (&$capturedLine18, &$capturedLine19): bool {
+                    $capturedLine18 = isset($forms[0]['fieldValues']['f2_2[0]']) ? (int) $forms[0]['fieldValues']['f2_2[0]'] : 0;
+                    $capturedLine19 = isset($forms[0]['fieldValues']['f2_3[0]']) ? (int) $forms[0]['fieldValues']['f2_3[0]'] : 0;
+
+                    return true;
+                })
+                ->andReturn("%PDF-1.4\n%schedule-d");
+        });
+
+        app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'print', 'schedule-d', 'schedule-d.pdf'),
+        );
+
+        $ceiling = 9;
+        $this->assertLessThanOrEqual($ceiling, $capturedLine18 + $capturedLine19, 'line18 + line19 must not exceed the shared ceiling');
+        $this->assertSame(5, $capturedLine18, 'line18 should be round(9*10/20)=5');
+        $this->assertSame(4, $capturedLine19, 'line19 should be capped at ceiling−line18=4 to keep the sum at 9');
+    }
+
     public function test_schedule_d_part_iii_lines_18_and_19_are_blank_when_net_long_term_gain_is_offset(): void
     {
         $user = User::factory()->create();

@@ -299,9 +299,12 @@ class IrsReturnPdfBuilder
      * as a pair, ensuring their sum never exceeds the shared ceiling min(line15, line16).
      *
      * When the combined source totals exceed the shared ceiling the ceiling is apportioned
-     * proportionally between the two buckets (each bucket = round(ceiling × source / combined)),
-     * and each result is additionally capped at its own source total so apportionment can never
-     * inflate a bucket above what was actually reported.
+     * proportionally: line18 = round(ceiling × source18 / combined), then
+     * line19 = min(round(ceiling × source19 / combined), ceiling − line18). Computing
+     * line19 as the residual prevents independent rounding from pushing the sum above the
+     * ceiling (e.g., two equal sources against an odd ceiling both rounding up). Each result
+     * is additionally capped at its own source total so apportionment can never inflate a
+     * bucket above what was actually reported.
      *
      * @param  array<string, mixed>  $facts
      * @return array{0: float, 1: float} [line18, line19]
@@ -338,8 +341,15 @@ class IrsReturnPdfBuilder
         // line18 + line19 <= ceiling.  Each bucket is also capped at its own
         // source total to prevent the apportionment from inflating a bucket
         // above what was actually reported.
+        //
+        // line18 is rounded first; line19 takes the remaining headroom so that
+        // independent rounding can never push line18 + line19 above the ceiling
+        // (e.g., two equal sources against an odd ceiling both rounding up).
         $line18 = (float) (int) round(min($source18, $ceiling * $source18 / $combined));
-        $line19 = (float) (int) round(min($source19, $ceiling * $source19 / $combined));
+        $line19 = (float) min(
+            (int) round(min($source19, $ceiling * $source19 / $combined)),
+            (int) ($ceiling - $line18),
+        );
 
         return [$line18, $line19];
     }
