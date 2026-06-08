@@ -64,6 +64,8 @@ class IrsReturnPdfBuilderTest extends TestCase
                     $this->assertSame('return', $options->scope);
                     $this->assertSame(['form-1040', 'schedule-1', 'schedule-3', 'schedule-d', 'form-8949', 'form-8949'], array_column($forms, 'formId'));
                     $this->assertSame(array_column($forms, 'instanceKey'), array_values(array_unique(array_column($forms, 'instanceKey'))));
+                    $this->assertSame('Packet credit 25', $forms[2]['fieldValues']['f2_22[0]'] ?? null);
+                    $this->assertSame('25', $forms[2]['fieldValues']['f1_23[0]'] ?? null);
                     $this->assertNull($forms[3]['fieldValues']['f2_4[0]'] ?? null);
                     $this->assertSame('Short lot', $forms[4]['fieldValues']['f1_03[0]'] ?? null);
                     $this->assertSame('Long lot', $forms[5]['fieldValues']['f2_03[0]'] ?? null);
@@ -80,6 +82,88 @@ class IrsReturnPdfBuilderTest extends TestCase
 
         $this->assertSame("%PDF-1.4\n%packet", $result->content);
         $this->assertSame(['form-1040', 'schedule-1', 'schedule-3', 'schedule-d', 'form-8949'], $result->formIds);
+    }
+
+    public function test_schedule_d_part_iii_lines_18_and_19_are_filled_from_line_12_sources(): void
+    {
+        $user = User::factory()->create();
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn([
+                    'scheduleD' => [
+                        'line12Sources' => [
+                            ['sourceType' => 'k1_collectibles_gain', 'amount' => 17.0],
+                            ['sourceType' => 'k1_unrecaptured_1250_gain', 'amount' => 23.0],
+                        ],
+                        'line12GainLoss' => 40.0,
+                        'line16Combined' => 40.0,
+                    ],
+                ]);
+        });
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms): bool {
+                    $this->assertSame('schedule-d', $forms[0]['formId']);
+                    $this->assertSame('17', $forms[0]['fieldValues']['f2_2[0]'] ?? null);
+                    $this->assertSame('23', $forms[0]['fieldValues']['f2_3[0]'] ?? null);
+
+                    return true;
+                })
+                ->andReturn("%PDF-1.4\n%schedule-d");
+        });
+
+        $result = app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'print', 'schedule-d', 'schedule-d.pdf'),
+        );
+
+        $this->assertSame(['schedule-d'], $result->formIds);
+    }
+
+    public function test_schedule_3_line_6_details_are_filled_from_supported_sources(): void
+    {
+        $user = User::factory()->create();
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn([
+                    'schedule3' => [
+                        'line6Sources' => [
+                            ['label' => 'General business credit', 'amount' => 30.0, 'box' => '6a'],
+                            ['label' => 'Prior-year minimum tax', 'amount' => 20.0, 'box' => '6b'],
+                            ['label' => 'Other credit', 'amount' => 25.0, 'box' => '6z'],
+                        ],
+                        'line7OtherNonrefundableCredits' => 75.0,
+                        'line8TotalNonrefundableCredits' => 75.0,
+                    ],
+                ]);
+        });
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms): bool {
+                    $this->assertSame('schedule-3', $forms[0]['formId']);
+                    $this->assertSame('30', $forms[0]['fieldValues']['f1_09[0]'] ?? null);
+                    $this->assertSame('20', $forms[0]['fieldValues']['f1_10[0]'] ?? null);
+                    $this->assertSame('Other credit 25', $forms[0]['fieldValues']['f2_22[0]'] ?? null);
+                    $this->assertSame('25', $forms[0]['fieldValues']['f1_23[0]'] ?? null);
+                    $this->assertSame('75', $forms[0]['fieldValues']['f1_24[0]'] ?? null);
+
+                    return true;
+                })
+                ->andReturn("%PDF-1.4\n%schedule-3");
+        });
+
+        $result = app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'print', 'schedule-3', 'schedule-3.pdf'),
+        );
+
+        $this->assertSame(['schedule-3'], $result->formIds);
     }
 
     /**
@@ -156,6 +240,13 @@ class IrsReturnPdfBuilderTest extends TestCase
                 'line4RetirementSavingsCredit' => 0.0,
                 'line5aResidentialCleanEnergyCredit' => 0.0,
                 'line5bEnergyEfficientHomeImprovementCredit' => 0.0,
+                'line6Sources' => [
+                    [
+                        'label' => 'Packet credit',
+                        'amount' => 25.0,
+                        'box' => '6z',
+                    ],
+                ],
                 'line7OtherNonrefundableCredits' => 25.0,
                 'line8TotalNonrefundableCredits' => 25.0,
                 'line9NetPremiumTaxCredit' => 0.0,

@@ -47,6 +47,8 @@
     { "key": "scheduleD.line14", "pdfField": "f1_42[0]", "source": "facts.scheduleD.line14Carryover", "format": "amount", "blankIfZero": true },
     { "key": "scheduleD.line15", "pdfField": "f1_43[0]", "source": "facts.scheduleD.line15NetLongTerm", "format": "amount", "blankIfZero": true },
     { "key": "scheduleD.line16", "pdfField": "f2_1[0]", "source": "facts.scheduleD.line16Combined", "format": "amount", "blankIfZero": true },
+    { "key": "scheduleD.line18", "pdfField": "f2_2[0]", "source": "facts.irsPdf.scheduleD.line18TwentyEightPercentGain", "format": "amount", "blankIfZero": true },
+    { "key": "scheduleD.line19", "pdfField": "f2_3[0]", "source": "facts.irsPdf.scheduleD.line19UnrecapturedSection1250Gain", "format": "amount", "blankIfZero": true },
     { "key": "scheduleD.line21", "pdfField": "f2_4[0]", "source": "facts.irsPdf.scheduleD.line21LossOnly", "format": "amount", "blankIfZero": true }
   ]
 }
