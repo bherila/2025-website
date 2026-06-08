@@ -152,6 +152,8 @@ export const optionGrantSchema = z.object({
 export const jobSpecSchema = z.object({
   id: z.string(),
   name: z.string(),
+  notesMarkdown: z.string().nullish().default(null),
+  archived: z.boolean().default(false),
   startDate: z.string().nullish().default(null),
   priorJobResignationDate: z.string().nullish().default(null),
   transitionOverride: transitionOverrideSchema,

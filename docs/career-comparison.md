@@ -17,3 +17,10 @@ The Career Comparison calculator compares a current job against one or more hypo
 - The default prior-job resignation date is derived from the offer start date by subtracting notice-period weeks plus time-off weeks. Current-job compensation and vesting remain active through the notice period, then the time-off gap is left before the new start date.
 - Each offer may override `transitionOverride.currentJobNoticeWeeks`, `transitionOverride.timeOffBetweenJobsWeeks`, and/or `priorJobResignationDate`. If no offer override is set, the shared assumptions apply.
 - Deltas still compare each offer path against the full current-job baseline. To compare "join now" against "join later", create two offers with different start dates/transition overrides and compare their lifetime rows.
+
+## Offer Notes And Archive Behavior
+
+- Hypothetical offers may store markdown notes in `notesMarkdown`. The UI opens notes in a dedicated Miller column backed by the shared CodeMirror editor.
+- Notes are persisted with the offer spec JSON, so assumptions such as exercise-cost analysis or negotiation context travel with saved latest comparisons and shared forks.
+- Hypothetical offers may be archived with `archived: true`. Archived offers remain stored and can be unarchived from the offer editor, but the projection engine skips them.
+- Because graphs, tables, deltas, and XLSX exports are built from the projection output, archived offers are omitted from every comparison result and export while still being recoverable later.

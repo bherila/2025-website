@@ -74,6 +74,8 @@ function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
     ...job,
     id: jobId,
     name: job.name.trim() || fallbackId,
+    notesMarkdown: job.notesMarkdown && job.notesMarkdown !== '' ? job.notesMarkdown : null,
+    archived: job.archived === true,
     startDate: job.startDate && job.startDate.trim() !== '' ? job.startDate : null,
     priorJobResignationDate: job.priorJobResignationDate && job.priorJobResignationDate.trim() !== '' ? job.priorJobResignationDate : null,
     transitionOverride: {

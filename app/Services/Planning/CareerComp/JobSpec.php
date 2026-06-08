@@ -29,6 +29,8 @@ final readonly class JobSpec
         return [
             'id' => $isCurrent ? 'current' : 'job',
             'name' => $isCurrent ? 'Current role' : 'Opportunity',
+            'notesMarkdown' => null,
+            'archived' => false,
             'startDate' => null,
             'priorJobResignationDate' => null,
             'transitionOverride' => [
@@ -98,6 +100,11 @@ final readonly class JobSpec
     public function isCurrent(): bool
     {
         return $this->current;
+    }
+
+    public function archived(): bool
+    {
+        return $this->bool('archived');
     }
 
     public function companyType(): string

@@ -49,6 +49,8 @@ final class CareerCompInputs
             'currentJobs' => [[
                 'id' => 'current',
                 'name' => 'Current role',
+                'notesMarkdown' => null,
+                'archived' => false,
                 'startDate' => null,
                 'priorJobResignationDate' => null,
                 'transitionOverride' => [
@@ -106,6 +108,8 @@ final class CareerCompInputs
             'hypotheticalJobs' => [[
                 'id' => 'hyp-1',
                 'name' => 'Private offer',
+                'notesMarkdown' => null,
+                'archived' => false,
                 'startDate' => null,
                 'priorJobResignationDate' => null,
                 'transitionOverride' => [
