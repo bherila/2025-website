@@ -6,10 +6,9 @@ use App\Models\User;
 use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfOptions;
 use App\Services\Finance\TaxReturnPdf\Exceptions\TaxReturnPdfUnavailableException;
 use App\Services\Finance\TaxReturnPdf\IrsReturnPdfBuilder;
-use Illuminate\Console\Command;
 use RuntimeException;
 
-class FinanceTaxReturnPdfCommand extends Command
+class FinanceTaxReturnPdfCommand extends BaseFinanceCommand
 {
     protected $signature = 'finance:tax-return-pdf
         {--user= : User ID to export; defaults to FINANCE_CLI_USER_ID or 1}
@@ -30,11 +29,11 @@ class FinanceTaxReturnPdfCommand extends Command
 
     public function handle(): int
     {
-        $userId = (int) ($this->option('user') ?: 1);
+        $userId = (int) ($this->option('user') ?: $this->userId());
         $user = User::query()->find($userId);
 
         if (! $user instanceof User) {
-            $this->error("User ID {$userId} not found.");
+            $this->error("User ID {$userId} not found. Pass --user for a valid user or set FINANCE_CLI_USER_ID.");
 
             return self::FAILURE;
         }
