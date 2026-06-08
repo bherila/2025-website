@@ -38,9 +38,9 @@ class Schedule3FactsBuilder extends TaxPreviewFactBuilder
         $line5aSources = $this->manualSources($userDeductions, DeductionCategory::Schedule3ResidentialCleanEnergyCredit, TaxFactRouting::Schedule3Line5a, 'Residential clean energy credit');
         $line5bSources = $this->manualSources($userDeductions, DeductionCategory::Schedule3EnergyEfficientHomeImprovementCredit, TaxFactRouting::Schedule3Line5b, 'Energy efficient home improvement credit');
         $line6Sources = [
-            ...$this->manualSources($userDeductions, DeductionCategory::Schedule3GeneralBusinessCredit, TaxFactRouting::Schedule3Line6, 'General business credit'),
-            ...$this->manualSources($userDeductions, DeductionCategory::Schedule3PriorYearMinimumTaxCredit, TaxFactRouting::Schedule3Line6, 'Credit for prior year minimum tax'),
-            ...$this->manualSources($userDeductions, DeductionCategory::Schedule3OtherNonrefundableCredits, TaxFactRouting::Schedule3Line6, 'Other nonrefundable credits'),
+            ...$this->manualSources($userDeductions, DeductionCategory::Schedule3GeneralBusinessCredit, TaxFactRouting::Schedule3Line6, 'General business credit', '6a'),
+            ...$this->manualSources($userDeductions, DeductionCategory::Schedule3PriorYearMinimumTaxCredit, TaxFactRouting::Schedule3Line6, 'Credit for prior year minimum tax', '6b'),
+            ...$this->manualSources($userDeductions, DeductionCategory::Schedule3OtherNonrefundableCredits, TaxFactRouting::Schedule3Line6, 'Other nonrefundable credits', '6z'),
         ];
         $line9Sources = $this->manualSources($userDeductions, DeductionCategory::Schedule3NetPremiumTaxCredit, TaxFactRouting::Schedule3Line9, 'Net premium tax credit');
         $line10Sources = $this->manualSources($userDeductions, DeductionCategory::Schedule3ExtensionPayment, TaxFactRouting::Schedule3Line10, 'Amount paid with request for extension to file');
@@ -101,7 +101,7 @@ class Schedule3FactsBuilder extends TaxPreviewFactBuilder
      * @param  UserDeduction[]  $userDeductions
      * @return TaxFactSource[]
      */
-    private function manualSources(array $userDeductions, DeductionCategory $category, TaxFactRouting $routing, string $label): array
+    private function manualSources(array $userDeductions, DeductionCategory $category, TaxFactRouting $routing, string $label, ?string $box = null): array
     {
         $sources = [];
 
@@ -115,6 +115,7 @@ class Schedule3FactsBuilder extends TaxPreviewFactBuilder
                 label: $deduction->description !== null && trim($deduction->description) !== '' ? $deduction->description : $label,
                 amount: (float) $deduction->amount,
                 sourceType: TaxFactSourceType::Schedule3UserEnteredCredit,
+                box: $box,
                 routing: $routing,
                 routingReason: "{$label} is entered manually until the upstream form-specific computation is available.",
             );

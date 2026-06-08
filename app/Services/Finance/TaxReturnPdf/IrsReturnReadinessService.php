@@ -72,6 +72,14 @@ class IrsReturnReadinessService
             $errors[] = 'Form 8949 export is blocked because one or more capital-gain rows do not have a supported Form 8949 box.';
         }
 
+        if ($this->missingRequiredForm8949Rows($facts) && $this->requiresForm8949($scope, $formId, $requiredForms)) {
+            $errors[] = 'Form 8949 export is blocked because Schedule D requires transaction detail but no supported Form 8949 rows are available.';
+        }
+
+        if ($this->hasUnsupportedSchedule3Line6Details($facts) && $this->requiresSchedule3($scope, $formId, $requiredForms)) {
+            $errors[] = 'Schedule 3 export is blocked because line 7 includes other nonrefundable credits without supported line 6 details.';
+        }
+
         if ($mode === 'editable' && ! $this->fillEngine->supportsEditableOutput()) {
             $errors[] = UnavailableAcroFormFillEngine::REASON;
         }
@@ -123,6 +131,56 @@ class IrsReturnReadinessService
     }
 
     /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function missingRequiredForm8949Rows(array $facts): bool
+    {
+        $instances = $facts['irsPdf']['form8949']['instances'] ?? null;
+
+        return is_array($instances) && $instances === [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function hasUnsupportedSchedule3Line6Details(array $facts): bool
+    {
+        $schedule3 = is_array($facts['schedule3'] ?? null) ? $facts['schedule3'] : [];
+        $line7 = $this->numeric($schedule3['line7OtherNonrefundableCredits'] ?? 0.0);
+
+        if (! $this->nonZero($line7)) {
+            return false;
+        }
+
+        $sources = is_array($schedule3['line6Sources'] ?? null) ? $schedule3['line6Sources'] : [];
+        if ($sources === []) {
+            return true;
+        }
+
+        $supportedTotal = 0.0;
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                return true;
+            }
+
+            $amount = $this->numeric($source['amount'] ?? 0.0);
+            if (! $this->nonZero($amount)) {
+                continue;
+            }
+
+            $box = is_scalar($source['box'] ?? null) ? strtolower(trim((string) $source['box'])) : null;
+            if (! in_array($box, ['6a', '6b', '6z'], true)) {
+                return true;
+            }
+
+            $supportedTotal += $amount;
+        }
+
+        return abs($supportedTotal - $line7) > 0.004;
+    }
+
+    /**
      * @param  array<int, string>  $requiredForms
      */
     private function requiresForm8949(string $scope, ?string $formId, array $requiredForms): bool
@@ -132,5 +190,27 @@ class IrsReturnReadinessService
         }
 
         return in_array('form-8949', $requiredForms, true);
+    }
+
+    /**
+     * @param  array<int, string>  $requiredForms
+     */
+    private function requiresSchedule3(string $scope, ?string $formId, array $requiredForms): bool
+    {
+        if ($scope === 'form') {
+            return $formId === 'schedule-3';
+        }
+
+        return in_array('schedule-3', $requiredForms, true);
+    }
+
+    private function nonZero(mixed $value): bool
+    {
+        return is_numeric($value) && abs((float) $value) > 0.004;
+    }
+
+    private function numeric(mixed $value): float
+    {
+        return is_numeric($value) ? (float) $value : 0.0;
     }
 }

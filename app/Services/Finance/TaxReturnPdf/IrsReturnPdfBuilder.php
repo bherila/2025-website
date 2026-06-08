@@ -188,7 +188,12 @@ class IrsReturnPdfBuilder
         $facts['irsPdf'] = [
             'scheduleD' => [
                 'lines' => $this->scheduleDLineColumns($facts),
+                'line18TwentyEightPercentGain' => $this->scheduleDPartIIIWorksheetAmount($facts, 'k1_collectibles_gain'),
+                'line19UnrecapturedSection1250Gain' => $this->scheduleDPartIIIWorksheetAmount($facts, 'k1_unrecaptured_1250_gain'),
                 'line21LossOnly' => $this->scheduleDLine21LossOnly($facts),
+            ],
+            'schedule3' => [
+                'line6' => $this->schedule3Line6Details($facts),
             ],
             'form8949' => [
                 'instances' => $this->form8949InstancesFromFacts($facts),
@@ -269,6 +274,97 @@ class IrsReturnPdfBuilder
 
     /**
      * @param  array<string, mixed>  $facts
+     */
+    private function scheduleDLine12SourceTotal(array $facts, string $sourceType): float
+    {
+        $scheduleD = is_array($facts['scheduleD'] ?? null) ? $facts['scheduleD'] : [];
+        $sources = is_array($scheduleD['line12Sources'] ?? null) ? $scheduleD['line12Sources'] : [];
+        $total = 0.0;
+
+        foreach ($sources as $source) {
+            if (! is_array($source) || ($source['sourceType'] ?? null) !== $sourceType) {
+                continue;
+            }
+
+            $total += $this->numeric($source['amount'] ?? 0.0);
+        }
+
+        return $total;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function scheduleDPartIIIWorksheetAmount(array $facts, string $sourceType): float
+    {
+        $sourceTotal = $this->scheduleDLine12SourceTotal($facts, $sourceType);
+        if ($sourceTotal <= 0.004) {
+            return 0.0;
+        }
+
+        $scheduleD = is_array($facts['scheduleD'] ?? null) ? $facts['scheduleD'] : [];
+        $line16 = $this->numeric($scheduleD['line16Combined'] ?? 0.0);
+        $line15 = $this->numeric($scheduleD['line15NetLongTerm'] ?? $line16);
+
+        if ($line15 <= 0.004 || $line16 <= 0.004) {
+            return 0.0;
+        }
+
+        return min($sourceTotal, $line15, $line16);
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array{generalBusinessCredit: float, priorYearMinimumTaxCredit: float, otherNonrefundableCredits: float, otherNonrefundableCreditsDescription: string|null}
+     */
+    private function schedule3Line6Details(array $facts): array
+    {
+        $schedule3 = is_array($facts['schedule3'] ?? null) ? $facts['schedule3'] : [];
+        $sources = is_array($schedule3['line6Sources'] ?? null) ? $schedule3['line6Sources'] : [];
+        $details = [
+            'generalBusinessCredit' => 0.0,
+            'priorYearMinimumTaxCredit' => 0.0,
+            'otherNonrefundableCredits' => 0.0,
+            'otherNonrefundableCreditsDescription' => null,
+        ];
+        $otherDescriptions = [];
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+
+            $amount = $this->numeric($source['amount'] ?? 0.0);
+            $box = is_scalar($source['box'] ?? null) ? strtolower(trim((string) $source['box'])) : null;
+
+            if ($box === '6a') {
+                $details['generalBusinessCredit'] += $amount;
+            } elseif ($box === '6b') {
+                $details['priorYearMinimumTaxCredit'] += $amount;
+            } elseif ($box === '6z') {
+                $details['otherNonrefundableCredits'] += $amount;
+                $label = is_scalar($source['label'] ?? null) ? trim((string) $source['label']) : '';
+
+                if ($label !== '') {
+                    $otherDescriptions[] = "{$label} {$this->schedule3Line6DisplayAmount($amount)}";
+                }
+            }
+        }
+
+        if ($otherDescriptions !== []) {
+            $details['otherNonrefundableCreditsDescription'] = implode('; ', $otherDescriptions);
+        }
+
+        return $details;
+    }
+
+    private function schedule3Line6DisplayAmount(float $amount): string
+    {
+        return (string) (int) round($amount);
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
      * @return array<int, array<string, mixed>>
      */
     private function form8949Instances(array $facts): array
@@ -277,7 +373,7 @@ class IrsReturnPdfBuilder
             ? $facts['irsPdf']['form8949']['instances']
             : [];
 
-        return $instances === [] ? [$this->blankForm8949Instance()] : $instances;
+        return $instances;
     }
 
     /**
@@ -336,14 +432,6 @@ class IrsReturnPdfBuilder
             'longRows' => array_values($longRows),
             'longTotals' => $this->form8949Totals($longRows),
         ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function blankForm8949Instance(): array
-    {
-        return $this->form8949Instance(null, [], null, [], 'blank');
     }
 
     /**

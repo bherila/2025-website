@@ -4,6 +4,15 @@ namespace App\Services\Finance\TaxReturnPdf;
 
 class IrsReturnFormSelector
 {
+    private const float DIRECT_SCHEDULE_3_FOREIGN_TAX_LIMIT = 300.0;
+
+    private const float DIRECT_SCHEDULE_3_FOREIGN_TAX_MFJ_LIMIT = 600.0;
+
+    private const array DIRECT_SCHEDULE_3_FOREIGN_TAX_SOURCE_TYPES = [
+        '1099_div_foreign_tax',
+        '1099_int_foreign_tax',
+    ];
+
     /**
      * @param  array<string, mixed>  $facts
      * @return array<int, string>
@@ -74,7 +83,7 @@ class IrsReturnFormSelector
             $unsupported[] = 'schedule-se';
         }
 
-        if ($this->nonZeroValue($facts, 'form1116.totalForeignTaxes') || $this->nonZeroValue($facts, 'form1116.creditValue')) {
+        if ($this->requiresForm1116($facts)) {
             $unsupported[] = 'form-1116';
         }
 
@@ -146,6 +155,83 @@ class IrsReturnFormSelector
 
         return $this->numeric($scheduleB['interestTotal'] ?? 0.0) > 1500.0
             || $this->numeric($scheduleB['ordinaryDividendTotal'] ?? 0.0) > 1500.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function requiresForm1116(array $facts): bool
+    {
+        if (! $this->nonZeroValue($facts, 'form1116.totalForeignTaxes') && ! $this->nonZeroValue($facts, 'form1116.creditValue')) {
+            return false;
+        }
+
+        return ! $this->qualifiesForDirectSchedule3ForeignTaxCredit($facts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function qualifiesForDirectSchedule3ForeignTaxCredit(array $facts): bool
+    {
+        $form1116 = $this->arrayValue($facts, 'form1116');
+        $totalForeignTaxes = $this->numeric($form1116['totalForeignTaxes'] ?? 0.0);
+
+        if ($totalForeignTaxes <= 0.004 || $totalForeignTaxes > $this->directSchedule3ForeignTaxLimit($facts)) {
+            return false;
+        }
+
+        $regularTax = $this->numeric($this->value($facts, 'form1040.line16'));
+        $directCreditLimit = min($totalForeignTaxes, max(0.0, $regularTax));
+
+        if (abs($directCreditLimit - $totalForeignTaxes) > 0.004) {
+            return false;
+        }
+
+        if ($this->nonZero($form1116['creditValue'] ?? 0.0) && abs($this->numeric($form1116['creditValue'] ?? 0.0) - $directCreditLimit) > 0.004) {
+            return false;
+        }
+
+        if ($this->nonZero($form1116['totalGeneralIncome'] ?? 0.0)
+            || $this->nonZero($form1116['totalLine4b'] ?? 0.0)
+            || $this->nonZero($form1116['totalSourcedByPartnerIncome'] ?? 0.0)
+            || $this->truthyValue($facts, 'form1116.hasUserOverride')) {
+            return false;
+        }
+
+        $sources = is_array($form1116['foreignTaxSources'] ?? null) ? $form1116['foreignTaxSources'] : [];
+        if ($sources === []) {
+            return false;
+        }
+
+        foreach ($this->arrayValue($facts, 'form1116.passiveIncomeSources') as $source) {
+            if (! is_array($source)) {
+                return false;
+            }
+            if (($source['isReviewed'] ?? true) === false || ($source['reviewStatus'] ?? 'reviewed') !== 'reviewed') {
+                return false;
+            }
+        }
+
+        foreach ($sources as $source) {
+            if (! is_array($source) || ! in_array($source['sourceType'] ?? null, self::DIRECT_SCHEDULE_3_FOREIGN_TAX_SOURCE_TYPES, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     */
+    private function directSchedule3ForeignTaxLimit(array $facts): float
+    {
+        $filingStatus = $this->value($facts, 'form1040.filingStatus');
+
+        return in_array($filingStatus, ['mfj', 'married_filing_jointly'], true)
+            ? self::DIRECT_SCHEDULE_3_FOREIGN_TAX_MFJ_LIMIT
+            : self::DIRECT_SCHEDULE_3_FOREIGN_TAX_LIMIT;
     }
 
     /**

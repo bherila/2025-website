@@ -1459,6 +1459,7 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame(5623.0, $facts['schedule3']['line8TotalNonrefundableCredits']);
         $this->assertSame(5500.0, $facts['schedule3']['line15TotalPaymentsRefundableCredits']);
         $this->assertSame('schedule_3_line_1', $facts['schedule3']['line1Sources'][0]['routing']);
+        $this->assertSame(['6a', '6b', '6z'], array_column($facts['schedule3']['line6Sources'], 'box'));
         $this->assertSame('schedule_3_user_entered_credit', $facts['schedule3']['line10Sources'][0]['sourceType']);
         $this->assertNull($facts['schedule3']['line10Sources'][0]['notes']);
     }
