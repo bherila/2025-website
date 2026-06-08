@@ -64,14 +64,17 @@ class TaxReturnPdfExportControllerTest extends TestCase
         $response->assertUnprocessable();
         $response->assertJsonFragment(['message' => 'Tax return PDF export failed.']);
 
-        $this->assertDatabaseHas('fin_tax_return_pdf_exports', [
-            'user_id' => $user->id,
-            'tax_year' => 2025,
-            'scope' => 'form',
-            'mode' => 'editable',
-            'status' => 'failed',
-            'filename' => 'bad-template.pdf',
-        ]);
+        // The raw exception detail (which can embed server paths) must not leak to the client.
+        $this->assertStringNotContainsString('IRS PDF template file is missing', $response->getContent() ?: '');
+
+        $export = FinTaxReturnPdfExport::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertSame('failed', $export->status);
+        $this->assertSame('bad-template.pdf', $export->filename);
+        // The detail is retained server-side for debugging via the audit row.
+        $this->assertStringContainsString(
+            'IRS PDF template file is missing for form-1040.',
+            json_encode($export->error_summary, JSON_THROW_ON_ERROR),
+        );
     }
 
     public function test_filename_is_clamped_after_pdf_extension_is_added(): void

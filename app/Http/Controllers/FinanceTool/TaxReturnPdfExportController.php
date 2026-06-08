@@ -11,6 +11,7 @@ use App\Services\Finance\TaxReturnPdf\IrsReturnPdfBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class TaxReturnPdfExportController extends Controller
@@ -50,13 +51,21 @@ class TaxReturnPdfExportController extends Controller
                 'warnings' => $exception->warnings,
             ], 422);
         } catch (RuntimeException $exception) {
+            Log::error('Tax return PDF export failed.', [
+                'user_id' => Auth::id(),
+                'tax_year' => $options->year,
+                'scope' => $options->scope,
+                'mode' => $options->mode,
+                'exception' => $exception->getMessage(),
+            ]);
+
             $this->audit($options, 'failed', [
                 'errors' => [$exception->getMessage()],
             ]);
 
             return response()->json([
                 'message' => 'Tax return PDF export failed.',
-                'errors' => [$exception->getMessage()],
+                'errors' => ['The tax return PDF could not be generated. Please try again, or contact support if the problem persists.'],
                 'warnings' => [],
             ], 422);
         }
