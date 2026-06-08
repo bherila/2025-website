@@ -29,6 +29,7 @@ import {
   notRenderedViaMillerShell,
   ValuationTimelineColumn,
 } from './CareerCompForm'
+import { CareerCompLtvDetailColumn, CareerCompLtvDetailYearColumn } from './CareerCompLtvDetailColumn'
 import {
   ProjectionAfterTaxFreeCashFlow,
   ProjectionAnnualFreeCashFlow,
@@ -37,6 +38,8 @@ import {
   ProjectionVestingBreakdown,
 } from './CareerCompResultViews'
 import {
+  type CareerCompLtvBand,
+  type CareerCompLtvMetric,
   type CareerCompResultViewId,
   type CareerCompRoute,
   type CareerCompRouteColumn,
@@ -44,8 +47,10 @@ import {
   grantRouteId,
   grantRouteInstance,
   grantTypeFromRouteId,
+  ltvDetailRouteInstance,
   parseCareerCompHash,
   parseGrantRouteInstance,
+  parseLtvDetailRouteInstance,
   serializeCareerCompRoute,
 } from './careerCompRoute'
 import { parseCareerCompUrlState, serializeCareerCompUrlState } from './careerCompUrlState'
@@ -72,9 +77,14 @@ type CareerCompColumnState =
   | { kind: 'result'; id: CareerCompResultViewId; initialLiquidityMode?: LiquidityMode | undefined }
   | { kind: 'grant'; editorKey: string; jobId: string; grantType: GrantType; grantId?: string | undefined }
   | { kind: 'valuationTimeline'; jobId: string }
+  | { kind: 'ltvDetail'; jobId: string; metric: CareerCompLtvMetric; band: CareerCompLtvBand }
+  | { kind: 'ltvDetailYear'; jobId: string; metric: CareerCompLtvMetric; band: CareerCompLtvBand; year: number }
 
 interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, CareerCompResultViewId, CareerCompColumnMeta> {
-  render: (projection: CareerCompProjection, options?: { initialLiquidityMode?: LiquidityMode | undefined }) => ReactElement
+  render: (projection: CareerCompProjection, options?: {
+    initialLiquidityMode?: LiquidityMode | undefined
+    onOpenLtvDetail?: (jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand) => void
+  }) => ReactElement
 }
 
 export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
@@ -106,7 +116,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     component: notRenderedViaMillerShell,
     meta: { description: 'Lifetime totals and server-computed deltas vs. current job.', icon: Table2 },
     size: 'full',
-    render: (projection) => <ProjectionLifetimeValue projection={projection} />,
+    render: (projection, options) => <ProjectionLifetimeValue projection={projection} onOpenDetail={options?.onOpenLtvDetail} />,
   },
   {
     id: 'vesting-breakdown',
@@ -182,6 +192,18 @@ function writeCareerCompRoute(route: CareerCompRoute): void {
 }
 
 function routeColumnToState(column: CareerCompRouteColumn): CareerCompColumnState | null {
+  if (column.id === 'ltv-detail') {
+    const params = parseLtvDetailRouteInstance(column.instance)
+
+    return params ? { kind: 'ltvDetail', jobId: params.jobId, metric: params.metric, band: params.band } : null
+  }
+
+  if (column.id === 'ltv-detail-year') {
+    const params = parseLtvDetailRouteInstance(column.instance, { requireYear: true })
+
+    return params && params.year !== undefined ? { kind: 'ltvDetailYear', jobId: params.jobId, metric: params.metric, band: params.band, year: params.year } : null
+  }
+
   if (column.id === 'valuation-timeline') {
     return column.instance ? { kind: 'valuationTimeline', jobId: column.instance } : null
   }
@@ -229,6 +251,20 @@ function columnStateToRouteColumn(column: CareerCompColumnState): CareerCompRout
 
   if (column.kind === 'valuationTimeline') {
     return { id: 'valuation-timeline', instance: column.jobId }
+  }
+
+  if (column.kind === 'ltvDetail') {
+    return {
+      id: 'ltv-detail',
+      instance: ltvDetailRouteInstance({ jobId: column.jobId, metric: column.metric, band: column.band }),
+    }
+  }
+
+  if (column.kind === 'ltvDetailYear') {
+    return {
+      id: 'ltv-detail-year',
+      instance: ltvDetailRouteInstance({ jobId: column.jobId, metric: column.metric, band: column.band, year: column.year }),
+    }
   }
 
   return {
@@ -535,6 +571,26 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'valuationTimeline', jobId }])
   }
 
+  function openLtvDetail(jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand): void {
+    setColumnStack((stack) => {
+      const ltvColumn: CareerCompColumnState = stack[0]?.kind === 'result' && stack[0].id === 'ltv-table'
+        ? stack[0]
+        : { kind: 'result', id: 'ltv-table' }
+
+      return [ltvColumn, { kind: 'ltvDetail', jobId, metric, band }]
+    })
+  }
+
+  function openLtvDetailYear(jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand, year: number): void {
+    setColumnStack((stack) => {
+      const ltvColumn: CareerCompColumnState = stack[0]?.kind === 'result' && stack[0].id === 'ltv-table'
+        ? stack[0]
+        : { kind: 'result', id: 'ltv-table' }
+
+      return [ltvColumn, { kind: 'ltvDetail', jobId, metric, band }, { kind: 'ltvDetailYear', jobId, metric, band, year }]
+    })
+  }
+
   function updateNewGrantColumn(grantId: string): void {
     setColumnStack((stack) => stack.map((column) => (column.kind === 'grant' && column.grantId === undefined ? { ...column, grantId } : column)))
   }
@@ -576,6 +632,40 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       }
     }
 
+    if (column.kind === 'ltvDetail') {
+      return {
+        key: `ltv-detail:${column.jobId}:${column.metric}:${column.band}`,
+        id: 'ltv-detail',
+        label: 'Lifetime value breakdown',
+        shortLabel: 'LTV detail',
+        size: 'wide',
+        children: projection ? (
+          <CareerCompLtvDetailColumn
+            projection={projection}
+            instanceKey={ltvDetailRouteInstance({ jobId: column.jobId, metric: column.metric, band: column.band })}
+            onOpenYear={openLtvDetailYear}
+          />
+        ) : <ProjectionEmptyState loading={loading} />,
+      }
+    }
+
+    if (column.kind === 'ltvDetailYear') {
+      return {
+        key: `ltv-detail-year:${column.jobId}:${column.metric}:${column.band}:${column.year}`,
+        id: 'ltv-detail-year',
+        label: 'Lifetime value inputs',
+        shortLabel: String(column.year),
+        size: 'wide',
+        children: projection ? (
+          <CareerCompLtvDetailYearColumn
+            projection={projection}
+            inputs={normalizedInputs}
+            instanceKey={ltvDetailRouteInstance({ jobId: column.jobId, metric: column.metric, band: column.band, year: column.year })}
+          />
+        ) : <ProjectionEmptyState loading={loading} />,
+      }
+    }
+
     if (column.kind === 'form') {
       const section = findMeta(CAREER_COMP_FORM_SECTIONS, column.id)
 
@@ -596,7 +686,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       label: view.label,
       shortLabel: view.shortLabel,
       size: view.size,
-      children: projection ? view.render(projection, { initialLiquidityMode: column.initialLiquidityMode }) : <ProjectionEmptyState loading={loading} />,
+      children: projection ? view.render(projection, { initialLiquidityMode: column.initialLiquidityMode, onOpenLtvDetail: openLtvDetail }) : <ProjectionEmptyState loading={loading} />,
     }
   }
 

@@ -5,11 +5,13 @@ import { ButtonGroup } from '@/components/ui/button-group'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
+import type { CareerCompLtvBand, CareerCompLtvMetric } from './careerCompRoute'
 import { AnnualFreeCashFlowChart } from './charts/AnnualFreeCashFlowChart'
 import { type LiquidityMode, LiquidityOverTimeChart } from './charts/LiquidityOverTimeChart'
 import { PaperLifetimeValueChart } from './charts/PaperLifetimeValueChart'
-import { formatFriendlyMoney, formatShares, formatSignedFriendlyMoney } from './formatters'
+import { formatFriendlyMoney, formatMoney, formatShares, formatSignedFriendlyMoney, formatSignedMoney } from './formatters'
 import { BAND_LABELS, type LifetimeValueRow, mapAfterTaxAnnualFreeCashFlowRows, mapAfterTaxLifetimeValueRows, mapAfterTaxSourceBreakdownRows, mapLifetimeValueRows, type ProjectionBand } from './mappers'
 import type { CareerCompProjection } from './types'
 
@@ -19,6 +21,18 @@ interface ProjectionProps {
 
 interface ProjectionLiquidityProps extends ProjectionProps {
   initialMode?: LiquidityMode | undefined
+}
+
+interface ProjectionLifetimeValueProps extends ProjectionProps {
+  onOpenDetail?: ((jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand) => void) | undefined
+}
+
+const LTV_DRILL_LABELS: Record<CareerCompLtvMetric, string> = {
+  'cash-comp': 'cash comp',
+  'liquid-equity': 'liquid equity',
+  'paper-equity': 'paper equity',
+  'liquid-total': 'liquid total',
+  'paper-total': 'paper total',
 }
 
 export function ProjectionLiquidity({ projection, initialMode = 'preTax' }: ProjectionLiquidityProps): ReactElement {
@@ -78,6 +92,76 @@ function lifetimeValue(row: LifetimeValueRow, band: ProjectionBand, metric: 'tot
   }
 
   return band === 'low' ? row.totalPaperValueDeltaLow : band === 'medium' ? row.totalPaperValueDeltaMedium : row.totalPaperValueDeltaHigh
+}
+
+function LtvDrillButton({
+  jobId,
+  jobName,
+  metric,
+  band,
+  value,
+  onOpenDetail,
+}: {
+  jobId: string
+  jobName: string
+  metric: CareerCompLtvMetric
+  band: ProjectionBand
+  value: number | null
+  onOpenDetail?: ((jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand) => void) | undefined
+}): ReactElement {
+  const bandLabel = BAND_LABELS[band].toLowerCase()
+  const metricLabel = LTV_DRILL_LABELS[metric]
+  const ariaLabel = metric === 'cash-comp'
+    ? `Drill into ${jobName} ${metricLabel}`
+    : `Drill into ${jobName} ${metricLabel} ${bandLabel}`
+
+  if (!onOpenDetail) {
+    return <span className="font-currency tabular-nums">{formatFriendlyMoney(value)}</span>
+  }
+
+  return (
+    <button
+      type="button"
+      className="inline-flex min-w-16 justify-end rounded-sm text-right font-currency tabular-nums text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={ariaLabel}
+      onClick={() => onOpenDetail(jobId, metric, band)}
+    >
+      {formatFriendlyMoney(value)}
+    </button>
+  )
+}
+
+function DeltaValue({
+  hasCurrentJob,
+  offerValue,
+  currentValue,
+  delta,
+}: {
+  hasCurrentJob: boolean
+  offerValue: number | null
+  currentValue: number | null
+  delta: number | null
+}): ReactElement {
+  if (!hasCurrentJob || currentValue === null || offerValue === null) {
+    return <span>No current job</span>
+  }
+
+  if (delta === null) {
+    return <span className="text-muted-foreground" aria-label="Current job baseline">—</span>
+  }
+
+  const math = `${formatMoney(offerValue)} − ${formatMoney(currentValue)} = ${formatSignedMoney(delta)}`
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} aria-label={math} className="inline-flex justify-end font-currency tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {formatSignedFriendlyMoney(delta)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{math}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 export function ProjectionAfterTaxLiquidity({ projection }: ProjectionProps): ReactElement {
@@ -231,11 +315,12 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
   )
 }
 
-export function ProjectionLifetimeValue({ projection }: ProjectionProps): ReactElement {
+export function ProjectionLifetimeValue({ projection, onOpenDetail }: ProjectionLifetimeValueProps): ReactElement {
   const [selectedBand, setSelectedBand] = useState<ProjectionBand>('medium')
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>(() => projection.jobs.map((job) => job.id))
   const [jobSelectionTouched, setJobSelectionTouched] = useState(false)
   const rows = useMemo(() => mapLifetimeValueRows(projection), [projection])
+  const currentRow = useMemo(() => rows.find((row) => row.isCurrent) ?? null, [rows])
   const projectionJobIds = useMemo(() => projection.jobs.map((job) => job.id), [projection.jobs])
   const effectiveSelectedJobIds = useMemo(() => {
     if (!jobSelectionTouched) {
@@ -320,14 +405,40 @@ export function ProjectionLifetimeValue({ projection }: ProjectionProps): ReactE
                 {visibleRows.map((row) => (
                   <TableRow key={row.jobId}>
                     <TableCell className="font-medium">{row.name}{row.isCurrent ? ' (current)' : ''}</TableCell>
-                    <TableCell className="text-right">{formatFriendlyMoney(row.totalCashComp)}</TableCell>
-                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalEquity'))}</TableCell>
-                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalPaperEquity'))}</TableCell>
-                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalValue'))}</TableCell>
-                    <TableCell className="text-right">{formatFriendlyMoney(lifetimeValue(row, selectedBand, 'totalPaperValue'))}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedFriendlyMoney(row.cashCompDelta) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedFriendlyMoney(lifetimeValue(row, selectedBand, 'totalValueDelta')) : 'No current job'}</TableCell>
-                    <TableCell className="text-right">{hasCurrentJob ? formatSignedFriendlyMoney(lifetimeValue(row, selectedBand, 'totalPaperValueDelta')) : 'No current job'}</TableCell>
+                    <TableCell className="text-right">
+                      <LtvDrillButton jobId={row.jobId} jobName={row.name} metric="cash-comp" band={selectedBand} value={row.totalCashComp} onOpenDetail={onOpenDetail} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <LtvDrillButton jobId={row.jobId} jobName={row.name} metric="liquid-equity" band={selectedBand} value={lifetimeValue(row, selectedBand, 'totalEquity')} onOpenDetail={onOpenDetail} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <LtvDrillButton jobId={row.jobId} jobName={row.name} metric="paper-equity" band={selectedBand} value={lifetimeValue(row, selectedBand, 'totalPaperEquity')} onOpenDetail={onOpenDetail} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <LtvDrillButton jobId={row.jobId} jobName={row.name} metric="liquid-total" band={selectedBand} value={lifetimeValue(row, selectedBand, 'totalValue')} onOpenDetail={onOpenDetail} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <LtvDrillButton jobId={row.jobId} jobName={row.name} metric="paper-total" band={selectedBand} value={lifetimeValue(row, selectedBand, 'totalPaperValue')} onOpenDetail={onOpenDetail} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DeltaValue hasCurrentJob={hasCurrentJob} offerValue={row.totalCashComp} currentValue={currentRow?.totalCashComp ?? null} delta={row.cashCompDelta} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DeltaValue
+                        hasCurrentJob={hasCurrentJob}
+                        offerValue={lifetimeValue(row, selectedBand, 'totalValue')}
+                        currentValue={currentRow ? lifetimeValue(currentRow, selectedBand, 'totalValue') : null}
+                        delta={lifetimeValue(row, selectedBand, 'totalValueDelta')}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DeltaValue
+                        hasCurrentJob={hasCurrentJob}
+                        offerValue={lifetimeValue(row, selectedBand, 'totalPaperValue')}
+                        currentValue={currentRow ? lifetimeValue(currentRow, selectedBand, 'totalPaperValue') : null}
+                        delta={lifetimeValue(row, selectedBand, 'totalPaperValueDelta')}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
                 {visibleRows.length === 0 ? (

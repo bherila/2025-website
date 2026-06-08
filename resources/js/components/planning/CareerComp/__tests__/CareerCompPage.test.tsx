@@ -13,6 +13,7 @@ import {
   updateSharedCareerComparisonExpiration,
 } from '../careerCompApi'
 import { CareerCompPage } from '../CareerCompPage'
+import { ltvDetailRouteInstance } from '../careerCompRoute'
 import { serializeCareerCompUrlState } from '../careerCompUrlState'
 import { DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
 import type { CareerComparisonMeta, CareerCompInitialData, CareerCompInputs, CareerCompProjection } from '../types'
@@ -174,6 +175,28 @@ describe('CareerCompPage', () => {
 
     expect(window.location.hash).toBe('')
     expect(container.querySelector('section[data-column-id="ltv-table"]')).not.toBeInTheDocument()
+  })
+
+  it('pushes LTV detail Miller columns from clicked lifetime cells', () => {
+    const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open LTV Table' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Drill into Offer 1 cash comp' }))
+
+    const detailInstance = ltvDetailRouteInstance({ jobId: 'hyp-1', metric: 'cash-comp', band: 'medium' })
+    expect(window.location.hash).toBe(`#/ltv-table/ltv-detail:${encodeURIComponent(detailInstance)}`)
+    expect(container.querySelector('section[data-column-id="ltv-detail"]')).toBeInTheDocument()
+    expect(screen.getByText('Offer 1 Cash comp')).toBeInTheDocument()
+  })
+
+  it('opens LTV detail columns from deep links', () => {
+    const detailInstance = ltvDetailRouteInstance({ jobId: 'hyp-1', metric: 'paper-equity', band: 'medium' })
+    window.history.replaceState(null, '', `/financial-planning/career-comparison#/ltv-table/ltv-detail:${encodeURIComponent(detailInstance)}`)
+
+    const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
+
+    expect(container.querySelector('section[data-column-id="ltv-detail"]')).toBeInTheDocument()
+    expect(screen.getByText('Offer 1 Paper equity med')).toBeInTheDocument()
   })
 
   it('preserves hash navigation when anonymous URL input state is rewritten', async () => {
