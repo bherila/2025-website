@@ -327,7 +327,9 @@ final class CareerCompInputs
         $jobs = array_values(array_filter($currentJobs, 'is_array'));
         $defaultCurrentJob = self::defaults()['currentJobs'][0] ?? null;
 
-        return count($jobs) === 1 && is_array($defaultCurrentJob) && $jobs[0] == $defaultCurrentJob;
+        return count($jobs) === 1
+            && is_array($defaultCurrentJob)
+            && self::withDefaultJobArchiveFields($jobs[0]) == self::withDefaultJobArchiveFields($defaultCurrentJob);
     }
 
     /**
@@ -340,7 +342,23 @@ final class CareerCompInputs
             return false;
         }
 
-        return $legacyCurrentJob != $defaultCurrentJob;
+        return self::withDefaultJobArchiveFields($legacyCurrentJob) != self::withDefaultJobArchiveFields($defaultCurrentJob);
+    }
+
+    /**
+     * @param  array<string, mixed>  $job
+     * @return array<string, mixed>
+     */
+    private static function withDefaultJobArchiveFields(array $job): array
+    {
+        if (! array_key_exists('notesMarkdown', $job)) {
+            $job['notesMarkdown'] = null;
+        }
+        if (! array_key_exists('archived', $job)) {
+            $job['archived'] = false;
+        }
+
+        return $job;
     }
 
     /**

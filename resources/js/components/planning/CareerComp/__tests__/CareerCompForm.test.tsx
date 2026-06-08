@@ -301,4 +301,19 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.queryByText('No active offers')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Offer notes' })).toHaveValue('Archived note')
   })
+
+  it('lets archived offers be deleted when the total offer limit is reached', () => {
+    const archivedOffers = Array.from({ length: 10 }, (_, index) => ({
+      ...buildDefaultJob(`hyp-${index + 1}`, `Offer ${index + 1}`),
+      archived: true,
+    }))
+
+    render(<Harness initial={{ ...makeInputs('public'), hypotheticalJobs: archivedOffers }} />)
+
+    expect(screen.getByRole('button', { name: 'Add offer' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Offer 1' }))
+
+    expect(screen.queryByText('Offer 1')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add offer' })).toBeEnabled()
+  })
 })

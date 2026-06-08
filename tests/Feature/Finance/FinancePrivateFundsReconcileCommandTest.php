@@ -173,6 +173,87 @@ class FinancePrivateFundsReconcileCommandTest extends TestCase
             ->expectsOutputToContain('Folder map is required');
     }
 
+    public function test_invalid_filename_dates_are_left_unparsed(): void
+    {
+        $this->writeDocument('folder-a/2025.02.31 fund-a statement.pdf', '%PDF invalid date');
+
+        $this->artisan('finance:private-funds:reconcile', [
+            '--root' => $this->root,
+            '--map' => $this->mapPath,
+        ])
+            ->assertExitCode(0)
+            ->expectsOutputToContain('unparsed');
+
+        $this->assertDatabaseCount('fin_documents', 0);
+    }
+
+    public function test_month_only_statement_dates_use_month_end(): void
+    {
+        $this->writeDocument('folder-a/2025.09 fund-a statement.pdf', '%PDF month statement');
+
+        $this->artisan('finance:private-funds:reconcile', [
+            '--root' => $this->root,
+            '--map' => $this->mapPath,
+            '--user' => $this->user->id,
+            '--apply' => true,
+        ])->assertExitCode(0);
+
+        $document = DB::table('fin_documents')
+            ->where('user_id', $this->user->id)
+            ->where('original_filename', '2025.09 fund-a statement.pdf')
+            ->first();
+
+        $this->assertNotNull($document);
+        $this->assertSame('2025-09-30', substr((string) $document->document_date, 0, 10));
+        $this->assertSame('2025-09-30', substr((string) $document->period_end, 0, 10));
+
+        $statement = DB::table('fin_statements')
+            ->where('document_id', $document->id)
+            ->first();
+
+        $this->assertNotNull($statement);
+        $this->assertSame('2025-09-30', substr((string) $statement->statement_closing_date, 0, 10));
+    }
+
+    public function test_existing_documents_refresh_derived_dates(): void
+    {
+        $relativePath = 'folder-b/schedule k-1 - fund-b - 2024.12.31.pdf';
+        $this->writeDocument($relativePath, '%PDF existing k1');
+        $hash = hash_file('sha256', $this->root.'/'.$relativePath);
+
+        $documentId = DB::table('fin_documents')->insertGetId([
+            'user_id' => $this->user->id,
+            'document_kind' => 'tax_form',
+            'document_type' => null,
+            'document_date' => null,
+            'tax_year' => null,
+            'period_end' => null,
+            'original_filename' => 'old.pdf',
+            'stored_filename' => 'old.pdf',
+            's3_path' => 'old.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 1,
+            'file_hash' => $hash,
+            'uploaded_by_user_id' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->artisan('finance:private-funds:reconcile', [
+            '--root' => $this->root,
+            '--map' => $this->mapPath,
+            '--user' => $this->user->id,
+            '--apply' => true,
+        ])->assertExitCode(0);
+
+        $document = DB::table('fin_documents')->where('id', $documentId)->first();
+
+        $this->assertSame('schedule_k1', $document->document_type);
+        $this->assertSame('2024-12-31', substr((string) $document->document_date, 0, 10));
+        $this->assertSame(2024, (int) $document->tax_year);
+        $this->assertSame('2024-12-31', substr((string) $document->period_end, 0, 10));
+    }
+
     private function insertAccount(string $name): void
     {
         DB::table('fin_accounts')->insert([

@@ -117,7 +117,9 @@ class FinanceApiController extends Controller
             'acct_is_retirement' => $request->isRetirement,
             'acct_last_balance' => '0',
             'acct_capital_commitment' => $request->input('capitalCommitment'),
-            'acct_capital_commitment_currency' => $request->input('capitalCommitmentCurrency', 'USD'),
+            'acct_capital_commitment_currency' => $request->has('capitalCommitmentCurrency')
+                ? $this->capitalCommitmentCurrency($request->input('capitalCommitmentCurrency'))
+                : 'USD',
             'acct_capital_commitment_date' => $request->input('capitalCommitmentDate'),
             'acct_capital_commitment_notes' => $request->input('capitalCommitmentNotes'),
         ]);
@@ -582,7 +584,7 @@ class FinanceApiController extends Controller
         }
 
         if ($request->has('capitalCommitmentCurrency')) {
-            $updates['acct_capital_commitment_currency'] = strtoupper((string) $request->input('capitalCommitmentCurrency', 'USD'));
+            $updates['acct_capital_commitment_currency'] = $this->capitalCommitmentCurrency($request->input('capitalCommitmentCurrency'));
         }
 
         if ($request->has('capitalCommitmentDate')) {
@@ -596,6 +598,17 @@ class FinanceApiController extends Controller
         $account->update($updates);
 
         return response()->json(['success' => true]);
+    }
+
+    private function capitalCommitmentCurrency(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $currency = trim((string) $value);
+
+        return $currency === '' ? null : strtoupper($currency);
     }
 
     public function deleteAccount(Request $request, int $account_id, TransactionDeletionTombstoneService $tombstones): JsonResponse
