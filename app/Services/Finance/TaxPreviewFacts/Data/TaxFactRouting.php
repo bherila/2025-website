@@ -137,6 +137,8 @@ enum TaxFactRouting: string
     case Schedule1Line8z = 'sch_1_8z';
     case Form6251IsoBargainElement = 'form_6251_iso_bargain_element';
     case Form1040NsoOrdinaryIncome = 'form_1040_nso_ordinary_income';
+    case Form1040RsuOrdinaryIncome = 'form_1040_rsu_ordinary_income';
     case EquityComp83bElection = 'equity_comp_83b_election';
     case ScheduleDEquitySaleProceeds = 'schedule_d_equity_sale_proceeds';
+    case ScheduleDEquityCapitalGain = 'schedule_d_equity_capital_gain';
 }

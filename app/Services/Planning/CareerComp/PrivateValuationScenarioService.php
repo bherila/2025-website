@@ -11,8 +11,9 @@ final class PrivateValuationScenarioService
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $vestingRows
      * @return array{scenarios:list<array{id:string,label:string,outcome:string,points:list<array<string, mixed>>,totalNetPaperValue:float}>,totalsByOutcome:array{low:float,medium:float,high:float},warnings:list<string>}
      */
-    public function project(JobSpec $job, array $vestingRows, int $startYear, int $horizonYears): array
+    public function project(JobSpec $job, array $vestingRows, int $startYear, int $horizonYears, ?ModelAssumptions $modelAssumptions = null): array
     {
+        $modelAssumptions ??= ModelAssumptions::fromArray([]);
         $totalsByOutcome = ['low' => 0.0, 'medium' => 0.0, 'high' => 0.0];
         $warnings = [];
 
@@ -35,7 +36,7 @@ final class PrivateValuationScenarioService
 
             $outcome = $this->normalizeOutcome((string) ($scenario['outcome'] ?? 'medium'));
             $outcomeCounts[$outcome]++;
-            $points = $this->pointsForScenario($job, $vestingRows, $stages, $baseFullyDilutedShares, $startYear, $horizonYears);
+            $points = $this->pointsForScenario($job, $vestingRows, $stages, $baseFullyDilutedShares, $startYear, $horizonYears, $modelAssumptions);
             $totalNetPaperValue = $points === [] ? 0.0 : (float) $points[array_key_last($points)]['netPaperValue'];
 
             $scenarios[] = [
@@ -58,8 +59,9 @@ final class PrivateValuationScenarioService
         return ['scenarios' => $scenarios, 'totalsByOutcome' => $totalsByOutcome, 'warnings' => $warnings];
     }
 
-    public function commonFmvForYear(JobSpec $job, int $year, string $outcome = 'medium'): float
+    public function commonFmvForYear(JobSpec $job, int $year, string $outcome = 'medium', ?ModelAssumptions $modelAssumptions = null): float
     {
+        $modelAssumptions ??= ModelAssumptions::fromArray([]);
         $selectedOutcome = $this->normalizeOutcome($outcome);
         $snapshots = [];
 
@@ -83,7 +85,7 @@ final class PrivateValuationScenarioService
         $baseFullyDilutedShares = $job->number('company.fullyDilutedShares');
         if ($baseFullyDilutedShares > 0.0) {
             foreach ($snapshots as $snapshot) {
-                $derivedCommonFmv = $this->derivedCommonFmvForSnapshot($snapshot, $baseFullyDilutedShares);
+                $derivedCommonFmv = $this->derivedCommonFmvForSnapshot($snapshot, $baseFullyDilutedShares, $modelAssumptions);
                 if ($derivedCommonFmv > 0.0) {
                     return $derivedCommonFmv;
                 }
@@ -111,19 +113,24 @@ final class PrivateValuationScenarioService
      * @param  list<array<string, mixed>>  $stages
      * @return list<array<string, mixed>>
      */
-    private function pointsForScenario(JobSpec $job, array $vestingRows, array $stages, float $baseFullyDilutedShares, int $startYear, int $horizonYears): array
+    private function pointsForScenario(JobSpec $job, array $vestingRows, array $stages, float $baseFullyDilutedShares, int $startYear, int $horizonYears, ModelAssumptions $modelAssumptions): array
     {
         $points = [];
 
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $year = $startYear + $offset;
             $snapshot = $this->snapshotForYear($stages, $year);
-            $commonFmv = $this->commonFmvForSnapshot($job, $snapshot, $baseFullyDilutedShares);
+            $commonFmv = $this->commonFmvForSnapshot($job, $snapshot, $baseFullyDilutedShares, $modelAssumptions);
             $shareTotals = $this->cumulativeShareTotals($job, $vestingRows, $year);
-            $dilutedOwnershipPct = $this->dilutedOwnershipPct($shareTotals['ownershipLots'], $stages, $year, $baseFullyDilutedShares);
+            $dilutedShares = $this->dilutedSharesByType($shareTotals['ownershipLots'], $stages, $year);
+            $dilutedOwnershipPct = round(($dilutedShares['total'] / $baseFullyDilutedShares) * 100.0, 6);
 
             $preferredPostMoneyValuation = $this->number($snapshot['preferredPostMoneyValuation'] ?? null);
             $grossOwnershipValue = MoneyMath::multiply($preferredPostMoneyValuation, $dilutedOwnershipPct / 100.0);
+            $rsuOwnershipValue = $dilutedShares['total'] > 0.0
+                ? MoneyMath::multiply($grossOwnershipValue, $dilutedShares['rsu'] / $dilutedShares['total'])
+                : 0.0;
+            $optionOwnershipValue = MoneyMath::subtract($grossOwnershipValue, $rsuOwnershipValue);
             $rsuCommonValue = MoneyMath::multiply($commonFmv, $shareTotals['rsuShares']);
             $optionCommonValue = MoneyMath::multiply($commonFmv, $shareTotals['optionShares']);
             $grossCommonValue = MoneyMath::add($rsuCommonValue, $optionCommonValue);
@@ -140,6 +147,8 @@ final class PrivateValuationScenarioService
                 'dilutedOwnershipPct' => $dilutedOwnershipPct,
                 'commonFmv' => MoneyMath::round($commonFmv),
                 'grossOwnershipValue' => $grossOwnershipValue,
+                'rsuOwnershipValue' => $rsuOwnershipValue,
+                'optionOwnershipValue' => $optionOwnershipValue,
                 'grossCommonValue' => $grossCommonValue,
                 'commonIntrinsicValue' => $commonIntrinsicValue,
                 'exerciseCost' => $shareTotals['exerciseCost'],
@@ -209,14 +218,14 @@ final class PrivateValuationScenarioService
     /**
      * @param  array<string, mixed>  $snapshot
      */
-    private function commonFmvForSnapshot(JobSpec $job, array $snapshot, float $baseFullyDilutedShares): float
+    private function commonFmvForSnapshot(JobSpec $job, array $snapshot, float $baseFullyDilutedShares, ModelAssumptions $modelAssumptions): float
     {
         $explicitCommonFmv = $this->explicitCommonFmvForSnapshot($snapshot);
         if ($explicitCommonFmv > 0.0) {
             return $explicitCommonFmv;
         }
 
-        $derivedCommonFmv = $this->derivedCommonFmvForSnapshot($snapshot, $baseFullyDilutedShares);
+        $derivedCommonFmv = $this->derivedCommonFmvForSnapshot($snapshot, $baseFullyDilutedShares, $modelAssumptions);
         if ($derivedCommonFmv > 0.0) {
             return $derivedCommonFmv;
         }
@@ -235,13 +244,21 @@ final class PrivateValuationScenarioService
     /**
      * @param  array<string, mixed>  $snapshot
      */
-    private function derivedCommonFmvForSnapshot(array $snapshot, float $baseFullyDilutedShares): float
+    private function derivedCommonFmvForSnapshot(array $snapshot, float $baseFullyDilutedShares, ModelAssumptions $modelAssumptions): float
     {
         $preferredPostMoneyValuation = $this->number($snapshot['preferredPostMoneyValuation'] ?? null);
         if ($preferredPostMoneyValuation > 0.0 && $baseFullyDilutedShares > 0.0) {
+            $preferredPerShare = MoneyMath::divide($preferredPostMoneyValuation, $baseFullyDilutedShares);
             $commonDiscountPct = min(100.0, max(0.0, $this->number($snapshot['commonFmvDiscountPct'] ?? null)));
+            if ($commonDiscountPct > 0.0) {
+                return MoneyMath::multiply($preferredPerShare, 1.0 - ($commonDiscountPct / 100.0));
+            }
 
-            return MoneyMath::multiply(MoneyMath::divide($preferredPostMoneyValuation, $baseFullyDilutedShares), 1.0 - ($commonDiscountPct / 100.0));
+            $stage = is_string($snapshot['stage'] ?? null) ? (string) $snapshot['stage'] : null;
+            $liquidityEvent = filter_var($snapshot['liquidityEvent'] ?? false, FILTER_VALIDATE_BOOL);
+            $commonFmvPct = $modelAssumptions->commonFmvPctForStage($stage, $liquidityEvent);
+
+            return MoneyMath::multiply($preferredPerShare, $commonFmvPct / 100.0);
         }
 
         return 0.0;
@@ -249,7 +266,7 @@ final class PrivateValuationScenarioService
 
     /**
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>  $vestingRows
-     * @return array{rsuShares:float,optionShares:float,totalShares:float,exerciseCost:float,optionSharesByGrant:array<string, float>,ownershipLots:list<array{grantYear:int,shares:float}>}
+     * @return array{rsuShares:float,optionShares:float,totalShares:float,exerciseCost:float,optionSharesByGrant:array<string, float>,ownershipLots:list<array{grantYear:int,shares:float,type:'rsu'|'option'}>}
      */
     private function cumulativeShareTotals(JobSpec $job, array $vestingRows, int $year): array
     {
@@ -270,6 +287,7 @@ final class PrivateValuationScenarioService
                     $ownershipLots[] = [
                         'grantYear' => $this->grantYearForRow($job, $row),
                         'shares' => $vestedShares,
+                        'type' => 'rsu',
                     ];
                 }
 
@@ -283,6 +301,7 @@ final class PrivateValuationScenarioService
                 $ownershipLots[] = [
                     'grantYear' => $this->grantYearForRow($job, $row),
                     'shares' => $exercisableShares,
+                    'type' => 'option',
                 ];
             }
         }
@@ -305,21 +324,20 @@ final class PrivateValuationScenarioService
     }
 
     /**
-     * @param  list<array{grantYear:int,shares:float}>  $ownershipLots
+     * @param  list<array{grantYear:int,shares:float,type:'rsu'|'option'}>  $ownershipLots
      * @param  list<array<string, mixed>>  $stages
+     * @return array{rsu:float,option:float,total:float}
      */
-    private function dilutedOwnershipPct(array $ownershipLots, array $stages, int $year, float $baseFullyDilutedShares): float
+    private function dilutedSharesByType(array $ownershipLots, array $stages, int $year): array
     {
-        if ($baseFullyDilutedShares <= 0.0) {
-            return 0.0;
-        }
-
-        $dilutedShares = 0.0;
+        $dilutedShares = ['rsu' => 0.0, 'option' => 0.0, 'total' => 0.0];
         foreach ($ownershipLots as $lot) {
-            $dilutedShares += MoneyMath::multiply($lot['shares'], $this->cumulativeDilutionFactor($stages, $year, $lot['grantYear']));
+            $shares = MoneyMath::multiply($lot['shares'], $this->cumulativeDilutionFactor($stages, $year, $lot['grantYear']));
+            $dilutedShares[$lot['type']] = MoneyMath::add($dilutedShares[$lot['type']], $shares);
+            $dilutedShares['total'] = MoneyMath::add($dilutedShares['total'], $shares);
         }
 
-        return round(($dilutedShares / $baseFullyDilutedShares) * 100.0, 6);
+        return $dilutedShares;
     }
 
     /**

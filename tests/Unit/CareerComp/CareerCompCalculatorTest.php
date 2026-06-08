@@ -8,6 +8,7 @@ use App\Services\Planning\CareerComp\EquityValuationService;
 use App\Services\Planning\CareerComp\JobSpec;
 use App\Services\Planning\CareerComp\OptionsVestingService;
 use App\Services\Planning\CareerComp\RsuVestingExpander;
+use App\Support\Finance\FederalIncomeTax;
 use PHPUnit\Framework\TestCase;
 
 class CareerCompCalculatorTest extends TestCase
@@ -449,6 +450,226 @@ class CareerCompCalculatorTest extends TestCase
             'Projected ISO spill job: ISO first-exercisable value exceeds $100k in 2028; spillover treated as NSO.',
             $projection['warnings'],
         );
+    }
+
+    public function test_private_scenario_liquidity_realizes_exit_value_and_capital_gain(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2023,
+            'horizonYears' => 3,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-exit',
+                'name' => 'Private exit',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [
+                            ['year' => 2023, 'stage' => 'A', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 10, 'liquidityEvent' => false],
+                            ['year' => 2025, 'stage' => 'IPO/Exit', 'preferredPostMoneyValuation' => 500000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 500, 'liquidityEvent' => true],
+                        ],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'owned-option',
+                    'kind' => 'hire',
+                    'type' => 'nso',
+                    'grantDate' => '2023-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 5,
+                    'vestingYears' => 1,
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => -1, 'mediumPct' => 0, 'highPct' => 1],
+            ]],
+        ]))->toArray();
+
+        $job = $projection['jobs'][0];
+
+        $this->assertSame(0.0, $job['liquidity']['medium'][0]['cumulativeValue']);
+        $this->assertSame(0.0, $job['liquidity']['medium'][1]['cumulativeValue']);
+        $this->assertSame(500000.0, $job['liquidity']['medium'][2]['cumulativeValue']);
+        $this->assertSame(500000.0, $job['annual'][2]['shareSaleProceeds']);
+        $this->assertSame(10000.0, $job['annual'][2]['equitySaleBasis']);
+        $this->assertSame(490000.0, $job['annual'][2]['equityCapitalGain']);
+        $this->assertSame(500000.0, $job['lifetime']['totalEquityValue']['low']);
+        $this->assertSame(500000.0, $job['lifetime']['totalEquityValue']['medium']);
+        $this->assertSame(500000.0, $job['lifetime']['totalEquityValue']['high']);
+        $this->assertSame(5000.0, $job['afterTax']['annual'][0]['nsoOrdinaryIncome']);
+        $this->assertSame(490000.0, $job['afterTax']['annual'][2]['equityCapitalGain']);
+        $this->assertGreaterThan(0.0, $job['afterTax']['lifetime']['totalValue']['low']);
+        $this->assertSame($job['afterTax']['lifetime']['totalValue']['medium'], $job['afterTax']['lifetime']['totalValue']['low']);
+        $this->assertSame($job['afterTax']['lifetime']['totalValue']['medium'], $job['afterTax']['lifetime']['totalValue']['high']);
+        $this->assertNotContains('Private exit: private liquidity date is beyond the planning horizon; equity never realizes.', $projection['warnings']);
+    }
+
+    public function test_private_scenario_after_tax_lifetime_uses_each_outcome_tax(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2023,
+            'horizonYears' => 3,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-multi-exit',
+                'name' => 'Private multi exit',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'fourNineA' => 0,
+                    'valuationScenarios' => [
+                        [
+                            'id' => 'low',
+                            'label' => 'Low',
+                            'outcome' => 'low',
+                            'stages' => [
+                                ['year' => 2023, 'stage' => 'A', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmvDiscountPct' => 100, 'commonFmv' => 0, 'liquidityEvent' => false],
+                                ['year' => 2025, 'stage' => 'Exit', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 100, 'liquidityEvent' => true],
+                            ],
+                        ],
+                        [
+                            'id' => 'medium',
+                            'label' => 'Medium',
+                            'outcome' => 'medium',
+                            'stages' => [
+                                ['year' => 2023, 'stage' => 'A', 'preferredPostMoneyValuation' => 500000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmvDiscountPct' => 100, 'commonFmv' => 0, 'liquidityEvent' => false],
+                                ['year' => 2025, 'stage' => 'Exit', 'preferredPostMoneyValuation' => 500000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 500, 'liquidityEvent' => true],
+                            ],
+                        ],
+                        [
+                            'id' => 'high',
+                            'label' => 'High',
+                            'outcome' => 'high',
+                            'stages' => [
+                                ['year' => 2023, 'stage' => 'A', 'preferredPostMoneyValuation' => 1000000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmvDiscountPct' => 100, 'commonFmv' => 0, 'liquidityEvent' => false],
+                                ['year' => 2025, 'stage' => 'Exit', 'preferredPostMoneyValuation' => 1000000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 1000, 'liquidityEvent' => true],
+                            ],
+                        ],
+                    ],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'exit-option',
+                    'kind' => 'hire',
+                    'type' => 'nso',
+                    'grantDate' => '2023-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 0,
+                    'vestingYears' => 1,
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => -1, 'mediumPct' => 0, 'highPct' => 1],
+            ]],
+        ]))->toArray();
+
+        $afterTax = $projection['jobs'][0]['afterTax']['lifetime']['totalValue'];
+
+        $this->assertSame(100000.0 - FederalIncomeTax::regularTax(100000.0, 2025, false, 0.0, 100000.0), $afterTax['low']);
+        $this->assertSame(500000.0 - FederalIncomeTax::regularTax(500000.0, 2025, false, 0.0, 500000.0), $afterTax['medium']);
+        $this->assertSame(1000000.0 - FederalIncomeTax::regularTax(1000000.0, 2025, false, 0.0, 1000000.0), $afterTax['high']);
+    }
+
+    public function test_private_rsu_liquidity_is_taxed_as_ordinary_compensation(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2023,
+            'horizonYears' => 3,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-rsu-exit',
+                'name' => 'Private RSU exit',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [
+                            ['year' => 2023, 'stage' => 'A', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 100, 'liquidityEvent' => false],
+                            ['year' => 2025, 'stage' => 'Exit', 'preferredPostMoneyValuation' => 500000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 500, 'liquidityEvent' => true],
+                        ],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [[
+                    'id' => 'rsu-exit',
+                    'kind' => 'hire',
+                    'grantDate' => '2023-01-01',
+                    'shareCount' => 1000,
+                    'vestingSchedule' => [
+                        'type' => 'tranches',
+                        'tranches' => [['month' => 0, 'percent' => 100]],
+                    ],
+                ]],
+                'optionGrants' => [],
+                'growthBands' => ['lowPct' => -1, 'mediumPct' => 0, 'highPct' => 1],
+            ]],
+        ]))->toArray();
+
+        $job = $projection['jobs'][0];
+        $afterTaxAnnual = $job['afterTax']['annual'][2];
+
+        $this->assertSame(500000.0, $job['annual'][2]['shareSaleProceeds']);
+        $this->assertSame(500000.0, $job['annual'][2]['privateRsuOrdinaryIncome']);
+        $this->assertSame(0.0, $job['annual'][2]['equityCapitalGain']);
+        $this->assertSame(500000.0, $afterTaxAnnual['taxableCompIncome']);
+        $this->assertSame(0.0, $afterTaxAnnual['equityCapitalGain']);
+
+        $sources = array_column($job['afterTax']['sources'], 'amount', 'sourceType');
+        $this->assertSame(500000.0, $sources['equity_comp_rsu_ordinary_income']);
+    }
+
+    public function test_private_liquidity_basis_includes_pre_horizon_taxed_nso_bargain_element(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 1,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'pre-horizon-nso-exit',
+                'name' => 'Pre horizon NSO exit',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'base',
+                        'label' => 'Base',
+                        'outcome' => 'medium',
+                        'stages' => [
+                            ['year' => 2025, 'stage' => 'A', 'preferredPostMoneyValuation' => 10000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 10, 'liquidityEvent' => false],
+                            ['year' => 2026, 'stage' => 'Exit', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 100, 'liquidityEvent' => true],
+                        ],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'pre-horizon-option',
+                    'kind' => 'hire',
+                    'type' => 'nso',
+                    'grantDate' => '2025-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 5,
+                    'vestingYears' => 1,
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $job = $projection['jobs'][0];
+
+        $this->assertSame(100000.0, $job['annual'][0]['shareSaleProceeds']);
+        $this->assertSame(10000.0, $job['annual'][0]['equitySaleBasis']);
+        $this->assertSame(90000.0, $job['annual'][0]['equityCapitalGain']);
+        $this->assertSame(0.0, $job['afterTax']['annual'][0]['nsoOrdinaryIncome']);
     }
 
     public function test_private_early_exercise_option_tax_uses_common_fmv_instead_of_preferred_share_price(): void

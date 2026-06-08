@@ -15,9 +15,9 @@ export const sampleCareerCompProjection: CareerCompProjection = {
       name: 'Current job',
       isCurrent: true,
       annual: [
-        { year: 2026, salary: 180000, bonus: 20000, vestedLiquidEquity: 30000, shareSaleProceeds: 0, exerciseOutlay: 0, freeCashFlow: 230000 },
-        { year: 2027, salary: 185000, bonus: 20000, vestedLiquidEquity: 30000, shareSaleProceeds: 0, exerciseOutlay: 0, freeCashFlow: 235000 },
-        { year: 2028, salary: 190000, bonus: 20000, vestedLiquidEquity: 30000, shareSaleProceeds: 0, exerciseOutlay: 0, freeCashFlow: 240000 },
+        { year: 2026, salary: 180000, bonus: 20000, vestedLiquidEquity: 30000, shareSaleProceeds: 0, equitySaleBasis: 0, equityCapitalGain: 0, exerciseOutlay: 0, freeCashFlow: 230000 },
+        { year: 2027, salary: 185000, bonus: 20000, vestedLiquidEquity: 30000, shareSaleProceeds: 0, equitySaleBasis: 0, equityCapitalGain: 0, exerciseOutlay: 0, freeCashFlow: 235000 },
+        { year: 2028, salary: 190000, bonus: 20000, vestedLiquidEquity: 30000, shareSaleProceeds: 0, equitySaleBasis: 0, equityCapitalGain: 0, exerciseOutlay: 0, freeCashFlow: 240000 },
       ],
       liquidity: {
         low: [{ year: 2026, cumulativeValue: 30000 }, { year: 2027, cumulativeValue: 60000 }, { year: 2028, cumulativeValue: 90000 }],
@@ -42,9 +42,9 @@ export const sampleCareerCompProjection: CareerCompProjection = {
       name: 'Offer 1',
       isCurrent: false,
       annual: [
-        { year: 2026, salary: 200000, bonus: 30000, vestedLiquidEquity: 50000, shareSaleProceeds: 0, exerciseOutlay: 10000, freeCashFlow: 270000 },
-        { year: 2027, salary: 205000, bonus: 30000, vestedLiquidEquity: 50000, shareSaleProceeds: 0, exerciseOutlay: 10000, freeCashFlow: 275000 },
-        { year: 2028, salary: 210000, bonus: 30000, vestedLiquidEquity: 50000, shareSaleProceeds: 25000, exerciseOutlay: 10000, freeCashFlow: 305000 },
+        { year: 2026, salary: 200000, bonus: 30000, vestedLiquidEquity: 50000, shareSaleProceeds: 0, equitySaleBasis: 0, equityCapitalGain: 0, exerciseOutlay: 10000, freeCashFlow: 270000 },
+        { year: 2027, salary: 205000, bonus: 30000, vestedLiquidEquity: 50000, shareSaleProceeds: 0, equitySaleBasis: 0, equityCapitalGain: 0, exerciseOutlay: 10000, freeCashFlow: 275000 },
+        { year: 2028, salary: 210000, bonus: 30000, vestedLiquidEquity: 50000, shareSaleProceeds: 25000, equitySaleBasis: 0, equityCapitalGain: 0, exerciseOutlay: 10000, freeCashFlow: 305000 },
       ],
       liquidity: {
         low: [{ year: 2026, cumulativeValue: 50000 }, { year: 2027, cumulativeValue: 100000 }, { year: 2028, cumulativeValue: 150000 }],

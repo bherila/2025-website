@@ -356,6 +356,7 @@ class CareerCompWorkbookBuilder
             $rows[] = ['description' => 'ISO AMT preference', 'amount' => $this->money($lifetime, 'isoAmtPreference')];
             $rows[] = ['description' => '83(b) election source amount', 'amount' => $this->sourceAmountForType($job, 'equity_comp_83b_election')];
             $rows[] = ['description' => 'Equity sale proceeds', 'amount' => $this->money($lifetime, 'equitySaleProceeds')];
+            $rows[] = ['description' => 'Equity long-term capital gain', 'amount' => $this->money($lifetime, 'equityCapitalGain')];
             $rows[] = ['description' => 'Estimated regular tax', 'amount' => $this->money($lifetime, 'estimatedRegularTax')];
             $rows[] = ['description' => 'Estimated AMT', 'amount' => $this->money($lifetime, 'estimatedAmt')];
             $rows[] = ['description' => 'Total estimated federal/AMT tax', 'amount' => $this->money($lifetime, 'totalEstimatedTax'), 'isTotal' => true];
@@ -393,6 +394,7 @@ class CareerCompWorkbookBuilder
                 $this->appendNonZeroTaxLine($rows, $annual, $year, 'ISO AMT preference', 'isoAmtPreference');
                 $this->appendNonZeroAmount($rows, $year, '83(b) election source amount', $this->annualSourceTypeAmount($job, $annual, 'equity_comp_83b_election'));
                 $this->appendNonZeroTaxLine($rows, $annual, $year, 'Equity sale proceeds', 'equitySaleProceeds');
+                $this->appendNonZeroTaxLine($rows, $annual, $year, 'Equity long-term capital gain', 'equityCapitalGain');
                 $rows[] = ['line' => $year, 'description' => 'Estimated regular tax', 'amount' => $this->money($annual, 'estimatedRegularTax')];
                 $rows[] = ['line' => $year, 'description' => 'Estimated AMT', 'amount' => $this->money($annual, 'estimatedAmt')];
                 $rows[] = ['line' => $year, 'description' => 'Total estimated federal/AMT tax', 'amount' => $this->money($annual, 'totalEstimatedTax'), 'isTotal' => true];
@@ -711,8 +713,10 @@ class CareerCompWorkbookBuilder
         return match ($sourceType) {
             'equity_comp_iso_bargain_element' => 'ISO AMT preference',
             'equity_comp_nso_ordinary_income' => 'NSO ordinary income',
+            'equity_comp_rsu_ordinary_income' => 'RSU ordinary income',
             'equity_comp_83b_election' => '83(b) election',
             'equity_comp_sale_proceeds' => 'Equity sale proceeds',
+            'equity_comp_long_term_capital_gain' => 'Equity long-term capital gain',
             default => $sourceType !== '' ? $sourceType : 'Equity tax source',
         };
     }

@@ -40,6 +40,7 @@ final class CareerCompInputs
         return [
             'horizonYears' => 10,
             'startYear' => $startYear,
+            'modelAssumptions' => ModelAssumptions::defaults(),
             'currentJob' => [
                 'id' => 'current',
                 'name' => 'Current role',
@@ -217,6 +218,13 @@ final class CareerCompInputs
         $job = $this->value('currentJob');
 
         return JobSpec::nullableFromArray(is_array($job) ? $job : null, true);
+    }
+
+    public function modelAssumptions(): ModelAssumptions
+    {
+        $assumptions = $this->value('modelAssumptions');
+
+        return ModelAssumptions::fromArray(is_array($assumptions) ? $assumptions : []);
     }
 
     /**

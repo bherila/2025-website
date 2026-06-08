@@ -11,6 +11,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 use App\Services\Planning\CareerComp\EquityValuationService;
 use App\Services\Planning\CareerComp\JobSpec;
+use App\Services\Planning\CareerComp\ModelAssumptions;
 use App\Services\Planning\CareerComp\PrivateValuationScenarioService;
 use App\Support\Finance\FederalIncomeTax;
 
@@ -39,20 +40,24 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
 
     /**
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>  $vestingRows
-     * @param  list<array{year:int,salary:float,bonus:float,vestedLiquidEquity:float,shareSaleProceeds:float,exerciseOutlay:float,freeCashFlow:float}>  $annualRows
+     * @param  list<array{year:int,salary:float,bonus:float,vestedLiquidEquity:float,shareSaleProceeds:float,equitySaleBasis?:float,equityCapitalGain?:float,privateRsuOrdinaryIncome?:float,exerciseOutlay:float,freeCashFlow:float}>  $annualRows
      * @param  array{low:float,medium:float,high:float}  $preTaxTotalValue
      */
-    public function build(JobSpec $job, array $vestingRows, array $annualRows, array $preTaxTotalValue): EquityCompensationFacts
+    public function build(JobSpec $job, array $vestingRows, array $annualRows, array $preTaxTotalValue, ?ModelAssumptions $modelAssumptions = null): EquityCompensationFacts
     {
+        $modelAssumptions ??= ModelAssumptions::fromArray([]);
+        $isMarried = $modelAssumptions->isMarried();
         $startYear = (int) ($annualRows[0]['year'] ?? date('Y'));
         $sources = [];
         $annual = [];
         $form6251 = [];
         $lifetime = [
             'taxableCompIncome' => 0.0,
+            'totalTaxableIncome' => 0.0,
             'nsoOrdinaryIncome' => 0.0,
             'isoAmtPreference' => 0.0,
             'equitySaleProceeds' => 0.0,
+            'equityCapitalGain' => 0.0,
             'estimatedRegularTax' => 0.0,
             'estimatedAmt' => 0.0,
             'totalEstimatedTax' => 0.0,
@@ -65,7 +70,7 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
             $cashComp = MoneyMath::add($annualRow['salary'], $annualRow['bonus']);
             $yearSources = [];
             $form6251SourceEntries = [];
-            $optionFacts = $this->optionFactsForYear($job, $vestingRows, $year, $startYear);
+            $optionFacts = $this->optionFactsForYear($job, $vestingRows, $year, $startYear, $modelAssumptions);
 
             foreach ($optionFacts['sources'] as $source) {
                 $sources[] = $source;
@@ -76,21 +81,35 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
             }
 
             $equitySaleProceeds = MoneyMath::round($annualRow['shareSaleProceeds']);
+            $equityCapitalGain = MoneyMath::round($annualRow['equityCapitalGain'] ?? 0.0);
+            $privateRsuOrdinaryIncome = MoneyMath::round($annualRow['privateRsuOrdinaryIncome'] ?? 0.0);
             if ($equitySaleProceeds !== 0.0) {
                 $source = $this->equitySaleSource($job, $year, $equitySaleProceeds);
                 $sources[] = $source;
                 $yearSources[] = $source->id;
             }
+            if ($equityCapitalGain !== 0.0) {
+                $source = $this->equityCapitalGainSource($job, $year, $equityCapitalGain);
+                $sources[] = $source;
+                $yearSources[] = $source->id;
+            }
+            if ($privateRsuOrdinaryIncome !== 0.0) {
+                $source = $this->privateRsuOrdinaryIncomeSource($job, $year, $privateRsuOrdinaryIncome);
+                $sources[] = $source;
+                $yearSources[] = $source->id;
+            }
 
-            $taxableCompIncome = MoneyMath::add($cashComp, $optionFacts['nsoOrdinaryIncome']);
-            $estimatedRegularTax = MoneyMath::round(FederalIncomeTax::ordinaryTax($taxableCompIncome, $year, false));
+            $taxableCompIncome = MoneyMath::sum([$cashComp, $optionFacts['nsoOrdinaryIncome'], $privateRsuOrdinaryIncome]);
+            $totalTaxableIncome = MoneyMath::add($taxableCompIncome, $equityCapitalGain);
+            $estimatedRegularTax = MoneyMath::round(FederalIncomeTax::regularTax($totalTaxableIncome, $year, $isMarried, 0.0, $equityCapitalGain));
             $form6251Facts = $this->form6251FactsBuilder->buildFromOtherAdjustments(
-                taxableIncome: $taxableCompIncome,
+                taxableIncome: $totalTaxableIncome,
                 line3OtherAdjustments: $optionFacts['isoAmtPreference'],
                 year: $year,
-                isMarried: false,
+                isMarried: $isMarried,
                 regularTax: $estimatedRegularTax,
                 sourceEntries: $form6251SourceEntries,
+                preferentialIncome: $equityCapitalGain,
             );
             $estimatedAmt = MoneyMath::round($form6251Facts->amt);
             $totalEstimatedTax = MoneyMath::add($estimatedRegularTax, $estimatedAmt);
@@ -103,9 +122,11 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
             $annual[] = [
                 'year' => $year,
                 'taxableCompIncome' => $taxableCompIncome,
+                'totalTaxableIncome' => $totalTaxableIncome,
                 'nsoOrdinaryIncome' => $optionFacts['nsoOrdinaryIncome'],
                 'isoAmtPreference' => $optionFacts['isoAmtPreference'],
                 'equitySaleProceeds' => $equitySaleProceeds,
+                'equityCapitalGain' => $equityCapitalGain,
                 'estimatedRegularTax' => $estimatedRegularTax,
                 'estimatedAmt' => $estimatedAmt,
                 'totalEstimatedTax' => $totalEstimatedTax,
@@ -114,9 +135,11 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
             ];
 
             $lifetime['taxableCompIncome'] = MoneyMath::add($lifetime['taxableCompIncome'], $taxableCompIncome);
+            $lifetime['totalTaxableIncome'] = MoneyMath::add($lifetime['totalTaxableIncome'], $totalTaxableIncome);
             $lifetime['nsoOrdinaryIncome'] = MoneyMath::add($lifetime['nsoOrdinaryIncome'], $optionFacts['nsoOrdinaryIncome']);
             $lifetime['isoAmtPreference'] = MoneyMath::add($lifetime['isoAmtPreference'], $optionFacts['isoAmtPreference']);
             $lifetime['equitySaleProceeds'] = MoneyMath::add($lifetime['equitySaleProceeds'], $equitySaleProceeds);
+            $lifetime['equityCapitalGain'] = MoneyMath::add($lifetime['equityCapitalGain'], $equityCapitalGain);
             $lifetime['estimatedRegularTax'] = MoneyMath::add($lifetime['estimatedRegularTax'], $estimatedRegularTax);
             $lifetime['estimatedAmt'] = MoneyMath::add($lifetime['estimatedAmt'], $estimatedAmt);
             $lifetime['totalEstimatedTax'] = MoneyMath::add($lifetime['totalEstimatedTax'], $totalEstimatedTax);
@@ -136,7 +159,7 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
      * @param  list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>  $vestingRows
      * @return array{nsoOrdinaryIncome:float,isoAmtPreference:float,sources:TaxFactSource[],form6251SourceEntries:Form6251SourceEntryFact[]}
      */
-    private function optionFactsForYear(JobSpec $job, array $vestingRows, int $year, int $startYear): array
+    private function optionFactsForYear(JobSpec $job, array $vestingRows, int $year, int $startYear, ModelAssumptions $modelAssumptions): array
     {
         $nsoOrdinaryIncome = 0.0;
         $isoAmtPreference = 0.0;
@@ -149,7 +172,7 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
             }
 
             $grant = $this->optionGrant($job, $row['grantId']);
-            $bargainElement = $this->bargainElement($job, $row, $year, $year - $startYear);
+            $bargainElement = $this->bargainElement($job, $row, $year, $year - $startYear, $modelAssumptions);
 
             if ($row['type'] === 'iso') {
                 $isoAmtPreference = MoneyMath::add($isoAmtPreference, $bargainElement);
@@ -211,20 +234,20 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
     /**
      * @param  array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}  $row
      */
-    private function bargainElement(JobSpec $job, array $row, int $year, int $yearOffset): float
+    private function bargainElement(JobSpec $job, array $row, int $year, int $yearOffset, ModelAssumptions $modelAssumptions): float
     {
         $strike = $this->strikeForGrant($job, $row['grantId']);
-        $sharePrice = $this->optionExerciseFairMarketValue($job, $year, $yearOffset);
+        $sharePrice = $this->optionExerciseFairMarketValue($job, $year, $yearOffset, $modelAssumptions);
         $marketValue = MoneyMath::multiply($sharePrice, $row['exercisableShares']);
         $exerciseOutlay = MoneyMath::multiply($strike, $row['exercisableShares']);
 
         return max(0.0, MoneyMath::subtract($marketValue, $exerciseOutlay));
     }
 
-    private function optionExerciseFairMarketValue(JobSpec $job, int $year, int $yearOffset): float
+    private function optionExerciseFairMarketValue(JobSpec $job, int $year, int $yearOffset, ModelAssumptions $modelAssumptions): float
     {
         if ($job->isPrivate()) {
-            return $this->privateValuationScenarioService->commonFmvForYear($job, $year, 'medium');
+            return $this->privateValuationScenarioService->commonFmvForYear($job, $year, 'medium', $modelAssumptions);
         }
 
         return $this->equityValuationService->sharePrice($job, max(0, $yearOffset), 'medium');
@@ -277,8 +300,36 @@ class EquityCompensationFactsBuilder extends TaxPreviewFactBuilder
             sourceType: TaxFactSourceType::EquityCompSaleProceeds,
             formType: 'career_comparison_projection',
             routing: TaxFactRouting::ScheduleDEquitySaleProceeds,
-            routingReason: 'Career comparison liquid equity proceeds are routed as Schedule D review inputs until basis and holding period are known.',
-            notes: 'Projection records gross proceeds only; cost basis and holding period remain outside this model.',
+            routingReason: 'Career comparison liquid equity proceeds are routed as Schedule D review inputs; projected gain is emitted as a separate source when basis is known.',
+            notes: 'Projection records gross proceeds separately from the modeled capital-gain amount.',
+        );
+    }
+
+    private function equityCapitalGainSource(JobSpec $job, int $year, float $amount): TaxFactSource
+    {
+        return new TaxFactSource(
+            id: $this->sourceId($job, $year, 'equity-capital-gain', TaxFactSourceType::EquityCompLongTermCapitalGain->value),
+            label: "{$job->name()} equity long-term capital gain",
+            amount: $amount,
+            sourceType: TaxFactSourceType::EquityCompLongTermCapitalGain,
+            formType: 'career_comparison_projection',
+            routing: TaxFactRouting::ScheduleDEquityCapitalGain,
+            routingReason: 'Projected private-company liquidity gain is routed through the same Schedule D preferential-capital-gain tax path used by the tax preview.',
+            notes: 'Projection treats scenario liquidity-event gain as long-term capital gain based on modeled proceeds minus exercise basis.',
+        );
+    }
+
+    private function privateRsuOrdinaryIncomeSource(JobSpec $job, int $year, float $amount): TaxFactSource
+    {
+        return new TaxFactSource(
+            id: $this->sourceId($job, $year, 'private-rsu-ordinary-income', TaxFactSourceType::EquityCompRsuOrdinaryIncome->value),
+            label: "{$job->name()} private RSU liquidity ordinary income",
+            amount: $amount,
+            sourceType: TaxFactSourceType::EquityCompRsuOrdinaryIncome,
+            formType: 'career_comparison_projection',
+            routing: TaxFactRouting::Form1040RsuOrdinaryIncome,
+            routingReason: 'Private-company RSU liquidity is treated as ordinary compensation income in the career-comparison projection.',
+            notes: 'Projection treats private RSU settlement value as ordinary wage-like income rather than preferential long-term capital gain.',
         );
     }
 
