@@ -106,7 +106,10 @@ class TaxPreviewWorkbookBuilder
         ];
     }
 
-    /** @param array<int, mixed> $interests */
+    /**
+     * @param  array<int, mixed>  $interests
+     * @return array<int, array<string, mixed>>
+     */
     private function partnershipBasisSummaryRows(array $interests): array
     {
         $rows = [['description' => 'Partnership basis summary', 'isHeader' => true]];
@@ -126,7 +129,10 @@ class TaxPreviewWorkbookBuilder
         return $rows;
     }
 
-    /** @param array<int, mixed> $interests */
+    /**
+     * @param  array<int, mixed>  $interests
+     * @return array<int, array<string, mixed>>
+     */
     private function partnershipBasisWorksheetRows(array $interests): array
     {
         $rows = [['description' => 'Outside basis rollforward', 'isHeader' => true]];
@@ -141,7 +147,10 @@ class TaxPreviewWorkbookBuilder
         return $rows;
     }
 
-    /** @param array<int, mixed> $interests */
+    /**
+     * @param  array<int, mixed>  $interests
+     * @return array<int, array<string, mixed>>
+     */
     private function partnershipBasisCapitalRows(array $interests): array
     {
         $rows = [['description' => 'Inside basis / capital reconciliation', 'isHeader' => true]];
@@ -161,7 +170,9 @@ class TaxPreviewWorkbookBuilder
         return $rows;
     }
 
-    /** @param array<int, mixed> $interests */
+    /** @param  array<int, mixed>  $interests
+     * @return array<int, array<string, mixed>>
+     */
     private function partnershipBasisDistributionRows(array $interests): array
     {
         $rows = [['description' => 'Distribution & liquidation analysis', 'isHeader' => true]];
@@ -182,7 +193,9 @@ class TaxPreviewWorkbookBuilder
         return $rows;
     }
 
-    /** @param array<int, mixed> $interests */
+    /** @param  array<int, mixed>  $interests
+     * @return array<int, array<string, mixed>>
+     */
     private function partnershipBasisSourceRows(array $interests): array
     {
         $rows = [['description' => 'Basis source lines', 'isHeader' => true]];
