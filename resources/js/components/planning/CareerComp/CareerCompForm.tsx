@@ -594,7 +594,7 @@ function GrantRow({ title, summary, selected, onEdit, onDuplicate, onRemove }: {
     <div
       className={selected
         ? 'flex items-center justify-between gap-2 rounded-md border border-primary/60 bg-primary/10 p-3 ring-1 ring-primary/30'
-        : 'flex items-center justify-between gap-2 rounded-md border p-3'}
+        : 'flex items-center justify-between gap-2 rounded-md border border-muted p-3'}
     >
       <button type="button" aria-current={selected ? 'true' : undefined} onClick={onEdit} className="min-w-0 flex-1 text-left focus-visible:outline-none">
         <p className="truncate text-sm font-medium">{title}</p>
@@ -820,7 +820,7 @@ function JobListButton({ job, labelPrefix, onOpen, onOpenOfferNotes }: {
   onOpenOfferNotes?: OpenOfferNotes | undefined
 }): ReactElement {
   return (
-    <div className="group rounded-md border border-border bg-card transition-colors hover:bg-muted/40">
+    <div className="group rounded-md border border-muted bg-card transition-colors hover:bg-muted/40">
       <button
         type="button"
         onClick={onOpen}
@@ -1068,7 +1068,7 @@ export function OfferNotesColumn({ inputs, jobId, onChange }: {
         height="60vh"
         ariaLabelledBy={labelId}
         placeholder={'# Notes\n\nCapture assumptions, negotiation context, and follow-up questions.'}
-        className="overflow-hidden rounded-md border border-border"
+        className="overflow-hidden rounded-md border border-muted"
       />
     </div>
   )
@@ -1246,7 +1246,7 @@ function ValuationTimelineLauncher({ job, onOpenValuationTimeline }: { job: JobS
     <button
       type="button"
       onClick={() => onOpenValuationTimeline(job.id)}
-      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-muted px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
         <LineChart className="size-4" />
@@ -1591,7 +1591,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
     if (onOpenJobEditor) {
       return (
         <div className="space-y-4">
-          <div className="rounded-md border border-border bg-muted/20 p-3">
+          <div className="rounded-md border border-muted bg-muted/20 p-3">
             <Label className="text-sm font-semibold">Current job baselines</Label>
             <p className="mt-1 text-sm text-muted-foreground">Open each current job in its own Miller column so compensation, equity, and transition inputs have more room.</p>
           </div>
@@ -1674,7 +1674,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
   if (onOpenJobEditor) {
     return (
       <div className="space-y-4">
-        <div className="rounded-md border border-border bg-muted/20 p-3">
+        <div className="rounded-md border border-muted bg-muted/20 p-3">
           <Label className="text-sm font-semibold">Offer list</Label>
           <p className="mt-1 text-sm text-muted-foreground">Choose an offer to edit it in a dedicated Miller column with wider space for compensation, equity, transition, and notes.</p>
         </div>

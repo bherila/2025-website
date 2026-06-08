@@ -190,7 +190,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
           <CardDescription>Lifetime after-tax totals consume the backend federal and AMT projection. Deltas compare against the current job when one exists.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto rounded-lg border" aria-label="After-tax lifetime value comparison table">
+          <div className="overflow-auto rounded-lg border border-muted" aria-label="After-tax lifetime value comparison table">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -237,7 +237,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
           <CardDescription>Per-year taxable compensation, ISO/NSO equity facts, and after-tax free cash flow from the projection.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="max-h-[520px] overflow-auto rounded-lg border" aria-label="Annual after-tax equity breakdown table">
+          <div className="max-h-[520px] overflow-auto rounded-lg border border-muted" aria-label="Annual after-tax equity breakdown table">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -285,7 +285,7 @@ export function ProjectionAfterTaxFreeCashFlow({ projection }: ProjectionProps):
           {sourceRows.length === 0 ? (
             <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No equity tax source rows for this projection.</p>
           ) : (
-            <div className="max-h-[420px] overflow-auto rounded-lg border" aria-label="Equity tax source breakdown table">
+            <div className="max-h-[420px] overflow-auto rounded-lg border border-muted" aria-label="Equity tax source breakdown table">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -353,7 +353,7 @@ export function ProjectionLifetimeValue({ projection, onOpenDetail }: Projection
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-col gap-4 rounded-md border bg-card p-4 md:flex-row md:items-start md:justify-between">
+      <div className="flex flex-col gap-4 rounded-md border border-muted bg-card p-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-2">
           <div className="text-xs font-medium uppercase text-muted-foreground">Outcome</div>
           <ButtonGroup role="group" aria-label="Lifetime value outcome">
@@ -388,7 +388,7 @@ export function ProjectionLifetimeValue({ projection, onOpenDetail }: Projection
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto rounded-lg border">
+          <div className="overflow-auto rounded-lg border border-muted">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -470,7 +470,7 @@ export function ProjectionVestingBreakdown({ projection }: ProjectionProps): Rea
             {job.vesting.length === 0 ? (
               <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No equity vesting rows for this job.</p>
             ) : (
-              <div className="overflow-auto rounded-lg border">
+              <div className="overflow-auto rounded-lg border border-muted">
                 <Table>
                   <TableHeader>
                     <TableRow>

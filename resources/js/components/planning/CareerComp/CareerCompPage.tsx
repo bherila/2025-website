@@ -330,7 +330,7 @@ function columnStackToRoute(columns: CareerCompColumnState[]): CareerCompRoute {
 
 function ProjectionEmptyState({ loading }: { loading: boolean }): ReactElement {
   return (
-    <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+    <div className="rounded-md border border-muted bg-muted/30 p-4 text-sm text-muted-foreground">
       {loading ? 'Calculating projection...' : 'Projection will appear after the backend compute endpoint returns successfully.'}
     </div>
   )
@@ -342,7 +342,7 @@ function ColumnOpenButton({ label, description, icon: Icon, onClick }: { label: 
       type="button"
       onClick={onClick}
       aria-label={`Open ${label}`}
-      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-muted bg-card px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
         <Icon className="size-4" />
@@ -967,7 +967,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       <WarningDetailsDialog warning={selectedWarning} onOpenChange={(open) => { if (!open) setSelectedWarning(null) }} />
 
       {status ? (
-        <section className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{status}</section>
+        <section className="rounded-md border border-muted bg-muted/30 p-3 text-sm text-muted-foreground">{status}</section>
       ) : null}
 
       <section className="grid gap-3">

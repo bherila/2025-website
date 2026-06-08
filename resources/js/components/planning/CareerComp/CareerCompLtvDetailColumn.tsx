@@ -723,7 +723,7 @@ export function CareerCompLtvDetailColumn({ projection, instanceKey, onOpenYear 
         <h2 className="text-sm font-semibold">{payload.title}</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">{payload.description}</p>
       </div>
-      <div className="overflow-hidden rounded-md border">
+      <div className="overflow-hidden rounded-md border border-muted">
         <Table>
           <TableHeader>
             <TableRow>
@@ -795,7 +795,7 @@ export function CareerCompLtvDetailYearColumn({ projection, inputs, instanceKey 
         <h2 className="text-sm font-semibold">{payload.title}</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">{payload.description}</p>
       </div>
-      <div className="overflow-hidden rounded-md border">
+      <div className="overflow-hidden rounded-md border border-muted">
         <Table>
           <TableHeader>
             <TableRow>
