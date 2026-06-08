@@ -183,7 +183,7 @@ const VESTING_SCHEDULE_OPTIONS: SelectOption<VestingSchedulePresetId>[] = [
   { value: 'custom', label: 'Custom / manual fields' },
 ]
 
-const MAX_HYPOTHETICAL_JOBS = 10
+export const MAX_HYPOTHETICAL_JOBS = 10
 
 const GRANT_KIND_OPTIONS: SelectOption<'hire' | 'refresher'>[] = [
   { value: 'hire', label: 'New hire' },
@@ -1558,7 +1558,17 @@ function JobEditor({
   )
 }
 
-export function JobEditorColumn({ inputs, jobId, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant }: CareerCompFormProps & { jobId: string }): ReactElement {
+export function JobEditorColumn({
+  inputs,
+  jobId,
+  onChange,
+  onOpenGrantEditor,
+  onOpenValuationTimeline,
+  onOpenOfferNotes,
+  onOpenModelAssumptions,
+  activeGrant,
+  compact,
+}: CareerCompFormProps & { jobId: string; compact?: boolean | undefined }): ReactElement {
   const job = findJob(inputs, jobId)
 
   if (!job) {
@@ -1591,6 +1601,7 @@ export function JobEditorColumn({ inputs, jobId, onChange, onOpenGrantEditor, on
       onOpenValuationTimeline={onOpenValuationTimeline}
       onOpenOfferNotes={isCurrentJob ? undefined : onOpenOfferNotes}
       onOpenModelAssumptions={onOpenModelAssumptions}
+      compact={compact}
     />
   )
 }

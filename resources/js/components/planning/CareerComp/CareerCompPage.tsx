@@ -25,6 +25,7 @@ import {
   CareerCompFormSection,
   type CareerCompFormSectionId,
   GrantEditorColumn,
+  MAX_HYPOTHETICAL_JOBS,
   type GrantType,
   JobEditorColumn,
   notRenderedViaMillerShell,
@@ -748,8 +749,10 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         }))
       }
 
+      const canCopyOffer = inputs.hypotheticalJobs.length < MAX_HYPOTHETICAL_JOBS
+
       const copyOffer = (): void => {
-        if (!jobForActions || isCurrentJob) {
+        if (!jobForActions || isCurrentJob || !canCopyOffer) {
           return
         }
 
@@ -781,7 +784,15 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         ? null
         : (
           <div className="flex shrink-0 items-center gap-1">
-            <Button type="button" variant="ghost" size="sm" aria-label={`Copy ${jobForActions.name}`} title={`Copy ${jobForActions.name}`} onClick={copyOffer}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={`Copy ${jobForActions.name}`}
+              title={canCopyOffer ? `Copy ${jobForActions.name}` : `Cannot add more than ${MAX_HYPOTHETICAL_JOBS} offers`}
+              disabled={!canCopyOffer}
+              onClick={copyOffer}
+            >
               <Copy className="size-4" />
             </Button>
             <Button type="button" variant="ghost" size="sm" aria-label={`Open notes for ${jobForActions.name}`} title={`Open notes for ${jobForActions.name}`} onClick={() => onOpenOfferNotes(jobForActions.id)}>
