@@ -72,10 +72,24 @@ class IrsReturnPdfBuilder
             }
 
             $value = $this->valueResolver->resolve($source, $context);
-            $values[$pdfField] = $this->valueFormatter->format($value, $mapping, $fields[$pdfField] ?? null);
+            $formattedValue = $this->valueFormatter->format($value, $mapping, $fields[$pdfField] ?? null);
+
+            if ($this->isUncheckedCheckboxValue($mapping, $formattedValue)) {
+                continue;
+            }
+
+            $values[$pdfField] = $formattedValue;
         }
 
         return $values;
+    }
+
+    /**
+     * @param  array<string, mixed>  $mapping
+     */
+    private function isUncheckedCheckboxValue(array $mapping, string|bool|null $value): bool
+    {
+        return ($mapping['format'] ?? null) === 'checkbox' && $value === false;
     }
 
     private function profile(User $user, int $year): ?FinTaxReturnProfile
