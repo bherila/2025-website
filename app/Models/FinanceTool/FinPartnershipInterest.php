@@ -53,10 +53,10 @@ class FinPartnershipInterest extends Model
         return $this->belongsTo(FileForTaxDocument::class, 'source_tax_document_id');
     }
 
-    /** @return BelongsTo<FinDocumentAccount, $this> */
+    /** @return BelongsTo<TaxDocumentAccount, $this> */
     public function sourceTaxDocumentAccount(): BelongsTo
     {
-        return $this->belongsTo(FinDocumentAccount::class, 'source_tax_document_account_id');
+        return $this->belongsTo(TaxDocumentAccount::class, 'source_tax_document_account_id');
     }
 
     /** @return HasMany<FinPartnershipBasisYear, $this> */

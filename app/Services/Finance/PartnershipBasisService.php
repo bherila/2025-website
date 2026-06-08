@@ -45,7 +45,7 @@ class PartnershipBasisService
                 ->where('tax_year', $year)
                 ->where('form_type', 'k1')
                 ->get()
-                ->each(fn (FileForTaxDocument $document): FinPartnershipInterest => $this->syncK1Document($document, $userId, $year));
+                ->each(fn (FileForTaxDocument $document): ?FinPartnershipInterest => $this->syncK1Document($document, $userId, $year));
         }
 
         /** @var EloquentCollection<int, FinPartnershipInterest> $interests */
@@ -53,7 +53,8 @@ class PartnershipBasisService
             ->where('user_id', $userId)
             ->where(function ($query) use ($year): void {
                 $query->whereHas('basisEvents', fn ($events) => $events->where('tax_year', $year))
-                    ->orWhereHas('basisYears', fn ($basisYears) => $basisYears->where('tax_year', $year));
+                    ->orWhereHas('basisYears', fn ($basisYears) => $basisYears->where('tax_year', $year))
+                    ->orWhereHas('basisYears', fn ($basisYears) => $basisYears->where('tax_year', $year - 1));
             })
             ->with(['basisEvents' => fn ($events) => $events->where('tax_year', $year)->orderBy('event_order')->orderBy('id')])
             ->get();
@@ -123,15 +124,15 @@ class PartnershipBasisService
             ->get();
 
         $beginningOutside = $this->beginningOutsideBasisCents($events, $prior);
-        $beginningTaxCapital = $this->capitalBeginningCents($events, 'initial_tax_basis_capital');
-        $beginningBookCapital = $this->capitalBeginningCents($events, 'initial_capital_account_value');
-        $beginningInside = $this->capitalBeginningNullableCents($events, 'initial_tax_basis_capital');
+        $beginningTaxCapital = $this->capitalBeginningCents($events, 'initial_tax_basis_capital', $prior instanceof FinPartnershipBasisYear ? (int) $prior->ending_tax_basis_capital_cents : 0);
+        $beginningBookCapital = $this->capitalBeginningCents($events, 'initial_capital_account_value', $prior instanceof FinPartnershipBasisYear ? (int) $prior->ending_book_capital_cents : 0);
+        $beginningInside = $this->capitalBeginningNullableCents($events, 'initial_tax_basis_capital', $prior instanceof FinPartnershipBasisYear ? (int) $prior->ending_inside_basis_cents : null);
         $liabilities = $this->liabilityTotals($events);
 
         $totals = $this->emptyYearTotals();
         $availableOutsideBasis = $beginningOutside;
         $distributionGain = 0;
-        $suspendedLoss = 0;
+        $suspendedLoss = $prior instanceof FinPartnershipBasisYear ? max(0, (int) $prior->suspended_loss_carryforward_cents) : 0;
 
         foreach ($events as $event) {
             $type = PartnershipBasisEventType::tryFrom((string) $event->event_type);
@@ -170,7 +171,13 @@ class PartnershipBasisService
 
         $endingTaxCapital = $this->endingCapitalCents($events, $beginningTaxCapital, 'tax_basis');
         $endingBookCapital = $this->endingCapitalCents($events, $beginningBookCapital, 'book');
-        $endingInside = $endingTaxCapital !== 0 ? $endingTaxCapital : $beginningInside;
+        if ($suspendedLoss > 0 && $availableOutsideBasis > 0) {
+            $releasedSuspendedLoss = min($availableOutsideBasis, $suspendedLoss);
+            $availableOutsideBasis -= $releasedSuspendedLoss;
+            $suspendedLoss -= $releasedSuspendedLoss;
+        }
+
+        $endingInside = $endingTaxCapital;
         $hasLiquidation = $this->hasLiquidationEvent($events);
         $reviewStatus = $this->reviewStatus($events, $distributionGain, $suspendedLoss, $hasLiquidation);
         $liquidationGainLoss = $this->liquidationGainLossCents($events, $availableOutsideBasis, $distributionGain);
@@ -268,10 +275,13 @@ class PartnershipBasisService
         $year = (int) $payload['tax_year'];
         $interest = $this->resolveManualInterest($account, $userId, isset($payload['partnership_interest_id']) ? (int) $payload['partnership_interest_id'] : null);
         $this->assertYearEditable($interest, $year);
+        $eventType = PartnershipBasisEventType::from((string) $payload['event_type']);
 
         // Manual events are append-only: two manual events of the same type/year are
         // distinct rows, never collapsed into one.
         $event = $this->appendEvent($interest, array_merge($payload, [
+            'event_order' => $payload['event_order'] ?? $this->eventOrder($eventType->value),
+            'basis_side' => $payload['basis_side'] ?? $this->basisSideFor($eventType),
             'source_type' => $payload['source_type'] ?? 'manual',
             'account_id' => $account->acct_id,
         ]));
@@ -281,21 +291,18 @@ class PartnershipBasisService
         return $event;
     }
 
-    public function lockAccountYear(FinAccounts $account, int $userId, int $year): ?FinPartnershipBasisYear
+    /** @return EloquentCollection<int, FinPartnershipBasisYear> */
+    public function lockAccountYear(FinAccounts $account, int $userId, int $year): EloquentCollection
     {
-        $basisYear = FinPartnershipBasisYear::query()
+        $basisYears = FinPartnershipBasisYear::query()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
             ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
-            ->first();
+            ->get();
 
-        if (! $basisYear instanceof FinPartnershipBasisYear) {
-            return null;
-        }
+        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'locked', 'locked_at' => now()]));
 
-        $basisYear->update(['review_status' => 'locked', 'locked_at' => now()]);
-
-        return $basisYear;
+        return $basisYears;
     }
 
     /**
@@ -393,9 +400,14 @@ class PartnershipBasisService
         ];
     }
 
-    private function syncK1Document(FileForTaxDocument $document, int $userId, int $year): FinPartnershipInterest
+    private function syncK1Document(FileForTaxDocument $document, int $userId, int $year): ?FinPartnershipInterest
     {
         $data = is_array($document->parsed_data) ? $document->parsed_data : [];
+        $formType = $this->mapFormType((string) ($data['formType'] ?? 'K-1-1065'));
+        if ($formType !== 'k1_1065') {
+            return null;
+        }
+
         $link = $document->accountLinks->first(fn ($candidate): bool => $candidate instanceof TaxDocumentAccount && (int) $candidate->tax_year === $year);
         $accountId = $link instanceof TaxDocumentAccount ? $link->account_id : $document->account_id;
         $interest = $this->findOrCreateInterest(
@@ -405,7 +417,7 @@ class PartnershipBasisService
             // the publicly-traded-partnership flag (per the K-1 spec used across the app).
             $this->normalizeEin($data['fields']['A']['value'] ?? null),
             $this->stringField($data, 'B') ?? $this->stringField($data, 'A') ?? 'Partnership',
-            $this->mapFormType((string) ($data['formType'] ?? 'K-1-1065')),
+            $formType,
             $document,
             $link instanceof TaxDocumentAccount ? $link : null,
             $this->truthyFlag($data['fields']['D']['value'] ?? null),
@@ -491,7 +503,7 @@ class PartnershipBasisService
                 'event_order' => $this->eventOrder($type->value),
                 'basis_side' => $this->basisSideFor($type),
                 'event_type' => $type->value,
-                'amount_cents' => abs($amountCents),
+                'amount_cents' => $this->preserveSignedAmount($type) ? $amountCents : abs($amountCents),
                 'source_type' => $sourceType,
                 'tax_document_id' => $document->id,
                 'tax_document_account_id' => $link?->id,
@@ -841,7 +853,7 @@ class PartnershipBasisService
     {
         return match ($type) {
             PartnershipBasisEventType::InitialTaxBasisCapital, PartnershipBasisEventType::InitialCapitalAccountValue => 'inside',
-            PartnershipBasisEventType::Memorandum, PartnershipBasisEventType::ReconciliationAdjustment => 'memorandum',
+            PartnershipBasisEventType::Memorandum, PartnershipBasisEventType::ReconciliationAdjustment, PartnershipBasisEventType::ManualReconciliationNote => 'memorandum',
             PartnershipBasisEventType::PriorYearRollforward => 'both',
             default => 'outside',
         };
@@ -874,19 +886,19 @@ class PartnershipBasisService
     }
 
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
-    private function capitalBeginningCents(Collection $events, string $eventType): int
+    private function capitalBeginningCents(Collection $events, string $eventType, int $fallback = 0): int
     {
         $event = $events->first(fn (FinPartnershipBasisEvent $basisEvent): bool => $basisEvent->event_type === $eventType);
 
-        return $event instanceof FinPartnershipBasisEvent ? (int) $event->amount_cents : 0;
+        return $event instanceof FinPartnershipBasisEvent ? (int) $event->amount_cents : $fallback;
     }
 
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
-    private function capitalBeginningNullableCents(Collection $events, string $eventType): ?int
+    private function capitalBeginningNullableCents(Collection $events, string $eventType, ?int $fallback = null): ?int
     {
         $event = $events->first(fn (FinPartnershipBasisEvent $basisEvent): bool => $basisEvent->event_type === $eventType);
 
-        return $event instanceof FinPartnershipBasisEvent ? (int) $event->amount_cents : null;
+        return $event instanceof FinPartnershipBasisEvent ? (int) $event->amount_cents : $fallback;
     }
 
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
@@ -899,7 +911,7 @@ class PartnershipBasisService
         $currentYear = $events->whereIn('event_type', ['capital_contribution_cash', 'capital_contribution_property_basis', 'taxable_income', 'tax_exempt_income'])->sum('amount_cents')
             - $events->whereIn('event_type', ['cash_distribution', 'property_distribution_basis', 'deductible_loss', 'nondeductible_expense', 'foreign_tax'])->sum('amount_cents');
 
-        return max(0, $beginning + (int) $currentYear);
+        return $beginning + (int) $currentYear;
     }
 
     /**
@@ -1009,9 +1021,22 @@ class PartnershipBasisService
             'liability_decrease', 'deemed_distribution_liability_decrease' => 50,
             'deductible_loss', 'section179', 'depletion', 'nondeductible_expense', 'foreign_tax' => 60,
             'sale_exchange', 'liquidation_distribution_cash', 'liquidation_distribution_property' => 70,
-            'reconciliation_adjustment', 'memorandum' => 90,
+            'manual_increase_to_outside_basis' => 25,
+            'manual_decrease_to_outside_basis' => 65,
+            'manual_reconciliation_note', 'reconciliation_adjustment', 'memorandum' => 90,
             default => 100,
         };
+    }
+
+    private function preserveSignedAmount(PartnershipBasisEventType $type): bool
+    {
+        return in_array($type, [
+            PartnershipBasisEventType::InitialTaxBasisCapital,
+            PartnershipBasisEventType::InitialCapitalAccountValue,
+            PartnershipBasisEventType::ReconciliationAdjustment,
+            PartnershipBasisEventType::ManualReconciliationNote,
+            PartnershipBasisEventType::Memorandum,
+        ], true);
     }
 
     /** @param array<string, mixed> $data */

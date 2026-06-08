@@ -125,7 +125,72 @@ class PartnershipBasisApiTest extends TestCase
 
         $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/lock?year=2024")
             ->assertOk()
-            ->assertJsonPath('reviewStatus', 'locked');
+            ->assertJsonPath('interests.0.reviewStatus', 'locked');
+    }
+
+    public function test_event_update_cannot_reassign_partnership_interest(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Update Account']);
+        $first = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'First Update LP',
+            'normalized_partnership_name' => 'first update lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $second = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Second Update LP',
+            'normalized_partnership_name' => 'second update lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $event = FinPartnershipBasisEvent::create([
+            'user_id' => $user->id,
+            'partnership_interest_id' => $first->id,
+            'account_id' => $account->acct_id,
+            'tax_year' => 2024,
+            'event_type' => 'taxable_income',
+            'amount_cents' => 10_00,
+            'source_type' => 'manual',
+            'review_status' => 'reviewed',
+        ]);
+
+        $this->putJson("/api/finance/accounts/{$account->acct_id}/basis/events/{$event->id}", [
+            'partnership_interest_id' => $second->id,
+            'amount_cents' => 25_00,
+        ])->assertOk();
+
+        $event->refresh();
+        $this->assertSame($first->id, (int) $event->partnership_interest_id);
+        $this->assertSame(25_00, (int) $event->amount_cents);
+    }
+
+    public function test_lock_endpoint_locks_every_basis_year_for_account(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Multi Lock Account']);
+
+        foreach (['First Lock LP', 'Second Lock LP'] as $name) {
+            $interest = FinPartnershipInterest::create([
+                'user_id' => $user->id,
+                'account_id' => $account->acct_id,
+                'partnership_name' => $name,
+                'normalized_partnership_name' => strtolower($name),
+                'form_type' => 'k1_1065',
+            ]);
+            $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+            app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+        }
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/lock?year=2024")
+            ->assertOk()
+            ->assertJsonCount(2, 'interests')
+            ->assertJsonPath('interests.0.reviewStatus', 'locked')
+            ->assertJsonPath('interests.1.reviewStatus', 'locked');
     }
 
     public function test_unknown_event_type_is_rejected(): void

@@ -53,7 +53,9 @@ enum PartnershipBasisEventType: string
     case SaleExchange = 'sale_exchange';
     case LiquidationDistributionCash = 'liquidation_distribution_cash';
     case LiquidationDistributionProperty = 'liquidation_distribution_property';
-    case ManualAdjustment = 'manual_adjustment';
+    case ManualIncreaseToOutsideBasis = 'manual_increase_to_outside_basis';
+    case ManualDecreaseToOutsideBasis = 'manual_decrease_to_outside_basis';
+    case ManualReconciliationNote = 'manual_reconciliation_note';
     case ReconciliationAdjustment = 'reconciliation_adjustment';
     case Memorandum = 'memorandum';
 
@@ -85,7 +87,8 @@ enum PartnershipBasisEventType: string
             self::CapitalContributionPropertyBasis,
             self::TaxableIncome,
             self::TaxExemptIncome,
-            self::LiabilityIncrease => self::BASIS_EFFECT_INCREASE,
+            self::LiabilityIncrease,
+            self::ManualIncreaseToOutsideBasis => self::BASIS_EFFECT_INCREASE,
 
             self::CashDistribution,
             self::MarketableSecuritiesDistribution,
@@ -94,7 +97,8 @@ enum PartnershipBasisEventType: string
             self::LiquidationDistributionCash => self::BASIS_EFFECT_DECREASE_GAIN,
 
             self::PropertyDistributionBasis,
-            self::LiquidationDistributionProperty => self::BASIS_EFFECT_DECREASE_REALLOCATE,
+            self::LiquidationDistributionProperty,
+            self::ManualDecreaseToOutsideBasis => self::BASIS_EFFECT_DECREASE_REALLOCATE,
 
             self::DeductibleLoss,
             self::NondeductibleExpense,
@@ -118,7 +122,8 @@ enum PartnershipBasisEventType: string
             self::InitialCashContribution,
             self::InitialPropertyContributionBasis,
             self::CapitalContributionCash,
-            self::CapitalContributionPropertyBasis => 'capital_contributions_cents',
+            self::CapitalContributionPropertyBasis,
+            self::ManualIncreaseToOutsideBasis => 'capital_contributions_cents',
             self::TaxableIncome => 'taxable_income_increase_cents',
             self::TaxExemptIncome => 'tax_exempt_income_increase_cents',
             self::LiabilityIncrease => 'liability_increase_cents',
@@ -134,6 +139,7 @@ enum PartnershipBasisEventType: string
             self::Depletion => 'deductions_losses_decrease_cents',
             self::NondeductibleExpense => 'nondeductible_expenses_decrease_cents',
             self::ForeignTax => 'foreign_taxes_decrease_cents',
+            self::ManualDecreaseToOutsideBasis => 'deductions_losses_decrease_cents',
             default => null,
         };
     }

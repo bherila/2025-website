@@ -91,7 +91,9 @@ const MANUAL_EVENT_TYPES: { value: string; label: string }[] = [
   { value: 'nondeductible_expense', label: 'Nondeductible expense' },
   { value: 'foreign_tax', label: 'Foreign tax' },
   { value: 'beginning_basis', label: 'Beginning basis override' },
-  { value: 'manual_adjustment', label: 'Manual adjustment' },
+  { value: 'manual_increase_to_outside_basis', label: 'Manual basis increase' },
+  { value: 'manual_decrease_to_outside_basis', label: 'Manual basis decrease' },
+  { value: 'manual_reconciliation_note', label: 'Memorandum note (no basis effect)' },
 ]
 
 function selectedYearForAccount(accountId: number): number {

@@ -65,6 +65,7 @@ class PartnershipBasisController extends Controller
         $interest = $basisEvent->partnershipInterest;
         $originalYear = (int) $basisEvent->tax_year;
         $payload = $this->eventPayload($request, false);
+        unset($payload['partnership_interest_id']);
         $newYear = isset($payload['tax_year']) ? (int) $payload['tax_year'] : $originalYear;
 
         $this->partnershipBasisService->assertYearEditable($interest, $originalYear);
@@ -96,10 +97,12 @@ class PartnershipBasisController extends Controller
 
     public function lock(Request $request, int $account): JsonResponse
     {
-        $basisYear = $this->partnershipBasisService->lockAccountYear($this->account($account), (int) Auth::id(), $this->year($request));
-        abort_if($basisYear === null, 404);
+        $year = $this->year($request);
+        $financeAccount = $this->account($account);
+        $basisYears = $this->partnershipBasisService->lockAccountYear($financeAccount, (int) Auth::id(), $year);
+        abort_if($basisYears->isEmpty(), 404);
 
-        return response()->json($this->partnershipBasisService->basisYearToArray($this->loadYearEvents($basisYear)));
+        return response()->json($this->partnershipBasisService->accountBasisData($financeAccount, (int) Auth::id(), $year));
     }
 
     private function loadYearEvents(FinPartnershipBasisYear $basisYear): FinPartnershipBasisYear

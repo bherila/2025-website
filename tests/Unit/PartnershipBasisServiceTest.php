@@ -323,6 +323,139 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame($second->id, (int) $event->partnership_interest_id);
     }
 
+    public function test_recompute_for_user_year_carries_prior_year_interest_without_current_events(): void
+    {
+        $interest = $this->interest('Prior Only LP');
+        $this->manualEvent($interest, 2023, 'beginning_basis', 100_00);
+        $this->service->recomputeForUserYear($this->user->id, 2023);
+
+        $years = $this->service->recomputeForUserYear($this->user->id, 2024);
+
+        $this->assertCount(1, $years);
+        $this->assertSame(100_00, $years->first()->beginning_outside_basis_cents);
+        $this->assertSame(100_00, $years->first()->ending_outside_basis_cents);
+    }
+
+    public function test_suspended_losses_carry_forward_and_release_when_basis_is_restored(): void
+    {
+        $interest = $this->interest('Suspended Release LP');
+        $this->manualEvent($interest, 2023, 'deductible_loss', 150_00);
+        $this->service->recomputeInterestYear($interest, 2023);
+
+        $this->manualEvent($interest, 2024, 'capital_contribution_cash', 100_00);
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents);
+        $this->assertSame(50_00, $basisYear->suspended_loss_carryforward_cents);
+    }
+
+    public function test_prior_tax_and_book_capital_roll_forward_without_current_capital_seed(): void
+    {
+        $interest = $this->interest('Capital Carry LP');
+        $this->manualEvent($interest, 2023, 'initial_tax_basis_capital', 75_00);
+        $this->manualEvent($interest, 2023, 'initial_capital_account_value', 120_00);
+        $this->service->recomputeInterestYear($interest, 2023);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(75_00, $basisYear->beginning_tax_basis_capital_cents);
+        $this->assertSame(75_00, $basisYear->ending_tax_basis_capital_cents);
+        $this->assertSame(120_00, $basisYear->beginning_book_capital_cents);
+        $this->assertSame(120_00, $basisYear->ending_book_capital_cents);
+    }
+
+    public function test_zero_ending_inside_basis_is_preserved(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Inside Zero LP', ['5' => '100'], ['19' => [['code' => 'A', 'value' => '200']]], [
+            'capitalAccount' => ['beginningCapital' => 100],
+        ]);
+
+        $this->assertSame(0, $basisYear->ending_tax_basis_capital_cents);
+        $this->assertSame(0, $basisYear->ending_inside_basis_cents);
+    }
+
+    public function test_signed_capital_account_values_are_preserved(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Deficit Capital LP', ['5' => '50'], [], [
+            'capitalAccount' => ['beginningCapital' => '-50'],
+        ]);
+
+        $this->assertSame(-50_00, $basisYear->beginning_tax_basis_capital_cents);
+        $this->assertSame(0, $basisYear->ending_tax_basis_capital_cents);
+    }
+
+    public function test_manual_events_default_to_basis_ordering(): void
+    {
+        $interest = $this->interest('Manual Ordering LP');
+
+        $this->service->createManualEvent($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_interest_id' => $interest->id,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 100_00,
+        ]);
+        $this->service->createManualEvent($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_interest_id' => $interest->id,
+            'event_type' => 'taxable_income',
+            'amount_cents' => 100_00,
+        ]);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+        $orders = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->pluck('event_order', 'event_type')
+            ->all();
+
+        $this->assertSame(0, $basisYear->distribution_gain_cents);
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents);
+        $this->assertSame(20, $orders['taxable_income']);
+        $this->assertSame(40, $orders['cash_distribution']);
+    }
+
+    public function test_manual_basis_increase_and_decrease_are_not_no_ops(): void
+    {
+        $interest = $this->interest('Manual Basis LP');
+
+        $this->service->createManualEvent($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_interest_id' => $interest->id,
+            'event_type' => 'manual_increase_to_outside_basis',
+            'amount_cents' => 100_00,
+        ]);
+        $this->service->createManualEvent($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_interest_id' => $interest->id,
+            'event_type' => 'manual_decrease_to_outside_basis',
+            'amount_cents' => 25_00,
+        ]);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(75_00, $basisYear->ending_outside_basis_cents);
+        $this->assertSame(100_00, $basisYear->capital_contributions_cents);
+        $this->assertSame(25_00, $basisYear->deductions_losses_decrease_cents);
+    }
+
+    public function test_non_1065_k1_documents_are_skipped(): void
+    {
+        $document = $this->k1Document(2024, 'S Corp K1 Inc', '11-1111111', [
+            'A' => ['value' => '11-1111111'],
+            'B' => ['value' => 'S Corp K1 Inc'],
+            'D' => ['value' => 'false'],
+            '5' => ['value' => '100'],
+        ], []);
+        $parsed = $document->parsed_data;
+        $parsed['formType'] = 'K-1-1120S';
+        $document->forceFill(['parsed_data' => $parsed])->save();
+
+        $years = $this->service->recomputeForUserYear($this->user->id, 2024);
+
+        $this->assertCount(0, $years);
+        $this->assertDatabaseCount('fin_partnership_interests', 0);
+    }
+
     /**
      * @param  array<string, string>  $fields
      * @param  array<string, array<int, array<string, string>>>  $codes
