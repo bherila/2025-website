@@ -272,9 +272,12 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
         }
 
         if ($datePrefixed && preg_match('/^(\d{4}\.\d{2}(?:\.\d{2})?)\s+(.+)$/', $nameWithoutExtension, $matches) === 1) {
-            $date = $this->parseDateToken($matches[1]);
             $label = $this->cleanLabel($matches[2]);
             $label = trim((string) preg_replace('/^'.preg_quote($accountName, '/').'\s+/i', '', $label));
+            $date = $this->parseDateToken(
+                $matches[1],
+                $this->documentKind($this->normaliseDocumentType($label)) === FinDocument::KIND_STATEMENT,
+            );
 
             return $date === null ? null : $this->parsedMetadata($label, $date);
         }
@@ -300,9 +303,10 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
         ];
     }
 
-    private function parseDateToken(string $token): ?CarbonImmutable
+    private function parseDateToken(string $token, bool $monthOnlyAsEndOfMonth = false): ?CarbonImmutable
     {
-        $format = substr_count($token, '.') === 1 ? 'Y.m' : 'Y.m.d';
+        $bareFormat = substr_count($token, '.') === 1 ? 'Y.m' : 'Y.m.d';
+        $format = '!'.$bareFormat;
 
         try {
             $date = CarbonImmutable::createFromFormat($format, $token);
@@ -314,7 +318,19 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
             return null;
         }
 
-        return $format === 'Y.m' ? $date->startOfMonth() : $date;
+        $errors = CarbonImmutable::getLastErrors();
+        if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
+            return null;
+        }
+        if ($date->format($bareFormat) !== $token) {
+            return null;
+        }
+
+        if ($bareFormat !== 'Y.m') {
+            return $date;
+        }
+
+        return $monthOnlyAsEndOfMonth ? $date->endOfMonth() : $date->startOfMonth();
     }
 
     private function cleanLabel(string $label): string
@@ -486,10 +502,7 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
                 $document = $this->createDocument($userId, $localDocument, $hash);
                 $events[] = $this->event('document', (string) $localDocument['relative_path'], 'imported', (string) $localDocument['document_type']);
             } else {
-                $document->fill([
-                    'document_type' => $localDocument['document_type'],
-                    'document_date' => $localDocument['document_date'],
-                ]);
+                $document->fill($this->documentDateFields($localDocument));
                 if ($document->isDirty()) {
                     $document->save();
                 }
@@ -521,12 +534,7 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
         return FinDocument::query()->create([
             'user_id' => $userId,
             'document_kind' => $localDocument['document_kind'],
-            'document_type' => $localDocument['document_type'],
-            'document_date' => $localDocument['document_date'],
-            'tax_year' => $localDocument['tax_year'] !== '' ? (int) $localDocument['tax_year'] : null,
-            'period_end' => in_array($localDocument['document_kind'], [FinDocument::KIND_STATEMENT, FinDocument::KIND_TAX_FORM], true)
-                ? $localDocument['document_date']
-                : null,
+            ...$this->documentDateFields($localDocument),
             'original_filename' => $localDocument['original_filename'],
             'stored_filename' => $storedFilename,
             's3_path' => $s3Path,
@@ -544,6 +552,22 @@ class FinancePrivateFundsReconcileCommand extends BaseFinanceCommand
             'is_reviewed' => false,
             'notes' => 'Imported from private fund document reconciliation.',
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $localDocument
+     * @return array<string, mixed>
+     */
+    private function documentDateFields(array $localDocument): array
+    {
+        return [
+            'document_type' => $localDocument['document_type'],
+            'document_date' => $localDocument['document_date'],
+            'tax_year' => $localDocument['tax_year'] !== '' ? (int) $localDocument['tax_year'] : null,
+            'period_end' => in_array($localDocument['document_kind'], [FinDocument::KIND_STATEMENT, FinDocument::KIND_TAX_FORM], true)
+                ? $localDocument['document_date']
+                : null,
+        ];
     }
 
     /**

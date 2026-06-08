@@ -95,20 +95,35 @@ return new class extends Migration
             }
         }
 
-        Schema::table('fin_documents', function (Blueprint $table): void {
-            if (Schema::hasIndex('fin_documents', 'fin_docs_user_type_date_idx')) {
-                $table->dropIndex('fin_docs_user_type_date_idx');
-            }
-            $table->dropColumn(['document_type', 'document_date']);
-        });
+        if (Schema::hasTable('fin_documents')) {
+            Schema::table('fin_documents', function (Blueprint $table): void {
+                if (Schema::hasIndex('fin_documents', 'fin_docs_user_type_date_idx')) {
+                    $table->dropIndex('fin_docs_user_type_date_idx');
+                }
+            });
+        }
 
-        Schema::table('fin_accounts', function (Blueprint $table): void {
-            $table->dropColumn([
-                'acct_capital_commitment',
-                'acct_capital_commitment_currency',
-                'acct_capital_commitment_date',
-                'acct_capital_commitment_notes',
-            ]);
-        });
+        foreach (['document_type', 'document_date'] as $column) {
+            if (Schema::hasColumn('fin_documents', $column)) {
+                Schema::table('fin_documents', function (Blueprint $table) use ($column): void {
+                    $table->dropColumn($column);
+                });
+            }
+        }
+
+        if (Schema::hasTable('fin_accounts')) {
+            Schema::table('fin_accounts', function (Blueprint $table): void {
+                $columns = array_values(array_filter([
+                    Schema::hasColumn('fin_accounts', 'acct_capital_commitment') ? 'acct_capital_commitment' : null,
+                    Schema::hasColumn('fin_accounts', 'acct_capital_commitment_currency') ? 'acct_capital_commitment_currency' : null,
+                    Schema::hasColumn('fin_accounts', 'acct_capital_commitment_date') ? 'acct_capital_commitment_date' : null,
+                    Schema::hasColumn('fin_accounts', 'acct_capital_commitment_notes') ? 'acct_capital_commitment_notes' : null,
+                ]));
+
+                if ($columns !== []) {
+                    $table->dropColumn($columns);
+                }
+            });
+        }
     }
 };

@@ -81,6 +81,20 @@ function diffFromDefaults(value: unknown, defaults: unknown): JsonValue | undefi
   return isJsonValue(value) ? value : undefined
 }
 
+function stripUrlOnlyFields(value: unknown, key = ''): unknown {
+  if (key === 'notesMarkdown') {
+    return null
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripUrlOnlyFields(entry))
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, stripUrlOnlyFields(entryValue, entryKey)]))
+  }
+
+  return value
+}
+
 function encodePayload(payload: JsonValue): string {
   return btoa(encodeURIComponent(JSON.stringify(payload)))
 }
@@ -105,7 +119,7 @@ export function parseCareerCompUrlState(search: string, base: CareerCompInputs =
 }
 
 export function serializeCareerCompUrlState(inputs: CareerCompInputs): string {
-  const normalizedInputs = normalizeCareerCompInputs(inputs)
+  const normalizedInputs = normalizeCareerCompInputs(stripUrlOnlyFields(inputs))
   const defaults = normalizeCareerCompInputs(DEFAULT_CAREER_COMP_INPUTS)
   const diff = diffFromDefaults(normalizedInputs, defaults)
 

@@ -58,6 +58,20 @@ describe('careerCompUrlState', () => {
     expect(parsed.hypotheticalJobs[0]?.refresher.cadenceYears).toBe(2)
   })
 
+  it('excludes offer notes from compact URL state', () => {
+    const inputs: CareerCompInputs = {
+      ...DEFAULT_CAREER_COMP_INPUTS,
+      hypotheticalJobs: [
+        {
+          ...baseJob,
+          notesMarkdown: 'x'.repeat(5000),
+        },
+      ],
+    }
+
+    expect(serializeCareerCompUrlState(inputs)).toBe('')
+  })
+
   it('falls back to base inputs when payload parsing fails', () => {
     expect(parseCareerCompUrlState('?cc=not-valid', DEFAULT_CAREER_COMP_INPUTS)).toEqual(DEFAULT_CAREER_COMP_INPUTS)
   })

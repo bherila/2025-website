@@ -181,6 +181,8 @@ const VESTING_SCHEDULE_OPTIONS: SelectOption<VestingSchedulePresetId>[] = [
   { value: 'custom', label: 'Custom / manual fields' },
 ]
 
+const MAX_HYPOTHETICAL_JOBS = 10
+
 const GRANT_KIND_OPTIONS: SelectOption<'hire' | 'refresher'>[] = [
   { value: 'hire', label: 'New hire' },
   { value: 'refresher', label: 'Refresher' },
@@ -1536,6 +1538,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
 
   const activeOffers = inputs.hypotheticalJobs.filter((job) => !job.archived)
   const archivedOffers = inputs.hypotheticalJobs.filter((job) => job.archived)
+  const canAddOffer = inputs.hypotheticalJobs.length < MAX_HYPOTHETICAL_JOBS
 
   return (
     <div className="space-y-4">
@@ -1586,6 +1589,9 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
                   <Button type="button" variant="outline" size="sm" aria-label={`Unarchive ${job.name}`} onClick={() => onChange(updateJob(inputs, job.id, (current) => ({ ...current, archived: false })))}>
                     <ArchiveRestore className="size-4" /> Unarchive
                   </Button>
+                  <Button type="button" variant="ghost" size="sm" aria-label={`Delete ${job.name}`} title={`Delete ${job.name}`} onClick={() => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) })}>
+                    <Trash2 className="size-4" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -1596,10 +1602,15 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
         type="button"
         variant="outline"
         className="w-full"
+        disabled={!canAddOffer}
         onClick={() => {
+          if (!canAddOffer) {
+            return
+          }
           const id = nextJobId(inputs.hypotheticalJobs, 'hyp')
           onChange({ ...inputs, hypotheticalJobs: [...inputs.hypotheticalJobs, buildDefaultJob(id, `Offer ${inputs.hypotheticalJobs.length + 1}`)] })
         }}
+        title={!canAddOffer ? `Delete an archived offer before adding more than ${MAX_HYPOTHETICAL_JOBS} total offers.` : undefined}
       >
         <Plus className="mr-2 size-4" /> Add offer
       </Button>
