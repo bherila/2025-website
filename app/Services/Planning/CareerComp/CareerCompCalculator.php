@@ -139,7 +139,7 @@ final class CareerCompCalculator
             'medium' => MoneyMath::round($afterTax['lifetime']['totalValue']['medium']),
             'high' => MoneyMath::round($afterTax['lifetime']['totalValue']['high']),
         ];
-        $afterTax['lifetime']['totalValue'] = $this->afterTaxTotalValueByOutcome($vestingJob, $vestingRows, $annual, $valuation, $lifetime['totalValue'], $defaultAfterTaxTotalValue, $modelAssumptions);
+        $afterTax['lifetime']['totalValue'] = $this->afterTaxTotalValueByOutcome($vestingJob, $vestingRows, $annual, $valuation, $lifetime['totalValue'], $defaultAfterTaxTotalValue, $modelAssumptions, $afterTax);
 
         return [
             'job' => [
@@ -449,9 +449,10 @@ final class CareerCompCalculator
      * @param  array<string, mixed>  $valuation
      * @param  array{low:float,medium:float,high:float}  $preTaxTotalValue
      * @param  array{low:float,medium:float,high:float}  $defaultTotalValue
+     * @param  array{lifetime:array{totalEstimatedTax:float}}  $mediumFacts  Already-built medium-outcome after-tax facts, reused to skip a redundant rebuild.
      * @return array{low:float,medium:float,high:float}
      */
-    private function afterTaxTotalValueByOutcome(JobSpec $job, array $vestingRows, array $annual, array $valuation, array $preTaxTotalValue, array $defaultTotalValue, ModelAssumptions $modelAssumptions): array
+    private function afterTaxTotalValueByOutcome(JobSpec $job, array $vestingRows, array $annual, array $valuation, array $preTaxTotalValue, array $defaultTotalValue, ModelAssumptions $modelAssumptions, array $mediumFacts): array
     {
         if (! is_array($valuation['annualEquityByOutcome'] ?? null)) {
             return $defaultTotalValue;
@@ -459,8 +460,9 @@ final class CareerCompCalculator
 
         $totalValue = ['low' => 0.0, 'medium' => 0.0, 'high' => 0.0];
         foreach (['low', 'medium', 'high'] as $band) {
-            $bandAnnual = $this->annualRowsForOutcome($annual, $valuation, $band);
-            $bandFacts = $this->equityCompensationFactsBuilder->build($job, $vestingRows, $bandAnnual, $preTaxTotalValue, $modelAssumptions)->toArray();
+            $bandFacts = $band === 'medium'
+                ? $mediumFacts
+                : $this->equityCompensationFactsBuilder->build($job, $vestingRows, $this->annualRowsForOutcome($annual, $valuation, $band), $preTaxTotalValue, $modelAssumptions)->toArray();
             $totalValue[$band] = MoneyMath::subtract($preTaxTotalValue[$band], $bandFacts['lifetime']['totalEstimatedTax']);
         }
 

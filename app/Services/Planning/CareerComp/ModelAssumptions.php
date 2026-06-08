@@ -65,6 +65,11 @@ final readonly class ModelAssumptions
         return $this->number('commonFmvPctOfPreferred.'.$this->commonFmvStageKey($stage, $liquidityEvent));
     }
 
+    /**
+     * Maps a funding-stage label to its common-FMV bucket. The frontend mirrors this in
+     * resources/js/components/planning/CareerComp/CareerCompForm.tsx (`stageAssumptionKey`)
+     * to render the benchmark hint; keep the two heuristics in sync.
+     */
     private function commonFmvStageKey(?string $stage, bool $liquidityEvent): string
     {
         if ($liquidityEvent) {

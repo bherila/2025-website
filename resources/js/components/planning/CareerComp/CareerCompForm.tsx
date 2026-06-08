@@ -369,6 +369,8 @@ function buildDefaultValuationScenario(existing: ValuationScenario[], startYear:
   }
 }
 
+// Mirror of ModelAssumptions::commonFmvStageKey (app/Services/Planning/CareerComp/ModelAssumptions.php),
+// used only for the display benchmark; keep the two heuristics in sync.
 function stageAssumptionKey(stage: ValuationScenarioStage): keyof ModelAssumptions['commonFmvPctOfPreferred'] {
   if (stage.liquidityEvent) {
     return 'liquidityEvent'
