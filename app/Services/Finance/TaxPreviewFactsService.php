@@ -195,7 +195,7 @@ class TaxPreviewFactsService
             $deductionMagiIsEstimated,
         );
         $taxableIncomeBeforeQbi = $this->taxableIncomeBeforeQbi($deductionMagi ?? 0.0, $scheduleA, $isMarried);
-        $form8949 = $this->form8949FactsBuilder->build($capitalGainsReport);
+        $form8949 = $this->form8949FactsBuilder->build($capitalGainsReport, $partnershipBasis->form8949Rows);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099, $form4952);
         $schedule3 = $this->schedule3FactsBuilder->build($form1116, $userDeductions);
         $form8960 = $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $scheduleA, $deductionMagi, $userId, $year, $deductionMagiIsEstimated);
@@ -315,7 +315,10 @@ class TaxPreviewFactsService
             ],
             'form8949' => [
                 'year' => $year,
-                'form8949' => $this->form8949FactsBuilder->build($this->capitalGainsTaxReportService->reportForUserYear($userId, $year))->toArray(),
+                'form8949' => $this->form8949FactsBuilder->build(
+                    $this->capitalGainsTaxReportService->reportForUserYear($userId, $year),
+                    $this->partnershipBasisFactsBuilder->build($userId, $year, $k1Docs)->form8949Rows,
+                )->toArray(),
             ],
             'form4797' => [
                 'year' => $year,
@@ -608,9 +611,10 @@ class TaxPreviewFactsService
     }
 
     /**
-     * Long-term excess cash-distribution gains from the partnership-basis layer that route to
-     * Schedule D line 12. Indeterminate-holding-period gains are left out (surfaced for review
-     * inside the partnershipBasis slice instead) so Schedule D totals are never silently inflated.
+     * Determinable excess cash-distribution gains from the partnership-basis layer that route to
+     * Schedule D line 3 (short-term) or line 10 (long-term) as §731 sale-of-interest gains.
+     * Indeterminate-holding-period gains are left out (surfaced for review inside the
+     * partnershipBasis slice instead) so Schedule D totals are never silently inflated.
      *
      * @return TaxFactSource[]
      */
@@ -618,7 +622,10 @@ class TaxPreviewFactsService
     {
         return array_values(array_filter(
             $partnershipBasis->distributionGainSources,
-            static fn (TaxFactSource $source): bool => $source->routing === TaxFactRouting::ScheduleDLine12->value,
+            static fn (TaxFactSource $source): bool => in_array($source->routing, [
+                TaxFactRouting::ScheduleDLine3->value,
+                TaxFactRouting::ScheduleDLine10->value,
+            ], true),
         ));
     }
 

@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Models\User;
 use App\Services\Finance\PartnershipBasisService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -659,6 +660,41 @@ class PartnershipBasisServiceTest extends TestCase
 
         $this->assertSame(100_00, $basisYear->beginning_book_capital_cents);
         $this->assertSame(80_00, $basisYear->ending_book_capital_cents);
+    }
+
+    public function test_holding_period_uses_interest_acquisition_date(): void
+    {
+        $interest = $this->interest('Holding LP');
+        $events = collect();
+
+        $interest->forceFill(['interest_start_date' => '2023-01-01'])->save();
+        $this->assertSame('long', $this->service->holdingPeriod($interest->refresh(), 2024, $events));
+
+        // Acquired mid-2024: at 2024 year-end it has been held one year or less → short-term.
+        $interest->forceFill(['interest_start_date' => '2024-06-01'])->save();
+        $this->assertSame('short', $this->service->holdingPeriod($interest->refresh(), 2024, $events));
+    }
+
+    public function test_holding_period_respects_explicit_disposition_date(): void
+    {
+        $interest = $this->interest('Disposition Date LP');
+        $interest->forceFill(['interest_start_date' => '2023-06-01'])->save();
+        $events = collect();
+
+        $this->assertSame('short', $this->service->holdingPeriod($interest->refresh(), 2024, $events, CarbonImmutable::parse('2024-03-01')));
+        $this->assertSame('long', $this->service->holdingPeriod($interest->refresh(), 2024, $events, CarbonImmutable::parse('2024-12-01')));
+    }
+
+    public function test_holding_period_falls_back_to_carryforward_proxy_then_indeterminate(): void
+    {
+        $interest = $this->interest('Proxy LP');
+
+        // No acquisition date and no prior-year carryforward → first-year, review-only.
+        $this->assertSame('indeterminate', $this->service->holdingPeriod($interest, 2024, collect()));
+
+        // A prior-year rollforward proves the interest crossed a year boundary → long-term proxy.
+        $rollforward = new FinPartnershipBasisEvent(['event_type' => 'prior_year_rollforward']);
+        $this->assertSame('long', $this->service->holdingPeriod($interest, 2024, collect([$rollforward])));
     }
 
     /**

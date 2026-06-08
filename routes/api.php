@@ -122,6 +122,7 @@ Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiControl
 Route::middleware(['web', 'auth'])->post('/finance/accounts/balance', [FinanceApiController::class, 'updateBalance']);
 Route::middleware(['web', 'auth'])->get('/finance/accounts/{account}/basis', [PartnershipBasisController::class, 'show']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/initialization', [PartnershipBasisController::class, 'initialize']);
+Route::middleware(['web', 'auth'])->put('/finance/accounts/{account}/basis/interests/{interest}', [PartnershipBasisController::class, 'updateInterest']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/events', [PartnershipBasisController::class, 'storeEvent']);
 Route::middleware(['web', 'auth'])->put('/finance/accounts/{account}/basis/events/{event}', [PartnershipBasisController::class, 'updateEvent']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/recompute', [PartnershipBasisController::class, 'recompute']);

@@ -510,6 +510,8 @@ export type PartnershipBasisFacts = {
 interests: Array<PartnershipBasisInterestFacts>;
 distributionGainSources: Array<TaxFactSource>;
 liquidationGainLossSources: Array<TaxFactSource>;
+form8949Rows: Array<Form8949RowFact>;
+reconciliations: Array<PartnershipBasisReconciliationFacts>;
 year: number;
 };
 export type PartnershipBasisInterestFacts = {
@@ -527,6 +529,35 @@ insideBasisConfidence: string;
 reviewStatus: string;
 isStale: boolean;
 worksheet: PartnershipBasisWorksheetFacts;
+};
+export type PartnershipBasisReconciliationFacts = {
+contributionCandidates: Array<PartnershipBasisReconciliationItem>;
+distributionCandidates: Array<PartnershipBasisReconciliationItem>;
+flags: Array<PartnershipBasisReconciliationFlag>;
+accountId: number;
+year: number;
+hasReconcilableData: boolean;
+};
+export type PartnershipBasisReconciliationFlag = {
+key: string;
+label: string;
+status: string;
+expected: number;
+observed: number;
+difference: number;
+detail: string;
+};
+export type PartnershipBasisReconciliationItem = {
+id: string;
+kind: string;
+date: string | null;
+description: string | null;
+amount: number;
+suggestedEventType: string;
+lineItemId: number | null;
+statementId: number | null;
+statementInvestmentId: number | null;
+reviewStatus: string;
 };
 export type PartnershipBasisWorksheetFacts = {
 beginningOutsideBasis: number;

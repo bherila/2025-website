@@ -9,6 +9,8 @@ use App\Models\FinanceTool\FinPartnershipBasisEvent;
 use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Models\FinanceTool\TaxDocumentAccount;
+use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +19,14 @@ use Illuminate\Validation\ValidationException;
 
 class PartnershipBasisService
 {
+    public const HOLDING_PERIOD_LONG = 'long';
+
+    public const HOLDING_PERIOD_SHORT = 'short';
+
+    public const HOLDING_PERIOD_INDETERMINATE = 'indeterminate';
+
+    public function __construct(private readonly PartnershipBasisReconciliationService $reconciliationService) {}
+
     /**
      * Flat (non-coded) K-1 boxes whose distributive-share amount adjusts outside
      * basis as ordinary income/loss. Guaranteed payments (4/4a/4b/4c), qualified-
@@ -234,6 +244,85 @@ class PartnershipBasisService
     }
 
     /**
+     * Holding period of the partnership interest as of a disposition date, used to characterise
+     * §731 gain on the deemed sale/exchange of the interest. Long-term when held more than one
+     * year. When no acquisition date is recorded, falls back to the cross-year carryforward proxy
+     * (a prior-year rollforward proves the interest crossed a year boundary) and is indeterminate
+     * in the interest's first tracked year so first-year gains stay review-only until confirmed.
+     *
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     */
+    public function holdingPeriod(FinPartnershipInterest $interest, int $year, Collection $events, ?CarbonImmutable $dispositionDate = null): string
+    {
+        $disposition = $dispositionDate ?? CarbonImmutable::create($year, 12, 31);
+        $start = $interest->interest_start_date;
+        if ($start !== null) {
+            // Long-term requires holding more than one year; exactly one year is short-term.
+            return CarbonImmutable::parse($start)->addYear()->lessThan($disposition)
+                ? self::HOLDING_PERIOD_LONG
+                : self::HOLDING_PERIOD_SHORT;
+        }
+
+        $crossedYearBoundary = $events->contains(
+            fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::PriorYearRollforward->value,
+        );
+
+        return $crossedYearBoundary ? self::HOLDING_PERIOD_LONG : self::HOLDING_PERIOD_INDETERMINATE;
+    }
+
+    /**
+     * Update interest-level attributes (holding-period dates, identity, classification flags) that
+     * are not part of the annual rollforward. Returns the refreshed interest.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function updateInterest(FinAccounts $account, int $userId, int $interestId, array $payload): FinPartnershipInterest
+    {
+        /** @var FinPartnershipInterest $interest */
+        $interest = FinPartnershipInterest::query()
+            ->where('id', $interestId)
+            ->where('user_id', $userId)
+            ->where('account_id', $account->acct_id)
+            ->firstOrFail();
+
+        $attributes = array_intersect_key($payload, array_flip([
+            'partnership_name',
+            'partnership_ein',
+            'interest_start_date',
+            'interest_end_date',
+            'is_ptp',
+            'is_trader_fund',
+        ]));
+
+        if (array_key_exists('partnership_ein', $attributes)) {
+            $attributes['partnership_ein'] = $this->normalizeEin($attributes['partnership_ein']);
+        }
+        if (array_key_exists('partnership_name', $attributes) && is_string($attributes['partnership_name'])) {
+            $attributes['normalized_partnership_name'] = $this->normalizeName($attributes['partnership_name']);
+        }
+
+        $interest->fill($attributes)->save();
+
+        return $interest->refresh();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function interestToArray(FinPartnershipInterest $interest): array
+    {
+        return [
+            'interestId' => $interest->id,
+            'partnershipName' => $interest->partnership_name,
+            'partnershipEin' => $interest->partnership_ein,
+            'interestStartDate' => $this->dateToString($interest->interest_start_date),
+            'interestEndDate' => $this->dateToString($interest->interest_end_date),
+            'isPtp' => (bool) $interest->is_ptp,
+            'isTraderFund' => (bool) $interest->is_trader_fund,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     public function initializeAccount(FinAccounts $account, int $userId, array $payload): FinPartnershipBasisYear
@@ -241,6 +330,10 @@ class PartnershipBasisService
         $year = (int) $payload['tax_year'];
         $interest = $this->findOrCreateInterest($userId, $account->acct_id, null, (string) ($payload['partnership_name'] ?? $account->acct_name), 'other', null, null, null);
         $this->assertYearEditable($interest, $year);
+
+        if (array_key_exists('interest_start_date', $payload) && $payload['interest_start_date'] !== null) {
+            $interest->forceFill(['interest_start_date' => $payload['interest_start_date']])->save();
+        }
 
         foreach ([
             'initial_cash_contribution_cents' => PartnershipBasisEventType::InitialCashContribution,
@@ -328,6 +421,7 @@ class PartnershipBasisService
             'year' => $year,
             'account' => ['id' => $account->acct_id, 'name' => $account->acct_name],
             'interests' => $basisYears->map(fn (FinPartnershipBasisYear $basisYear): array => $this->basisYearToArray($basisYear))->values()->all(),
+            'reconciliation' => $this->reconciliationService->reconcile((int) $account->acct_id, $year, $basisYears)->toArray(),
         ];
     }
 
@@ -347,6 +441,10 @@ class PartnershipBasisService
             'partnershipName' => $interest->partnership_name,
             'partnershipEin' => $interest->partnership_ein,
             'accountId' => $interest->account_id,
+            'interestStartDate' => $this->dateToString($interest->interest_start_date),
+            'interestEndDate' => $this->dateToString($interest->interest_end_date),
+            'isPtp' => (bool) $interest->is_ptp,
+            'holdingPeriod' => $this->holdingPeriod($interest, (int) $basisYear->tax_year, $events),
             'taxYear' => $basisYear->tax_year,
             'beginningOutsideBasis' => MoneyMath::fromCents((int) $basisYear->beginning_outside_basis_cents),
             'endingOutsideBasis' => MoneyMath::fromCents((int) $basisYear->ending_outside_basis_cents),
@@ -1221,6 +1319,11 @@ class PartnershipBasisService
             'K-1-1041', '1041' => 'k1_1041',
             default => 'other',
         };
+    }
+
+    private function dateToString(DateTimeInterface|string|null $value): ?string
+    {
+        return $value === null ? null : CarbonImmutable::parse($value)->toDateString();
     }
 
     private function moneyToCents(mixed $value): ?int

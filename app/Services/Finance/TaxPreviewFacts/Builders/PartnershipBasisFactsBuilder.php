@@ -6,8 +6,11 @@ use App\Enums\Finance\PartnershipBasisEventType;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinPartnershipBasisEvent;
 use App\Models\FinanceTool\FinPartnershipBasisYear;
+use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\PartnershipBasisReconciliationService;
 use App\Services\Finance\PartnershipBasisService;
+use App\Services\Finance\TaxPreviewFacts\Data\Form8949RowFact;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisEventFact;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisInterestFacts;
@@ -15,11 +18,15 @@ use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisWorksheetFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
 class PartnershipBasisFactsBuilder
 {
-    public function __construct(private readonly PartnershipBasisService $partnershipBasisService) {}
+    public function __construct(
+        private readonly PartnershipBasisService $partnershipBasisService,
+        private readonly PartnershipBasisReconciliationService $reconciliationService,
+    ) {}
 
     /**
      * Build partnership-basis facts. This is a READ path: it returns already-synced basis
@@ -35,32 +42,67 @@ class PartnershipBasisFactsBuilder
         $interests = [];
         $distributionGainSources = [];
         $liquidationGainLossSources = [];
+        $form8949Rows = [];
+        /** @var array<int, Collection<int, FinPartnershipBasisYear>> $basisYearsByAccount */
+        $basisYearsByAccount = [];
 
         foreach ($basisYears as $basisYear) {
             $interests[] = $this->interestFact($basisYear);
 
             $interest = $basisYear->partnershipInterest;
+            if ($interest === null) {
+                continue;
+            }
+            if ($interest->account_id !== null) {
+                $basisYearsByAccount[$interest->account_id] ??= collect();
+                $basisYearsByAccount[$interest->account_id]->push($basisYear);
+            }
             $partnerName = $interest->partnership_name;
             $events = $interest->relationLoaded('basisEvents') ? $interest->basisEvents : collect();
 
             $gain = (int) $basisYear->distribution_gain_cents;
             if ($gain > 0) {
-                $longTerm = $this->heldLongTerm($events);
+                $dispositionDate = $this->latestDistributionDate($events);
+                $holdingPeriod = $this->partnershipBasisService->holdingPeriod($interest, (int) $basisYear->tax_year, $events, $dispositionDate);
+                [$routing, $box, $isShortTerm] = $this->dispositionRouting($holdingPeriod);
+                $gainDollars = MoneyMath::fromCents($gain);
+
                 $distributionGainSources[] = new TaxFactSource(
                     id: "partnership-basis-{$basisYear->id}-excess-distribution-gain",
                     label: "{$partnerName} — excess distribution gain",
-                    amount: MoneyMath::fromCents($gain),
+                    amount: $gainDollars,
                     sourceType: TaxFactSourceType::PartnershipExcessDistributionGain,
                     accountId: $interest->account_id,
                     formType: 'k1',
                     box: '19',
-                    routing: $longTerm ? TaxFactRouting::ScheduleDLine12 : TaxFactRouting::NeedsReviewScheduleDLine5Or12,
-                    routingReason: $longTerm
-                        ? 'Cash distribution in excess of outside basis is treated as long-term gain from the sale of the partnership interest (interest held over one year) and flows to Schedule D line 12.'
-                        : 'Cash distribution in excess of outside basis is gain from the sale of the partnership interest; confirm the holding period before Schedule D routing.',
+                    routing: $routing,
+                    routingReason: $this->dispositionRoutingReason($holdingPeriod),
                     isReviewed: false,
                     reviewStatus: 'needs_review',
                 );
+
+                // A determinable holding period produces a Form 8949 disposition row (the §731 gain
+                // is gain from the deemed sale of the interest); an indeterminate first-year gain is
+                // surfaced for review only and is never summed into Schedule D.
+                if ($box !== null) {
+                    $form8949Rows[] = new Form8949RowFact(
+                        form8949Box: $box,
+                        description: "{$partnerName} — cash distribution in excess of outside basis (IRC §731)",
+                        dateAcquired: $this->interestStartDate($interest),
+                        dateSold: $dispositionDate?->toDateString() ?? sprintf('%d-12-31', $basisYear->tax_year),
+                        proceeds: $gainDollars,
+                        costBasis: 0.0,
+                        adjustmentCode: null,
+                        adjustmentAmount: 0.0,
+                        gainOrLoss: $gainDollars,
+                        isShortTerm: $isShortTerm,
+                        isCovered: false,
+                        isSummaryRow: false,
+                        accountName: $partnerName,
+                        taxDocumentId: null,
+                        sourceTransactionId: "partnership-basis-{$basisYear->id}-excess-distribution-gain",
+                    );
+                }
             }
 
             if ($basisYear->liquidation_gain_loss_cents !== null) {
@@ -79,24 +121,85 @@ class PartnershipBasisFactsBuilder
             }
         }
 
+        $reconciliations = [];
+        foreach ($basisYearsByAccount as $accountId => $accountBasisYears) {
+            $reconciliation = $this->reconciliationService->reconcile((int) $accountId, $year, $accountBasisYears);
+            if ($reconciliation->hasReconcilableData) {
+                $reconciliations[] = $reconciliation;
+            }
+        }
+
         return new PartnershipBasisFacts(
             year: $year,
             interests: $interests,
             distributionGainSources: $distributionGainSources,
             liquidationGainLossSources: $liquidationGainLossSources,
+            form8949Rows: $form8949Rows,
+            reconciliations: $reconciliations,
         );
     }
 
     /**
-     * Excess-distribution gain is long-term when the interest was held over a year. A prior-year
-     * carryforward event proves the interest crossed a year boundary; in the interest's first year
-     * the holding period is indeterminate and the gain is left for review rather than summed.
+     * Map a determined holding period to Schedule D routing, Form 8949 box, and short-term flag.
+     * Form 8949 box C = short-term not reported on a 1099-B → Schedule D line 3; box F = long-term
+     * not reported on a 1099-B → Schedule D line 10. An indeterminate period yields no box (the gain
+     * is left for review and excluded from Schedule D totals).
+     *
+     * @return array{0: TaxFactRouting, 1: ?string, 2: bool}
+     */
+    private function dispositionRouting(string $holdingPeriod): array
+    {
+        return match ($holdingPeriod) {
+            PartnershipBasisService::HOLDING_PERIOD_LONG => [TaxFactRouting::ScheduleDLine10, 'F', false],
+            PartnershipBasisService::HOLDING_PERIOD_SHORT => [TaxFactRouting::ScheduleDLine3, 'C', true],
+            default => [TaxFactRouting::NeedsReviewScheduleDLine5Or12, null, false],
+        };
+    }
+
+    private function dispositionRoutingReason(string $holdingPeriod): string
+    {
+        return match ($holdingPeriod) {
+            PartnershipBasisService::HOLDING_PERIOD_LONG => 'Cash distribution in excess of outside basis is long-term gain from the deemed sale of the partnership interest (held more than one year); reported on Form 8949 Part II (box F) and Schedule D line 10.',
+            PartnershipBasisService::HOLDING_PERIOD_SHORT => 'Cash distribution in excess of outside basis is short-term gain from the deemed sale of the partnership interest (held one year or less); reported on Form 8949 Part I (box C) and Schedule D line 3.',
+            default => 'Cash distribution in excess of outside basis is gain from the sale of the partnership interest; set the interest acquisition date to confirm the holding period before Schedule D routing.',
+        };
+    }
+
+    /**
+     * Latest dated distribution/liquidation event in the year, used as the deemed disposition date
+     * for holding-period and Form 8949 sold-date purposes. Null when no distribution carries a date.
      *
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      */
-    private function heldLongTerm(Collection $events): bool
+    private function latestDistributionDate(Collection $events): ?CarbonImmutable
     {
-        return $events->contains(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::PriorYearRollforward->value);
+        $distributionTypes = [
+            PartnershipBasisEventType::CashDistribution->value,
+            PartnershipBasisEventType::MarketableSecuritiesDistribution->value,
+            PartnershipBasisEventType::PropertyDistributionBasis->value,
+            PartnershipBasisEventType::LiquidationDistributionCash->value,
+            PartnershipBasisEventType::LiquidationDistributionProperty->value,
+        ];
+
+        $latest = null;
+        foreach ($events as $event) {
+            if (! in_array($event->event_type, $distributionTypes, true) || $event->event_date === null) {
+                continue;
+            }
+            $candidate = CarbonImmutable::parse($event->event_date);
+            if ($latest === null || $candidate->greaterThan($latest)) {
+                $latest = $candidate;
+            }
+        }
+
+        return $latest;
+    }
+
+    private function interestStartDate(FinPartnershipInterest $interest): ?string
+    {
+        $start = $interest->interest_start_date;
+
+        return $start === null ? null : CarbonImmutable::parse($start)->toDateString();
     }
 
     private function interestFact(FinPartnershipBasisYear $basisYear): PartnershipBasisInterestFacts

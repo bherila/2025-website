@@ -21,9 +21,15 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $docs1099
      * @param  ScheduleDRollupInput[]  $rollups
-     * @param  TaxFactSource[]  $partnershipBasisGainSources  Long-term excess cash-distribution
-     *                                                        gains from the partnership-basis layer,
-     *                                                        already filtered to Schedule D line 12.
+     * @param  TaxFactSource[]  $partnershipBasisGainSources  Excess cash-distribution gains from the
+     *                                                        partnership-basis layer with a
+     *                                                        determinable holding period. §731 gain
+     *                                                        is gain from the deemed sale of the
+     *                                                        interest, so it is reported on Form 8949
+     *                                                        and routed to Schedule D line 3
+     *                                                        (short-term, box C) or line 10
+     *                                                        (long-term, box F) — never line 12,
+     *                                                        which is for K-1 pass-through gains.
      */
     public function build(
         array $k1Docs,
@@ -46,28 +52,32 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             $lineBuckets[$rollup->scheduleDLine]['gainLoss'] = $this->sumMoney([$lineBuckets[$rollup->scheduleDLine]['gainLoss'], $rollup->netGainOrLoss]);
         }
 
-        $line3Sources = [];
+        // §731 excess cash-distribution gains are gains from the deemed sale of the partnership
+        // interest, reported on Form 8949 → Schedule D line 3 (short-term, box C) or line 10
+        // (long-term, box F). Indeterminate-holding-period gains are excluded upstream and surfaced
+        // for review, so only determinable rows arrive here.
+        $partnershipLine3Sources = $this->partnershipSourcesForRouting($partnershipBasisGainSources, TaxFactRouting::ScheduleDLine3);
+        $partnershipLine10Sources = $this->partnershipSourcesForRouting($partnershipBasisGainSources, TaxFactRouting::ScheduleDLine10);
+
+        $line3Sources = $partnershipLine3Sources;
         $line4Sources = $form6781->shortTermSources;
-        $line10Sources = [];
+        $line10Sources = $partnershipLine10Sources;
         $line11Sources = [
             ...$form6781->longTermSources,
             ...($form4797 instanceof Form4797Facts ? $form4797->scheduleDSources : []),
         ];
         $line5Sources = $this->scheduleDLine5Sources($k1Docs);
-        // Long-term excess cash-distribution gains from the partnership-basis layer are gains from
-        // the sale of the interest; they sum into line 12 alongside K-1 Box 9 long-term gains and
-        // carry needs_review status for the partner to confirm.
-        $line12Sources = [
-            ...$this->scheduleDLine12Sources($k1Docs),
-            ...$partnershipBasisGainSources,
-        ];
+        $line12Sources = $this->scheduleDLine12Sources($k1Docs);
         $line13Sources = $this->scheduleDLine13Sources($docs1099);
         $ambiguous11SSources = $this->scheduleDAmbiguous11SSources($k1Docs);
 
         $line1a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1a'));
         $line1b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '1b'));
         $line2 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '2'));
-        $line3 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '3'));
+        $line3 = $this->sumMoney([
+            $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '3')),
+            $this->sumSources($partnershipLine3Sources),
+        ]);
         $line4 = $this->sumSources($line4Sources);
         $line5 = $this->sumSources($line5Sources);
         $line6 = $this->scheduleDCarryoverLineAmount($carryoverInput?->short_term_loss_carryover);
@@ -76,7 +86,10 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $line8a = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8a'));
         $line8b = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '8b'));
         $line9 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '9'));
-        $line10 = $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '10'));
+        $line10 = $this->sumMoney([
+            $this->roundMoney($this->scheduleDLineGainLoss($lineBuckets, '10')),
+            $this->sumSources($partnershipLine10Sources),
+        ]);
         $line11 = $this->sumSources($line11Sources);
         $line12 = $this->sumSources($line12Sources);
         $line13 = $this->sumSources($line13Sources);
@@ -134,6 +147,18 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $amount = $lossCarryover ?? 0.0;
 
         return $amount > 0.0 ? -$this->roundMoney($amount) : 0.0;
+    }
+
+    /**
+     * @param  TaxFactSource[]  $sources
+     * @return TaxFactSource[]
+     */
+    private function partnershipSourcesForRouting(array $sources, TaxFactRouting $routing): array
+    {
+        return array_values(array_filter(
+            $sources,
+            static fn (TaxFactSource $source): bool => $source->routing === $routing->value,
+        ));
     }
 
     /**

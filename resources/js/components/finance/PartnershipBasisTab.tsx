@@ -42,6 +42,10 @@ interface PartnershipBasisInterest {
   interestId: number
   partnershipName: string
   partnershipEin: string | null
+  interestStartDate: string | null
+  interestEndDate: string | null
+  isPtp: boolean
+  holdingPeriod: string
   beginningOutsideBasis: number
   endingOutsideBasis: number
   beginningTaxBasisCapital: number
@@ -67,10 +71,42 @@ interface PartnershipBasisInterest {
   events: PartnershipBasisEvent[]
 }
 
+interface ReconciliationFlag {
+  key: string
+  label: string
+  status: string
+  expected: number
+  observed: number
+  difference: number
+  detail: string
+}
+
+interface ReconciliationItem {
+  id: string
+  kind: string
+  date: string | null
+  description: string | null
+  amount: number
+  suggestedEventType: string
+  lineItemId: number | null
+  statementId: number | null
+  reviewStatus: string
+}
+
+interface ReconciliationData {
+  accountId: number
+  year: number
+  contributionCandidates: ReconciliationItem[]
+  distributionCandidates: ReconciliationItem[]
+  flags: ReconciliationFlag[]
+  hasReconcilableData: boolean
+}
+
 interface PartnershipBasisData {
   year: number
   account: { id: number; name: string }
   interests: PartnershipBasisInterest[]
+  reconciliation: ReconciliationData
 }
 
 interface PartnershipBasisTabProps {
@@ -135,6 +171,28 @@ function metric(label: string, value: number | null, info?: string): ReactElemen
 
 function humanize(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+/** Holding period of the interest, used to characterise §731 gain on the deemed sale of the interest. */
+function holdingPeriodBadge(holdingPeriod: string): ReactElement {
+  if (holdingPeriod === 'long') {
+    return <Badge variant="secondary">Long-term holding</Badge>
+  }
+  if (holdingPeriod === 'short') {
+    return <Badge variant="secondary">Short-term holding</Badge>
+  }
+  return <Badge variant="outline">Holding period: set acquisition date</Badge>
+}
+
+/** Badge for a reconciliation comparison: green when matched, amber for mismatch, neutral for info. */
+function reconciliationStatusBadge(status: string): ReactElement {
+  if (status === 'match') {
+    return <Badge className="bg-emerald-600 hover:bg-emerald-600">Match</Badge>
+  }
+  if (status === 'mismatch') {
+    return <Badge variant="destructive">Mismatch</Badge>
+  }
+  return <Badge variant="outline">Info</Badge>
 }
 
 /** Where an event originated, for the amber "Go to source" drill button. */
@@ -278,10 +336,18 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
                 <p className="mt-1 text-sm text-muted-foreground">
                   {interest.partnershipEin ? `EIN ${interest.partnershipEin} · ` : ''}Inside-basis confidence: {humanize(interest.insideBasisConfidence)}
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {holdingPeriodBadge(interest.holdingPeriod)}
+                  <span className="text-xs text-muted-foreground">
+                    Acquired: {interest.interestStartDate ?? '—'}
+                    {interest.interestEndDate ? ` · Disposed: ${interest.interestEndDate}` : ''}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {interest.reviewStatus === 'locked' && <Lock className="h-4 w-4 text-muted-foreground" />}
                 {statusBadge(interest.reviewStatus, interest.isStale)}
+                <EditInterestDialog accountId={accountId} interest={interest} disabled={isBusy} onSaved={load} setError={setError} />
                 <AddEventDialog accountId={accountId} year={year} interestId={interest.interestId} disabled={isBusy} onSaved={load} setError={setError} />
                 <DetailsButton
                   glyph="window"
@@ -359,7 +425,73 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
           </CardContent>
         </Card>
       ))}
+
+      {data?.reconciliation?.hasReconcilableData ? (
+        <ReconciliationCard reconciliation={data.reconciliation} />
+      ) : null}
     </div>
+  )
+}
+
+function ReconciliationCard({ reconciliation }: { reconciliation: ReconciliationData }): ReactElement {
+  const candidates = [...reconciliation.contributionCandidates, ...reconciliation.distributionCandidates]
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-1">
+          Transaction &amp; statement reconciliation
+          <InfoTooltip>Read-only candidates and comparisons from this account&rsquo;s transactions and statements. Nothing here changes outside basis until you review it and add an event.</InfoTooltip>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {reconciliation.flags.length > 0 && (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {reconciliation.flags.map((flag) => (
+              <div key={flag.key} className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{flag.label}</span>
+                  {reconciliationStatusBadge(flag.status)}
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div><div className="text-xs text-muted-foreground">Basis</div><div className="font-mono">{formatCurrency(flag.expected)}</div></div>
+                  <div><div className="text-xs text-muted-foreground">Observed</div><div className="font-mono">{formatCurrency(flag.observed)}</div></div>
+                  <div><div className="text-xs text-muted-foreground">Difference</div><div className="font-mono">{formatCurrency(flag.difference)}</div></div>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{flag.detail}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {candidates.length > 0 && (
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Candidate</TableHead>
+                  <TableHead>Suggested event</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {candidates.map((candidate) => (
+                  <TableRow key={candidate.id}>
+                    <TableCell className="whitespace-nowrap">{candidate.date ?? '—'}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{humanize(candidate.kind)}</div>
+                      <div className="text-xs text-muted-foreground">{candidate.description ?? '—'}</div>
+                    </TableCell>
+                    <TableCell>{humanize(candidate.suggestedEventType)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatCurrency(candidate.amount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -374,7 +506,7 @@ interface BasisActionDialogProps {
 function InitializeBasisDialog({ accountId, year, disabled, onSaved, setError }: BasisActionDialogProps): ReactElement {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ partnershipName: '', cash: '', taxCapital: '', bookCapital: '', outsideBasisOverride: '', notes: '' })
+  const [form, setForm] = useState({ partnershipName: '', cash: '', taxCapital: '', bookCapital: '', outsideBasisOverride: '', startDate: '', notes: '' })
 
   const submit = async () => {
     setSaving(true)
@@ -387,6 +519,7 @@ function InitializeBasisDialog({ accountId, year, disabled, onSaved, setError }:
         initial_tax_basis_capital_cents: form.taxCapital ? dollarsToCents(form.taxCapital) : null,
         initial_book_capital_or_fmv_cents: form.bookCapital ? dollarsToCents(form.bookCapital) : null,
         initial_outside_basis_override_cents: form.outsideBasisOverride ? dollarsToCents(form.outsideBasisOverride) : null,
+        interest_start_date: form.startDate || null,
         initialization_review_status: 'needs_review',
         notes: form.notes || null,
       })
@@ -421,6 +554,13 @@ function InitializeBasisDialog({ accountId, year, disabled, onSaved, setError }:
             <CurrencyField id="pb-tax-capital" label="Tax-basis capital" value={form.taxCapital} onChange={(v) => setForm({ ...form, taxCapital: v })} info="Beginning tax-basis capital reported on the K-1." />
             <CurrencyField id="pb-book-capital" label="Book / FMV capital" value={form.bookCapital} onChange={(v) => setForm({ ...form, bookCapital: v })} info="Capital-account / NAV value. Reconciliation only." />
             <CurrencyField id="pb-override" label="Outside basis override" value={form.outsideBasisOverride} onChange={(v) => setForm({ ...form, outsideBasisOverride: v })} info="Optional. Sets opening outside basis directly when known." />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="pb-start" className="flex items-center gap-1">
+              Acquisition date
+              <InfoTooltip>When the interest was acquired. Sets the holding period for §731 gain on excess distributions and on the sale/liquidation of the interest.</InfoTooltip>
+            </Label>
+            <Input id="pb-start" type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
           </div>
           <div className="space-y-1">
             <Label htmlFor="pb-notes">Notes</Label>
@@ -503,6 +643,76 @@ function AddEventDialog({ accountId, year, interestId, disabled, onSaved, setErr
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
           <Button onClick={() => void submit()} disabled={saving || !form.amount}>{saving ? 'Saving…' : 'Add event'}</Button>
+        </DialogFooter>
+      </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function EditInterestDialog({ accountId, interest, disabled, onSaved, setError }: { accountId: number; interest: PartnershipBasisInterest; disabled: boolean; onSaved: () => Promise<void> | void; setError: (message: string | null) => void }): ReactElement {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    startDate: interest.interestStartDate ?? '',
+    endDate: interest.interestEndDate ?? '',
+    isPtp: interest.isPtp,
+  })
+
+  // Reset to the interest's current values each time the dialog opens (after a reload changes props).
+  const openDialog = () => {
+    setForm({ startDate: interest.interestStartDate ?? '', endDate: interest.interestEndDate ?? '', isPtp: interest.isPtp })
+    setOpen(true)
+  }
+
+  const submit = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await fetchWrapper.put(`/api/finance/accounts/${accountId}/basis/interests/${interest.interestId}`, {
+        interest_start_date: form.startDate || null,
+        interest_end_date: form.endDate || null,
+        is_ptp: form.isPtp,
+      })
+      setOpen(false)
+      await onSaved()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not update the interest.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" disabled={disabled} onClick={openDialog}><Settings2 className="h-3 w-3" /> Interest</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Interest details — {interest.partnershipName}</DialogTitle>
+          <DialogDescription>
+            The acquisition date sets the holding period used to characterise §731 gain on excess distributions and the sale/liquidation of the interest (long-term when held more than one year).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="ei-start">Acquisition date</Label>
+              <Input id="ei-start" type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ei-end">Disposition date</Label>
+              <Input id="ei-end" type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4" checked={form.isPtp} onChange={(e) => setForm({ ...form, isPtp: e.target.checked })} />
+            Publicly traded partnership (PTP)
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+          <Button onClick={() => void submit()} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
         </DialogFooter>
       </DialogContent>
       </Dialog>

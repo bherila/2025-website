@@ -96,14 +96,88 @@ class TaxPreviewWorkbookBuilder
     private function partnershipBasisSheets(array $facts): array
     {
         $interests = is_array($facts['interests'] ?? null) ? $facts['interests'] : [];
+        $form8949Rows = is_array($facts['form8949Rows'] ?? null) ? $facts['form8949Rows'] : [];
+        $reconciliations = is_array($facts['reconciliations'] ?? null) ? $facts['reconciliations'] : [];
 
         return [
             ['name' => 'Partnership Basis Summary', 'rows' => $this->partnershipBasisSummaryRows($interests)],
             ['name' => 'Outside Basis Rollforward', 'rows' => $this->partnershipBasisWorksheetRows($interests)],
             ['name' => 'Inside Basis / Capital Reconciliation', 'rows' => $this->partnershipBasisCapitalRows($interests)],
             ['name' => 'Distribution & Liquidation Analysis', 'rows' => $this->partnershipBasisDistributionRows($interests)],
+            ['name' => 'Form 8949 Dispositions', 'rows' => $this->partnershipBasisDispositionRows($form8949Rows)],
+            ['name' => 'Transaction & Statement Reconciliation', 'rows' => $this->partnershipBasisReconciliationRows($reconciliations)],
             ['name' => 'Basis Source Lines', 'rows' => $this->partnershipBasisSourceRows($interests)],
         ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $form8949Rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function partnershipBasisDispositionRows(array $form8949Rows): array
+    {
+        $rows = [['description' => 'Form 8949 partnership dispositions (IRC §731)', 'isHeader' => true]];
+        foreach ($form8949Rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $rows[] = [
+                'line' => (string) ($row['form8949Box'] ?? ''),
+                'description' => (string) ($row['description'] ?? 'Partnership disposition'),
+                'amount' => is_numeric($row['gainOrLoss'] ?? null) ? (float) $row['gainOrLoss'] : 0.0,
+                'note' => trim(implode(' ', array_filter([
+                    ($row['isShortTerm'] ?? false) ? 'short-term' : 'long-term',
+                    isset($row['dateAcquired']) ? 'acquired '.$this->stringValue($row['dateAcquired']) : null,
+                    isset($row['dateSold']) ? 'sold '.$this->stringValue($row['dateSold']) : null,
+                ]))),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<int, mixed>  $reconciliations
+     * @return array<int, array<string, mixed>>
+     */
+    private function partnershipBasisReconciliationRows(array $reconciliations): array
+    {
+        $rows = [['description' => 'Transaction & statement reconciliation', 'isHeader' => true]];
+        foreach ($reconciliations as $reconciliation) {
+            if (! is_array($reconciliation)) {
+                continue;
+            }
+
+            $flags = is_array($reconciliation['flags'] ?? null) ? $reconciliation['flags'] : [];
+            foreach ($flags as $flag) {
+                if (! is_array($flag)) {
+                    continue;
+                }
+                $rows[] = [
+                    'line' => (string) ($flag['status'] ?? 'info'),
+                    'description' => (string) ($flag['label'] ?? 'Reconciliation'),
+                    'amount' => is_numeric($flag['difference'] ?? null) ? (float) $flag['difference'] : 0.0,
+                    'note' => (string) ($flag['detail'] ?? ''),
+                ];
+            }
+
+            foreach (['contributionCandidates' => 'Contribution candidate', 'distributionCandidates' => 'Distribution candidate'] as $key => $label) {
+                $candidates = is_array($reconciliation[$key] ?? null) ? $reconciliation[$key] : [];
+                foreach ($candidates as $candidate) {
+                    if (! is_array($candidate)) {
+                        continue;
+                    }
+                    $rows[] = [
+                        'line' => (string) ($candidate['date'] ?? ''),
+                        'description' => $label.': '.$this->stringValue($candidate['description'] ?? null),
+                        'amount' => is_numeric($candidate['amount'] ?? null) ? (float) $candidate['amount'] : 0.0,
+                        'note' => (string) ($candidate['suggestedEventType'] ?? 'needs_review'),
+                    ];
+                }
+            }
+        }
+
+        return $rows;
     }
 
     /**

@@ -36,6 +36,7 @@ class PartnershipBasisController extends Controller
             'initial_tax_basis_capital_cents' => ['nullable', 'integer'],
             'initial_book_capital_or_fmv_cents' => ['nullable', 'integer'],
             'initial_outside_basis_override_cents' => ['nullable', 'integer'],
+            'interest_start_date' => ['nullable', 'date'],
             'initialization_review_status' => ['nullable', 'in:reviewed,needs_review'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
@@ -43,6 +44,22 @@ class PartnershipBasisController extends Controller
         $basisYear = $this->partnershipBasisService->initializeAccount($this->account($account), (int) Auth::id(), $payload);
 
         return response()->json($this->partnershipBasisService->basisYearToArray($this->loadYearEvents($basisYear)), 201);
+    }
+
+    public function updateInterest(Request $request, int $account, int $interest): JsonResponse
+    {
+        $payload = $request->validate([
+            'partnership_name' => ['sometimes', 'string', 'max:255'],
+            'partnership_ein' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'interest_start_date' => ['sometimes', 'nullable', 'date'],
+            'interest_end_date' => ['sometimes', 'nullable', 'date'],
+            'is_ptp' => ['sometimes', 'boolean'],
+            'is_trader_fund' => ['sometimes', 'boolean'],
+        ]);
+
+        $updated = $this->partnershipBasisService->updateInterest($this->account($account), (int) Auth::id(), $interest, $payload);
+
+        return response()->json($this->partnershipBasisService->interestToArray($updated));
     }
 
     public function storeEvent(Request $request, int $account): JsonResponse
