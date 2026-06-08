@@ -1,5 +1,7 @@
 import {
+  ltvDetailRouteInstance,
   parseCareerCompHash,
+  parseLtvDetailRouteInstance,
   serializeCareerCompRoute,
 } from '../careerCompRoute'
 
@@ -53,5 +55,29 @@ describe('careerCompRoute', () => {
         ],
       }),
     ).toBe('#/offers/grant-opt:hyp-1%3Ahyp-1-opt-1')
+  })
+
+  it('round-trips LTV detail route instances', () => {
+    const detailInstance = ltvDetailRouteInstance({ jobId: 'hyp-1', metric: 'liquid-total', band: 'medium' })
+    const yearInstance = ltvDetailRouteInstance({ jobId: 'hyp-1', metric: 'liquid-total', band: 'medium', year: 2028 })
+
+    expect(parseLtvDetailRouteInstance(detailInstance)).toEqual({
+      jobId: 'hyp-1',
+      metric: 'liquid-total',
+      band: 'medium',
+    })
+    expect(parseLtvDetailRouteInstance(yearInstance, { requireYear: true })).toEqual({
+      jobId: 'hyp-1',
+      metric: 'liquid-total',
+      band: 'medium',
+      year: 2028,
+    })
+    expect(parseCareerCompHash(`#/ltv-table/ltv-detail:${encodeURIComponent(detailInstance)}/ltv-detail-year:${encodeURIComponent(yearInstance)}`)).toEqual({
+      columns: [
+        { id: 'ltv-table' },
+        { id: 'ltv-detail', instance: detailInstance },
+        { id: 'ltv-detail-year', instance: yearInstance },
+      ],
+    })
   })
 })

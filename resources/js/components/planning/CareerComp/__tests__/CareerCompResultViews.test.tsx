@@ -80,6 +80,22 @@ describe('Career Comparison after-tax result views', () => {
     expect(screen.getByRole('columnheader', { name: 'Liquid total low' })).toBeInTheDocument()
   })
 
+  it('opens LTV drilldowns with the selected outcome band and labels delta math', () => {
+    const onOpenDetail = jest.fn()
+
+    render(<ProjectionLifetimeValue projection={sampleCareerCompProjection} onOpenDetail={onOpenDetail} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Drill into Offer 1 liquid total med' }))
+
+    expect(onOpenDetail).toHaveBeenCalledWith('hyp-1', 'liquid-total', 'medium')
+    expect(screen.getByLabelText('$888,000 − $723,000 = +$165,000')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'High' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Drill into Offer 1 paper equity high' }))
+
+    expect(onOpenDetail).toHaveBeenLastCalledWith('hyp-1', 'paper-equity', 'high')
+  })
+
   it('renders the after-tax liquidity chart from the golden fixture', () => {
     const projection = careerCompProjectionSchema.parse(raw)
 

@@ -24,7 +24,34 @@ export const CAREER_COMP_LEGACY_RESULT_VIEW_IDS = [
 
 export type CareerCompLegacyResultViewId = (typeof CAREER_COMP_LEGACY_RESULT_VIEW_IDS)[number]
 
-export const CAREER_COMP_DETAIL_COLUMN_IDS = ['grant-rsu', 'grant-opt', 'valuation-timeline'] as const
+export const CAREER_COMP_LTV_DETAIL_COLUMN_IDS = ['ltv-detail', 'ltv-detail-year'] as const
+
+export const CAREER_COMP_LTV_METRIC_IDS = [
+  'cash-comp',
+  'liquid-equity',
+  'paper-equity',
+  'liquid-total',
+  'paper-total',
+] as const
+
+export const CAREER_COMP_LTV_BANDS = ['low', 'medium', 'high'] as const
+
+export type CareerCompLtvMetric = (typeof CAREER_COMP_LTV_METRIC_IDS)[number]
+export type CareerCompLtvBand = (typeof CAREER_COMP_LTV_BANDS)[number]
+
+export interface CareerCompLtvRouteParams {
+  jobId: string
+  metric: CareerCompLtvMetric
+  band: CareerCompLtvBand
+  year?: number | undefined
+}
+
+export const CAREER_COMP_DETAIL_COLUMN_IDS = [
+  'grant-rsu',
+  'grant-opt',
+  'valuation-timeline',
+  ...CAREER_COMP_LTV_DETAIL_COLUMN_IDS,
+] as const
 
 export type CareerCompDetailColumnId = (typeof CAREER_COMP_DETAIL_COLUMN_IDS)[number]
 export type CareerCompRouteColumnId = CareerCompFormSectionId | CareerCompResultViewId | CareerCompLegacyResultViewId | CareerCompDetailColumnId
@@ -85,4 +112,53 @@ export function parseGrantRouteInstance(instance: string | undefined): { jobId: 
     jobId: instance.slice(0, separator),
     grantId: instance.slice(separator + 1),
   }
+}
+
+function isCareerCompLtvMetric(value: string | null): value is CareerCompLtvMetric {
+  return CAREER_COMP_LTV_METRIC_IDS.some((metric) => metric === value)
+}
+
+function isCareerCompLtvBand(value: string | null): value is CareerCompLtvBand {
+  return CAREER_COMP_LTV_BANDS.some((band) => band === value)
+}
+
+export function ltvDetailRouteInstance(params: CareerCompLtvRouteParams): string {
+  const searchParams = new URLSearchParams({
+    jobId: params.jobId,
+    metric: params.metric,
+    band: params.band,
+  })
+
+  if (params.year !== undefined) {
+    searchParams.set('year', String(params.year))
+  }
+
+  return searchParams.toString()
+}
+
+export function parseLtvDetailRouteInstance(instance: string | undefined, options: { requireYear?: boolean } = {}): CareerCompLtvRouteParams | null {
+  if (!instance) {
+    return null
+  }
+
+  const searchParams = new URLSearchParams(instance)
+  const jobId = searchParams.get('jobId')
+  const metric = searchParams.get('metric')
+  const band = searchParams.get('band')
+
+  if (!jobId || !isCareerCompLtvMetric(metric) || !isCareerCompLtvBand(band)) {
+    return null
+  }
+
+  const yearValue = searchParams.get('year')
+  if (yearValue === null) {
+    return options.requireYear === true ? null : { jobId, metric, band }
+  }
+
+  const year = Number(yearValue)
+  if (!Number.isInteger(year)) {
+    return null
+  }
+
+  return { jobId, metric, band, year }
 }
