@@ -1,0 +1,24 @@
+{
+  "taxYear": 2025,
+  "formId": "schedule-1",
+  "templateRevision": "2025",
+  "mappings": [
+    { "key": "header.name", "pdfField": "f1_01[0]", "source": "irsProfile.nameLine", "format": "text" },
+    { "key": "header.ssn", "pdfField": "f1_02[0]", "source": "irsProfile.ssn", "format": "ssn" },
+    { "key": "schedule1.line1a", "pdfField": "f1_04[0]", "source": "facts.schedule1.line1aTotal", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line2a", "pdfField": "f1_05[0]", "source": "facts.schedule1.line2aTotal", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line3", "pdfField": "f1_07[0]", "source": "facts.schedule1.line3Total", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line4", "pdfField": "f1_08[0]", "source": "facts.schedule1.line4Total", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line5", "pdfField": "f1_09[0]", "source": "facts.schedule1.line5Total", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line6", "pdfField": "f1_10[0]", "source": "facts.schedule1.line6Total", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line7", "pdfField": "f1_12[0]", "source": "facts.schedule1.line7Total", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line8b", "pdfField": "f1_14[0]", "source": "facts.schedule1.line8bTotal", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line8h", "pdfField": "f1_20[0]", "source": "facts.schedule1.line8hTotal", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line8i", "pdfField": "f1_21[0]", "source": "facts.schedule1.line8iTotal", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line8z", "pdfField": "f1_36[0]", "source": "facts.schedule1.line8zTotal", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line9", "pdfField": "f1_37[0]", "source": "facts.schedule1.line9TotalOtherIncome", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line10", "pdfField": "f1_38[0]", "source": "facts.form1040.line8", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line15", "pdfField": "f2_05[0]", "source": "facts.schedule1.line15Total", "format": "amount", "blankIfZero": true },
+    { "key": "schedule1.line26", "pdfField": "f2_30[0]", "source": "facts.form1040.line10", "format": "amount", "blankIfZero": true }
+  ]
+}

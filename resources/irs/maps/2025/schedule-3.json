@@ -1,0 +1,23 @@
+{
+  "taxYear": 2025,
+  "formId": "schedule-3",
+  "templateRevision": "2025",
+  "mappings": [
+    { "key": "header.name", "pdfField": "f1_01[0]", "source": "irsProfile.nameLine", "format": "text" },
+    { "key": "header.ssn", "pdfField": "f1_02[0]", "source": "irsProfile.ssn", "format": "ssn" },
+    { "key": "schedule3.line1", "pdfField": "f1_03[0]", "source": "facts.schedule3.line1ForeignTaxCredit", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line2", "pdfField": "f1_04[0]", "source": "facts.schedule3.line2ChildDependentCareCredit", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line3", "pdfField": "f1_05[0]", "source": "facts.schedule3.line3EducationCredits", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line4", "pdfField": "f1_06[0]", "source": "facts.schedule3.line4RetirementSavingsCredit", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line5a", "pdfField": "f1_07[0]", "source": "facts.schedule3.line5aResidentialCleanEnergyCredit", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line5b", "pdfField": "f1_08[0]", "source": "facts.schedule3.line5bEnergyEfficientHomeImprovementCredit", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line7", "pdfField": "f1_24[0]", "source": "facts.schedule3.line7OtherNonrefundableCredits", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line8", "pdfField": "f1_25[0]", "source": "facts.schedule3.line8TotalNonrefundableCredits", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line9", "pdfField": "f1_26[0]", "source": "facts.schedule3.line9NetPremiumTaxCredit", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line10", "pdfField": "f1_27[0]", "source": "facts.schedule3.line10ExtensionPayment", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line11", "pdfField": "f1_28[0]", "source": "facts.schedule3.line11ExcessSocialSecurityWithheld", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line12", "pdfField": "f1_29[0]", "source": "facts.schedule3.line12FuelTaxCredit", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line14", "pdfField": "f1_36[0]", "source": "facts.schedule3.line14OtherPaymentsRefundableCredits", "format": "amount", "blankIfZero": true },
+    { "key": "schedule3.line15", "pdfField": "f1_37[0]", "source": "facts.schedule3.line15TotalPaymentsRefundableCredits", "format": "amount", "blankIfZero": true }
+  ]
+}

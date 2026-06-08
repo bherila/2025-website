@@ -1,0 +1,1560 @@
+[
+    {
+        "name": "f1_01[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "365_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            36,
+            684,
+            445.65,
+            698.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_02[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "366_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": null,
+        "maxLength": 11,
+        "rect": [
+            446.4,
+            684,
+            576,
+            698.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_03[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "367_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            482.4,
+            660.002,
+            576,
+            672.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_04[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "368_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            606.002,
+            576,
+            618.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_05[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "369_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            594,
+            576,
+            605.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_06[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "370_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            338.4,
+            582.001,
+            475.2,
+            594
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_07[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "371_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            570.002,
+            576,
+            582.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "c1_1[0]",
+        "type": "Btn",
+        "fieldKind": "checkbox",
+        "page": 1,
+        "objectId": "372_0",
+        "value": "Off",
+        "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
+        "flags": null,
+        "maxLength": null,
+        "rect": [
+            273.6,
+            560,
+            281.6,
+            568
+        ],
+        "options": [],
+        "states": [
+            "1",
+            "Off"
+        ],
+        "onValues": [
+            "1"
+        ]
+    },
+    {
+        "name": "c1_2[0]",
+        "type": "Btn",
+        "fieldKind": "checkbox",
+        "page": 1,
+        "objectId": "373_0",
+        "value": "Off",
+        "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
+        "flags": null,
+        "maxLength": null,
+        "rect": [
+            324,
+            560,
+            332,
+            568
+        ],
+        "options": [],
+        "states": [
+            "1",
+            "Off"
+        ],
+        "onValues": [
+            "1"
+        ]
+    },
+    {
+        "name": "f1_08[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "374_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            558,
+            576,
+            569.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_09[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "375_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            546.001,
+            576,
+            558
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_10[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "376_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            534.002,
+            576,
+            546.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "c1_3[0]",
+        "type": "Btn",
+        "fieldKind": "checkbox",
+        "page": 1,
+        "objectId": "407_0",
+        "value": "Off",
+        "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
+        "flags": null,
+        "maxLength": null,
+        "rect": [
+            448.8,
+            524,
+            456.8,
+            532
+        ],
+        "options": [],
+        "states": [
+            "1",
+            "Off"
+        ],
+        "onValues": [
+            "1"
+        ]
+    },
+    {
+        "name": "f1_11[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "408_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            151.2,
+            510.001,
+            223.2,
+            522
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_12[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "378_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            510.001,
+            576,
+            522
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_13[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "406_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            414.4,
+            486,
+            478.4,
+            497.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_14[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "380_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            474.001,
+            481.65,
+            486
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_15[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "381_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            462.002,
+            481.65,
+            474.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_16[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "382_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            414.4,
+            450,
+            478.4,
+            461.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_17[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "383_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            438.001,
+            481.65,
+            450
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_18[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "384_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            426.002,
+            481.65,
+            438.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_19[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "385_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            414,
+            481.65,
+            425.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_20[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "386_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            402.001,
+            481.65,
+            414
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_21[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "387_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            390.002,
+            481.65,
+            402.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_22[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "388_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            378,
+            481.65,
+            389.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_23[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "389_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            366.001,
+            481.65,
+            378
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_24[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "390_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            342,
+            481.65,
+            353.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_25[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "391_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            330.001,
+            481.65,
+            342
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_26[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "392_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            318.002,
+            481.65,
+            330.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_27[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "393_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            306,
+            481.65,
+            317.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_28[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "394_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            294.001,
+            481.65,
+            306
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_29[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "395_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            282.002,
+            481.65,
+            294.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_30[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "396_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            270,
+            481.65,
+            281.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_31[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "397_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            414.4,
+            246.002,
+            478.4,
+            258.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_32[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "398_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            222.001,
+            481.65,
+            234
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_33[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "399_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            210.002,
+            481.65,
+            222.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_34[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "400_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            186.001,
+            481.65,
+            198
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_36[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "402_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            150.001,
+            481.65,
+            162
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_35[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "405_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8392704,
+        "maxLength": null,
+        "rect": [
+            64.8,
+            149.998,
+            381.6,
+            173.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_37[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "403_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            138.002,
+            576,
+            150.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f1_38[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 1,
+        "objectId": "404_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            114.001,
+            576,
+            126
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_01[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "409_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            720,
+            576,
+            731.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_02[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "410_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            696.002,
+            576,
+            708.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_03[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "411_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            684,
+            576,
+            695.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "c2_1[0]",
+        "type": "Btn",
+        "fieldKind": "checkbox",
+        "page": 2,
+        "objectId": "412_0",
+        "value": "Off",
+        "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
+        "flags": null,
+        "maxLength": null,
+        "rect": [
+            185.8,
+            662.002,
+            193.8,
+            670.002
+        ],
+        "options": [],
+        "states": [
+            "1",
+            "Off"
+        ],
+        "onValues": [
+            "1"
+        ]
+    },
+    {
+        "name": "f2_04[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "413_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            660.002,
+            576,
+            672.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_05[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "414_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            648,
+            576,
+            659.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_06[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "415_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            636.001,
+            576,
+            648
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_07[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "416_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            624.002,
+            576,
+            636.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_08[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "417_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            612,
+            576,
+            623.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_09[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "418_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            600.001,
+            576,
+            612
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_10[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "442_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 25165824,
+        "maxLength": 9,
+        "rect": [
+            403.2,
+            588.002,
+            475.2,
+            600.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_11[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "420_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            338.4,
+            576,
+            475.2,
+            587.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "c2_2[0]",
+        "type": "Btn",
+        "fieldKind": "checkbox",
+        "page": 2,
+        "objectId": "421_0",
+        "value": "Off",
+        "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
+        "flags": null,
+        "maxLength": null,
+        "rect": [
+            185.8,
+            554.002,
+            193.8,
+            562.002
+        ],
+        "options": [],
+        "states": [
+            "1",
+            "Off"
+        ],
+        "onValues": [
+            "1"
+        ]
+    },
+    {
+        "name": "f2_12[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "422_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            552.002,
+            576,
+            564.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_13[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "423_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            540,
+            576,
+            551.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_14[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "424_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388609,
+        "maxLength": null,
+        "rect": [
+            504,
+            528.001,
+            576,
+            540
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_15[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "425_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            516.002,
+            576,
+            528.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_16[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "441_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            492.001,
+            481.65,
+            504
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_17[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "427_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            468,
+            481.65,
+            479.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_18[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "428_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            444.002,
+            481.65,
+            456.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_19[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "429_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            432,
+            481.65,
+            443.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_20[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "430_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            408.002,
+            481.65,
+            420.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_21[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "431_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            396,
+            481.65,
+            407.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_22[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "432_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            384.001,
+            481.65,
+            396
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_23[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "433_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            360,
+            481.65,
+            371.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_24[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "434_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            336.002,
+            481.65,
+            348.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_25[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "435_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            324,
+            481.65,
+            335.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_26[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "436_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            312.001,
+            481.65,
+            324
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_28[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "438_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            410.4,
+            276.001,
+            481.65,
+            288
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_27[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "440_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8392704,
+        "maxLength": null,
+        "rect": [
+            64.8,
+            275.998,
+            381.6,
+            299.999
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_29[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "439_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            264.002,
+            576,
+            276.001
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    },
+    {
+        "name": "f2_30[0]",
+        "type": "Tx",
+        "fieldKind": "text",
+        "page": 2,
+        "objectId": "361_0",
+        "value": null,
+        "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
+        "flags": 8388608,
+        "maxLength": null,
+        "rect": [
+            504,
+            240.001,
+            576,
+            252
+        ],
+        "options": [],
+        "states": [],
+        "onValues": []
+    }
+]

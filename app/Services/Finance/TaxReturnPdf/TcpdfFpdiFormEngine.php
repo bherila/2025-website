@@ -20,11 +20,47 @@ class TcpdfFpdiFormEngine implements IrsAcroFormFillEngine
     public function fill(string $templatePath, array $fieldValues, TaxReturnPdfOptions $options): string
     {
         $formId = $options->formId ?? 'form-1040';
+
+        return $this->fillForms([[
+            'formId' => $formId,
+            'templatePath' => $templatePath,
+            'fieldValues' => $fieldValues,
+            'instanceKey' => $this->instanceKey($options),
+        ]], $options);
+    }
+
+    /**
+     * @param  array<int, array{formId: string, templatePath: string, fieldValues: array<string, string|bool|null>, instanceKey: string}>  $forms
+     */
+    public function fillForms(array $forms, TaxReturnPdfOptions $options): string
+    {
+        $pdf = $this->newPdf($options);
+
+        foreach ($forms as $form) {
+            $this->renderForm($pdf, $form, $options);
+        }
+
+        $content = $pdf->Output($options->filename ?? 'tax-return.pdf', 'S');
+
+        if ($content === '' || ! str_starts_with($content, '%PDF')) {
+            throw new RuntimeException('TCPDF/FPDI did not return a valid PDF payload.');
+        }
+
+        return $content;
+    }
+
+    /**
+     * @param  array{formId: string, templatePath: string, fieldValues: array<string, string|bool|null>, instanceKey: string}  $form
+     */
+    private function renderForm(Fpdi $pdf, array $form, TaxReturnPdfOptions $options): void
+    {
+        $formId = $form['formId'];
+        $templatePath = $form['templatePath'];
+        $fieldValues = $form['fieldValues'];
+        $instanceKey = $form['instanceKey'];
         $template = $this->templates->template($options->year, $formId);
         $backgroundPath = $this->templates->backgroundPath($template);
         $fieldsByPage = $this->fieldsByPage($this->fieldDumpService->dump($templatePath));
-
-        $pdf = $this->newPdf($options);
         $pageCount = $pdf->setSourceFile($backgroundPath);
 
         for ($page = 1; $page <= $pageCount; $page++) {
@@ -46,18 +82,10 @@ class TcpdfFpdiFormEngine implements IrsAcroFormFillEngine
                 if ($options->mode === 'print') {
                     $this->drawPrintValue($pdf, $field, $geometry, $fieldValues[$field->name] ?? null);
                 } else {
-                    $this->drawEditableField($pdf, $formId, $options, $field, $geometry, $fieldValues[$field->name] ?? null);
+                    $this->drawEditableField($pdf, $formId, $instanceKey, $field, $geometry, $fieldValues[$field->name] ?? null);
                 }
             }
         }
-
-        $content = $pdf->Output($options->filename ?? "{$formId}.pdf", 'S');
-
-        if ($content === '' || ! str_starts_with($content, '%PDF')) {
-            throw new RuntimeException('TCPDF/FPDI did not return a valid PDF payload.');
-        }
-
-        return $content;
     }
 
     /**
@@ -142,14 +170,14 @@ class TcpdfFpdiFormEngine implements IrsAcroFormFillEngine
     /**
      * @param  array{x: float, y: float, w: float, h: float}  $geometry
      */
-    private function drawEditableField(Fpdi $pdf, string $formId, TaxReturnPdfOptions $options, IrsFieldDefinition $field, array $geometry, string|bool|null $value): void
+    private function drawEditableField(Fpdi $pdf, string $formId, string $instanceKey, IrsFieldDefinition $field, array $geometry, string|bool|null $value): void
     {
         $fontSize = $this->fontSize($field);
         $pdf->SetFont('helvetica', '', $fontSize);
         $pdf->SetTextColor(0, 0, 0);
 
         if ($field->type === 'Btn') {
-            $this->drawEditableButton($pdf, $formId, $options, $field, $geometry, $value);
+            $this->drawEditableButton($pdf, $formId, $instanceKey, $field, $geometry, $value);
 
             return;
         }
@@ -168,7 +196,7 @@ class TcpdfFpdiFormEngine implements IrsAcroFormFillEngine
         }
 
         $pdf->TextField(
-            $this->outputFieldName($formId, $this->instanceKey($options), $field, true),
+            $this->outputFieldName($formId, $instanceKey, $field, true),
             $geometry['w'],
             $geometry['h'],
             $properties,
@@ -181,7 +209,7 @@ class TcpdfFpdiFormEngine implements IrsAcroFormFillEngine
     /**
      * @param  array{x: float, y: float, w: float, h: float}  $geometry
      */
-    private function drawEditableButton(Fpdi $pdf, string $formId, TaxReturnPdfOptions $options, IrsFieldDefinition $field, array $geometry, string|bool|null $value): void
+    private function drawEditableButton(Fpdi $pdf, string $formId, string $instanceKey, IrsFieldDefinition $field, array $geometry, string|bool|null $value): void
     {
         $size = max(1, (int) round(min($geometry['w'], $geometry['h'])));
         $onValue = $field->onValues[0] ?? 'Yes';
@@ -190,7 +218,7 @@ class TcpdfFpdiFormEngine implements IrsAcroFormFillEngine
 
         if ($field->fieldKind === 'radio') {
             $pdf->RadioButton(
-                $this->outputFieldName($formId, $this->instanceKey($options), $field, false),
+                $this->outputFieldName($formId, $instanceKey, $field, false),
                 $size,
                 ['lineWidth' => 0, 'borderStyle' => 'none'],
                 $fieldOptions,
@@ -204,7 +232,7 @@ class TcpdfFpdiFormEngine implements IrsAcroFormFillEngine
         }
 
         $pdf->CheckBox(
-            $this->outputFieldName($formId, $this->instanceKey($options), $field, true),
+            $this->outputFieldName($formId, $instanceKey, $field, true),
             $size,
             $checked,
             ['lineWidth' => 0, 'borderStyle' => 'none'],

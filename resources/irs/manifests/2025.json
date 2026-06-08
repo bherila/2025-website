@@ -13,6 +13,50 @@
       "sourceUrl": "https://www.irs.gov/pub/irs-pdf/f1040.pdf",
       "revision": "2025",
       "fillable": true
+    },
+    "schedule-1": {
+      "name": "Schedule 1 (Form 1040)",
+      "taxYear": 2025,
+      "path": "resources/irs/forms/2025/f1040s1.pdf",
+      "sha256": "8dafec719f6a4716c259a2bdaca546d9bb9e262d1eabef885fe116a7327458fa",
+      "backgroundPath": "resources/irs/forms/2025/f1040s1-bg.pdf",
+      "backgroundSha256": "9e32dae27655f291655c689ea90b9dc93cd16d851407ea950ae2e1ee867c09a9",
+      "sourceUrl": "https://www.irs.gov/pub/irs-pdf/f1040s1.pdf",
+      "revision": "2025",
+      "fillable": true
+    },
+    "schedule-3": {
+      "name": "Schedule 3 (Form 1040)",
+      "taxYear": 2025,
+      "path": "resources/irs/forms/2025/f1040s3.pdf",
+      "sha256": "008cfd3fe3ebd0860452069b90fd0a3d53dda6dd8a5d870278370aa899a63f82",
+      "backgroundPath": "resources/irs/forms/2025/f1040s3-bg.pdf",
+      "backgroundSha256": "61901c1c8e08b00c69c11640290c042bd8f1928c79c230fb2b252442b9fa1629",
+      "sourceUrl": "https://www.irs.gov/pub/irs-pdf/f1040s3.pdf",
+      "revision": "2025",
+      "fillable": true
+    },
+    "schedule-d": {
+      "name": "Schedule D (Form 1040)",
+      "taxYear": 2025,
+      "path": "resources/irs/forms/2025/f1040sd.pdf",
+      "sha256": "90564c8b7e49280363612639b804d113ebedb516c2e87c70649f29c844da1d2e",
+      "backgroundPath": "resources/irs/forms/2025/f1040sd-bg.pdf",
+      "backgroundSha256": "b06bd247124e43bbade5c256992a852f9c7f7a75791befd2968e121fab98aa9d",
+      "sourceUrl": "https://www.irs.gov/pub/irs-pdf/f1040sd.pdf",
+      "revision": "2025",
+      "fillable": true
+    },
+    "form-8949": {
+      "name": "Form 8949",
+      "taxYear": 2025,
+      "path": "resources/irs/forms/2025/f8949.pdf",
+      "sha256": "274513891e4e281d11e14286f14b9df724c24b6030fca0f0681da64fb2e7f525",
+      "backgroundPath": "resources/irs/forms/2025/f8949-bg.pdf",
+      "backgroundSha256": "a1b497dcda63fa55cd562fcf6097e99c6bd9ea0fd8150b848ca4140cc0541563",
+      "sourceUrl": "https://www.irs.gov/pub/irs-pdf/f8949.pdf",
+      "revision": "2025",
+      "fillable": true
     }
   }
 }

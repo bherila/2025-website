@@ -36,4 +36,21 @@ class IrsFieldDumpServiceTest extends TestCase
             $grouped['c1_8[0]'][1]->onValues,
         ))));
     }
+
+    public function test_committed_field_dumps_cover_all_pinned_packet_forms(): void
+    {
+        $expectedCounts = [
+            'f1040.pdf' => 199,
+            'f1040s1.pdf' => 73,
+            'f1040s3.pdf' => 37,
+            'f1040sd.pdf' => 55,
+            'f8949.pdf' => 202,
+        ];
+
+        foreach ($expectedCounts as $filename => $expectedCount) {
+            $fields = app(IrsFieldDumpService::class)->dump(resource_path("irs/forms/2025/{$filename}"));
+
+            $this->assertCount($expectedCount, $fields);
+        }
+    }
 }
