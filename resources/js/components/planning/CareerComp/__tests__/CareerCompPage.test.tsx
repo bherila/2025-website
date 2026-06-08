@@ -178,6 +178,39 @@ describe('CareerCompPage', () => {
     expect(container.querySelector('section[data-column-id="ltv-table"]')).not.toBeInTheDocument()
   })
 
+  it('opens offers as a list column before drilling into an offer editor column', () => {
+    const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Offers' }))
+
+    expect(window.location.hash).toBe('#/offers')
+    expect(screen.getByText('Offer list')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Job name')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open offer Offer 1' }))
+
+    expect(window.location.hash).toBe('#/offers/job:hyp-1')
+    expect(container.querySelector('section[data-column-id="job"]')).toBeInTheDocument()
+    expect(screen.getByLabelText('Job name')).toHaveValue('Offer 1')
+  })
+
+  it('opens current jobs as a list column before drilling into a current job editor column', () => {
+    const inputs = { ...DEFAULT_CAREER_COMP_INPUTS, currentJobs: [currentJobFixture] }
+    const { container } = render(<CareerCompPage initialData={baseInitialData({ inputs })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Current' }))
+
+    expect(window.location.hash).toBe('#/current-job')
+    expect(screen.getByText('Current job baselines')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Job name')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: `Open current job ${currentJobFixture.name}` }))
+
+    expect(window.location.hash).toBe(`#/current-job/job:${currentJobFixture.id}`)
+    expect(container.querySelector('section[data-column-id="job"]')).toBeInTheDocument()
+    expect(screen.getByLabelText('Job name')).toHaveValue(currentJobFixture.name)
+  })
+
   it('pushes LTV detail Miller columns from clicked lifetime cells', () => {
     const { container } = render(<CareerCompPage initialData={baseInitialData()} />)
 
@@ -356,6 +389,7 @@ describe('CareerCompPage', () => {
     render(<CareerCompPage initialData={baseInitialData()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Offers' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open offer Offer 1' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add RSU grant' }))
 
     const shareCount = screen.getByLabelText('Share count')

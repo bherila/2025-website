@@ -26,6 +26,7 @@ import {
   type CareerCompFormSectionId,
   GrantEditorColumn,
   type GrantType,
+  JobEditorColumn,
   notRenderedViaMillerShell,
   OfferNotesColumn,
   ValuationTimelineColumn,
@@ -80,6 +81,7 @@ interface CareerCompColumnMeta {
 type CareerCompColumnState =
   | { kind: 'form'; id: CareerCompFormSectionId }
   | { kind: 'result'; id: CareerCompResultViewId; initialLiquidityMode?: LiquidityMode | undefined; initialLiquidityBand?: CareerCompLtvBand | undefined }
+  | { kind: 'job'; jobId: string }
   | { kind: 'grant'; editorKey: string; jobId: string; grantType: GrantType; grantId?: string | undefined }
   | { kind: 'offerNotes'; jobId: string }
   | { kind: 'valuationTimeline'; jobId: string }
@@ -219,6 +221,10 @@ function routeColumnToState(column: CareerCompRouteColumn): CareerCompColumnStat
     return params && params.year !== undefined ? { kind: 'ltvDetailYear', jobId: params.jobId, metric: params.metric, band: params.band, year: params.year } : null
   }
 
+  if (column.id === 'job') {
+    return column.instance ? { kind: 'job', jobId: column.instance } : null
+  }
+
   if (column.id === 'valuation-timeline') {
     return column.instance ? { kind: 'valuationTimeline', jobId: column.instance } : null
   }
@@ -277,6 +283,10 @@ function routeToColumnStack(route: CareerCompRoute): CareerCompColumnState[] {
 function columnStateToRouteColumn(column: CareerCompColumnState): CareerCompRouteColumn {
   if (column.kind === 'form' || column.kind === 'result') {
     return { id: column.id }
+  }
+
+  if (column.kind === 'job') {
+    return { id: 'job', instance: column.jobId }
   }
 
   if (column.kind === 'valuationTimeline') {
@@ -603,20 +613,39 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     setColumnStack([column])
   }
 
+  function openJobEditor(jobId: string): void {
+    setColumnStack((stack) => {
+      const rootColumn = stack[0]
+      const section = rootColumn?.kind === 'form' && (rootColumn.id === 'current-job' || rootColumn.id === 'offers')
+        ? rootColumn
+        : { kind: 'form' as const, id: 'offers' as const }
+
+      return [section, { kind: 'job', jobId }]
+    })
+  }
+
+  function detailParentStack(stack: CareerCompColumnState[], jobId: string): CareerCompColumnState[] {
+    if (stack[1]?.kind === 'job' && stack[1].jobId === jobId) {
+      return stack.slice(0, 2)
+    }
+
+    return stack.slice(0, 1)
+  }
+
   function openGrantEditor(jobId: string, grantType: GrantType, grantId?: string): void {
     grantEditorSequenceRef.current += 1
     const editorKey = grantId
       ? `grant:${jobId}:${grantType}:${grantId}`
       : `grant:${jobId}:${grantType}:new:${grantEditorSequenceRef.current}`
-    setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'grant', editorKey, jobId, grantType, grantId }])
+    setColumnStack((stack) => [...detailParentStack(stack, jobId), { kind: 'grant', editorKey, jobId, grantType, grantId }])
   }
 
   function openValuationTimeline(jobId: string): void {
-    setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'valuationTimeline', jobId }])
+    setColumnStack((stack) => [...detailParentStack(stack, jobId), { kind: 'valuationTimeline', jobId }])
   }
 
   function openOfferNotes(jobId: string): void {
-    setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'offerNotes', jobId }])
+    setColumnStack((stack) => [...detailParentStack(stack, jobId), { kind: 'offerNotes', jobId }])
   }
 
   function openLiquidityDetail(jobId: string, year: number, band: CareerCompLtvBand, mode: CareerCompLiquidityMode): void {
@@ -660,6 +689,31 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
   }
 
   function toMillerColumn(column: CareerCompColumnState): MillerColumnShellColumn {
+    if (column.kind === 'job') {
+      const job = [...inputs.currentJobs, ...inputs.hypotheticalJobs].find((entry) => entry.id === column.jobId)
+      const isCurrentJob = inputs.currentJobs.some((entry) => entry.id === column.jobId)
+
+      return {
+        key: `job:${column.jobId}`,
+        id: 'job',
+        label: isCurrentJob ? 'Current job details' : 'Offer details',
+        shortLabel: job?.name ?? 'Job',
+        size: 'wide',
+        children: (
+          <JobEditorColumn
+            inputs={inputs}
+            jobId={column.jobId}
+            onChange={setInputs}
+            onOpenGrantEditor={openGrantEditor}
+            onOpenValuationTimeline={openValuationTimeline}
+            onOpenOfferNotes={openOfferNotes}
+            onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })}
+            activeGrant={activeGrant}
+          />
+        ),
+      }
+    }
+
     if (column.kind === 'grant') {
       return {
         key: column.editorKey,
@@ -759,7 +813,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         id: column.id,
         label: section.label,
         shortLabel: section.shortLabel,
-        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} onOpenValuationTimeline={openValuationTimeline} onOpenOfferNotes={openOfferNotes} onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })} activeGrant={activeGrant} />,
+        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} onOpenValuationTimeline={openValuationTimeline} onOpenOfferNotes={openOfferNotes} onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })} activeGrant={activeGrant} onOpenJobEditor={openJobEditor} />,
       }
     }
 

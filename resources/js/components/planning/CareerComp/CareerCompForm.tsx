@@ -24,6 +24,7 @@ export type GrantType = 'rsu' | 'opt'
 export type OpenGrantEditor = (jobId: string, grantType: GrantType, grantId?: string) => void
 export type OpenValuationTimeline = (jobId: string) => void
 export type OpenOfferNotes = (jobId: string) => void
+export type OpenJobEditor = (jobId: string) => void
 
 export interface CareerCompFormSectionMeta {
   id: CareerCompFormSectionId
@@ -53,6 +54,7 @@ interface CareerCompFormProps {
   onOpenOfferNotes: OpenOfferNotes
   onOpenModelAssumptions: () => void
   activeGrant?: ActiveGrantSelection | null | undefined
+  onOpenJobEditor?: OpenJobEditor | undefined
 }
 
 interface CareerCompFormSectionProps extends CareerCompFormProps {
@@ -794,6 +796,57 @@ function removeCurrentJob(inputs: CareerCompInputs, jobId: string): CareerCompIn
   }
 }
 
+function jobListDescription(job: JobSpec): string {
+  const companyLabel = job.company.type === 'private' ? 'Private company' : 'Public company'
+  const grantCount = job.rsuGrants.length + job.optionGrants.length
+  const grantLabel = grantCount === 1 ? '1 equity grant' : `${grantCount} equity grants`
+  const notesLabel = job.notesMarkdown?.trim() ? 'notes saved' : 'no notes yet'
+
+  return `${companyLabel} · ${formatMoney(job.comp.baseSalary)} base · ${grantLabel} · ${notesLabel}`
+}
+
+function JobListButton({ job, labelPrefix, onOpen, onOpenOfferNotes }: {
+  job: JobSpec
+  labelPrefix: string
+  onOpen: () => void
+  onOpenOfferNotes?: OpenOfferNotes | undefined
+}): ReactElement {
+  return (
+    <div className="group rounded-md border border-border bg-card transition-colors hover:bg-muted/40">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Open ${labelPrefix} ${job.name}`}
+        className="flex w-full items-start gap-3 px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
+          <Briefcase className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1 space-y-1">
+          <span className="block truncate text-sm font-semibold text-foreground">{job.name}</span>
+          <span className="block text-xs leading-relaxed text-muted-foreground">{jobListDescription(job)}</span>
+        </span>
+        <ChevronRight className="mt-2 size-4 shrink-0 text-muted-foreground" />
+      </button>
+      {onOpenOfferNotes ? (
+        <div className="flex justify-end border-t border-border/60 px-3 py-2">
+          <Button type="button" variant="ghost" size="sm" aria-label={`Open notes for ${job.name}`} title={`Open notes for ${job.name}`} onClick={() => onOpenOfferNotes(job.id)}>
+            <FileText className="size-4" /> Notes
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function AddJobButton({ label, onClick, disabled, title }: { label: string; onClick: () => void; disabled?: boolean; title?: string | undefined }): ReactElement {
+  return (
+    <Button type="button" variant="outline" className="w-full" onClick={onClick} disabled={disabled} title={title}>
+      <Plus className="mr-2 size-4" /> {label}
+    </Button>
+  )
+}
+
 function ModelAssumptionsEditor({ inputs, onChange }: { inputs: CareerCompInputs; onChange: (inputs: CareerCompInputs) => void }): ReactElement {
   const assumptions = inputs.modelAssumptions
   const commonFmvPctOfPreferred = assumptions.commonFmvPctOfPreferred
@@ -1465,7 +1518,44 @@ function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssump
   )
 }
 
-export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant }: CareerCompFormSectionProps): ReactElement {
+export function JobEditorColumn({ inputs, jobId, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant }: CareerCompFormProps & { jobId: string }): ReactElement {
+  const job = findJob(inputs, jobId)
+
+  if (!job) {
+    return (
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle>Job not found</CardTitle>
+          <CardDescription>This job may have been removed or archived in another column.</CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  const isCurrentJob = inputs.currentJobs.some((entry) => entry.id === jobId)
+
+  return (
+    <JobEditor
+      activeGrant={activeGrant}
+      job={job}
+      startYear={inputs.startYear}
+      horizonYears={inputs.horizonYears}
+      modelAssumptions={inputs.modelAssumptions}
+      currentJobs={inputs.currentJobs}
+      showCareerTransition={!isCurrentJob}
+      onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
+      onRemove={isCurrentJob ? () => onChange(removeCurrentJob(inputs, job.id)) : (inputs.hypotheticalJobs.length > 1 ? () => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) }) : undefined)}
+      removeLabel={`Remove ${job.name}`}
+      onArchive={isCurrentJob ? undefined : () => onChange(updateJob(inputs, job.id, (current) => ({ ...current, archived: true })))}
+      onOpenGrantEditor={onOpenGrantEditor}
+      onOpenValuationTimeline={onOpenValuationTimeline}
+      onOpenOfferNotes={isCurrentJob ? undefined : onOpenOfferNotes}
+      onOpenModelAssumptions={onOpenModelAssumptions}
+    />
+  )
+}
+
+export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant, onOpenJobEditor }: CareerCompFormSectionProps): ReactElement {
   if (section === 'basics') {
     return (
       <Card>
@@ -1486,6 +1576,39 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
   }
 
   if (section === 'current-job') {
+    if (onOpenJobEditor) {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <Label className="text-sm font-semibold">Current job baselines</Label>
+            <p className="mt-1 text-sm text-muted-foreground">Open each current job in its own Miller column so compensation, equity, and transition inputs have more room.</p>
+          </div>
+          {inputs.currentJobs.length > 0 ? (
+            <div className="space-y-2">
+              {inputs.currentJobs.map((job) => (
+                <JobListButton key={job.id} job={job} labelPrefix="current job" onOpen={() => onOpenJobEditor(job.id)} />
+              ))}
+            </div>
+          ) : (
+            <Card className="border-dashed">
+              <CardHeader>
+                <CardTitle>No current jobs</CardTitle>
+                <CardDescription>Deltas will be hidden until you add at least one current job baseline.</CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+          <AddJobButton
+            label="Add current job"
+            onClick={() => {
+              const id = nextJobId(inputs.currentJobs, 'current')
+              onChange({ ...inputs, currentJobs: [...inputs.currentJobs, buildDefaultJob(id, inputs.currentJobs.length === 0 ? 'Current job' : `Current job ${inputs.currentJobs.length + 1}`)] })
+              onOpenJobEditor(id)
+            }}
+          />
+        </div>
+      )
+    }
+
     return (
       <div className="space-y-4">
         {inputs.currentJobs.length > 0 ? (
@@ -1520,17 +1643,13 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           </Card>
         )}
         {inputs.currentJobs.length > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
+          <AddJobButton
+            label="Add current job"
             onClick={() => {
               const id = nextJobId(inputs.currentJobs, 'current')
               onChange({ ...inputs, currentJobs: [...inputs.currentJobs, buildDefaultJob(id, `Current job ${inputs.currentJobs.length + 1}`)] })
             }}
-          >
-            <Plus className="mr-2 size-4" /> Add current job
-          </Button>
+          />
         ) : null}
       </div>
     )
@@ -1539,6 +1658,73 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
   const activeOffers = inputs.hypotheticalJobs.filter((job) => !job.archived)
   const archivedOffers = inputs.hypotheticalJobs.filter((job) => job.archived)
   const canAddOffer = inputs.hypotheticalJobs.length < MAX_HYPOTHETICAL_JOBS
+
+  if (onOpenJobEditor) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-md border border-border bg-muted/20 p-3">
+          <Label className="text-sm font-semibold">Offer list</Label>
+          <p className="mt-1 text-sm text-muted-foreground">Choose an offer to edit it in a dedicated Miller column with wider space for compensation, equity, transition, and notes.</p>
+        </div>
+        {activeOffers.length > 0 ? (
+          <div className="space-y-2">
+            {activeOffers.map((job) => (
+              <JobListButton key={job.id} job={job} labelPrefix="offer" onOpen={() => onOpenJobEditor(job.id)} onOpenOfferNotes={onOpenOfferNotes} />
+            ))}
+          </div>
+        ) : (
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle>No active offers</CardTitle>
+              <CardDescription>Archived offers are saved but excluded from charts, tables, and exports.</CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+        {archivedOffers.length > 0 ? (
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <Label className="text-sm font-semibold">Archived offers</Label>
+              <p className="text-xs text-muted-foreground">Saved for recovery and excluded from projections and XLSX export.</p>
+            </div>
+            <div className="space-y-2">
+              {archivedOffers.map((job) => (
+                <div key={job.id} className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{job.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{job.notesMarkdown ? 'Notes saved' : 'No notes yet'}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button type="button" variant="ghost" size="sm" aria-label={`Open notes for ${job.name}`} title={`Open notes for ${job.name}`} onClick={() => onOpenOfferNotes(job.id)}>
+                      <FileText className="size-4" />
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" aria-label={`Unarchive ${job.name}`} onClick={() => onChange(updateJob(inputs, job.id, (current) => ({ ...current, archived: false })))}>
+                      <ArchiveRestore className="size-4" /> Unarchive
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" aria-label={`Delete ${job.name}`} title={`Delete ${job.name}`} onClick={() => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) })}>
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <AddJobButton
+          label="Add offer"
+          disabled={!canAddOffer}
+          title={!canAddOffer ? `Delete an archived offer before adding more than ${MAX_HYPOTHETICAL_JOBS} total offers.` : undefined}
+          onClick={() => {
+            if (!canAddOffer) {
+              return
+            }
+            const id = nextJobId(inputs.hypotheticalJobs, 'hyp')
+            onChange({ ...inputs, hypotheticalJobs: [...inputs.hypotheticalJobs, buildDefaultJob(id, `Offer ${inputs.hypotheticalJobs.length + 1}`)] })
+            onOpenJobEditor(id)
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -1598,11 +1784,10 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           </div>
         </div>
       ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
+      <AddJobButton
+        label="Add offer"
         disabled={!canAddOffer}
+        title={!canAddOffer ? `Delete an archived offer before adding more than ${MAX_HYPOTHETICAL_JOBS} total offers.` : undefined}
         onClick={() => {
           if (!canAddOffer) {
             return
@@ -1610,10 +1795,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           const id = nextJobId(inputs.hypotheticalJobs, 'hyp')
           onChange({ ...inputs, hypotheticalJobs: [...inputs.hypotheticalJobs, buildDefaultJob(id, `Offer ${inputs.hypotheticalJobs.length + 1}`)] })
         }}
-        title={!canAddOffer ? `Delete an archived offer before adding more than ${MAX_HYPOTHETICAL_JOBS} total offers.` : undefined}
-      >
-        <Plus className="mr-2 size-4" /> Add offer
-      </Button>
+      />
     </div>
   )
 }
