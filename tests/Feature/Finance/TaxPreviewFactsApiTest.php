@@ -45,6 +45,31 @@ class TaxPreviewFactsApiTest extends TestCase
             ->assertJsonMissingPath('taxFacts');
     }
 
+    public function test_tax_preview_data_endpoint_includes_all_year_k1_documents(): void
+    {
+        $user = $this->createUser();
+        $currentYearDoc = $this->createTaxDocument($user->id, [
+            'tax_year' => 2025,
+            'form_type' => 'k1',
+            'is_reviewed' => true,
+            'parsed_data' => $this->k1Data(['B' => 'Partnership', '1' => '100']),
+        ]);
+        $priorYearDoc = $this->createTaxDocument($user->id, [
+            'tax_year' => 2023,
+            'form_type' => 'k1',
+            'is_reviewed' => false,
+            'parsed_data' => $this->k1Data(['B' => 'Partnership', '1' => '50']),
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/finance/tax-preview-data?year=2025');
+
+        $response->assertOk()
+            ->assertJsonPath('allK1Documents.0.id', $priorYearDoc->id)
+            ->assertJsonPath('allK1Documents.0.tax_year', 2023)
+            ->assertJsonPath('allK1Documents.1.id', $currentYearDoc->id)
+            ->assertJsonPath('allK1Documents.1.tax_year', 2025);
+    }
+
     public function test_tax_preview_data_service_loads_accounts_without_auth_context(): void
     {
         $user = $this->createUser();

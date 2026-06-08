@@ -48,6 +48,7 @@ export interface TaxPreviewDataset {
   pendingReviewCount: number
   w2Documents: TaxDocument[]
   accountDocuments: TaxDocument[]
+  allK1Documents: TaxDocument[]
   scheduleCData: ScheduleCResponse
   employmentEntities: EmploymentEntity[]
   accounts: TaxPreviewAccount[]
@@ -68,6 +69,7 @@ interface TaxPreviewContextValue {
   pendingReviewCount: number
   w2Documents: TaxDocument[]
   accountDocuments: TaxDocument[]
+  allK1Documents: TaxDocument[]
   reviewedW2Docs: TaxDocument[]
   reviewed1099Docs: TaxDocument[]
   reviewedK1Docs: TaxDocument[]
@@ -134,6 +136,7 @@ interface TaxPreviewContextValue {
   setPendingReviewCount: Dispatch<SetStateAction<number>>
   setW2Documents: Dispatch<SetStateAction<TaxDocument[]>>
   setAccountDocuments: Dispatch<SetStateAction<TaxDocument[]>>
+  setAllK1Documents: Dispatch<SetStateAction<TaxDocument[]>>
   setScheduleCData: Dispatch<SetStateAction<ScheduleCResponse | null>>
   setEmploymentEntities: Dispatch<SetStateAction<EmploymentEntity[]>>
   setAccounts: Dispatch<SetStateAction<TaxPreviewAccount[]>>
@@ -169,6 +172,7 @@ export function TaxPreviewProvider({
   const [pendingReviewCount, setPendingReviewCount] = useState(0)
   const [w2Documents, setW2Documents] = useState<TaxDocument[]>([])
   const [accountDocuments, setAccountDocuments] = useState<TaxDocument[]>([])
+  const [allK1Documents, setAllK1Documents] = useState<TaxDocument[]>([])
   const [priorYearCapitalLossCarryover, setPriorYearCapitalLossCarryover] = useState<CapitalLossCarryoverLines | null>(null)
   const [scheduleCData, setScheduleCData] = useState<ScheduleCResponse | null>(null)
   const [employmentEntities, setEmploymentEntities] = useState<EmploymentEntity[]>([])
@@ -344,6 +348,7 @@ export function TaxPreviewProvider({
       setPendingReviewCount(response.pendingReviewCount ?? 0)
       setArrayStateIfChanged(setW2Documents, Array.isArray(response.w2Documents) ? response.w2Documents : [])
       setArrayStateIfChanged(setAccountDocuments, Array.isArray(response.accountDocuments) ? response.accountDocuments : [])
+      setArrayStateIfChanged(setAllK1Documents, Array.isArray(response.allK1Documents) ? response.allK1Documents : [])
       setScheduleCData(response.scheduleCData ?? null)
       setEmploymentEntities(Array.isArray(response.employmentEntities) ? response.employmentEntities : [])
       setAccounts(Array.isArray(response.accounts) ? response.accounts : [])
@@ -783,6 +788,7 @@ export function TaxPreviewProvider({
     pendingReviewCount,
     w2Documents,
     accountDocuments,
+    allK1Documents,
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,
@@ -824,6 +830,7 @@ export function TaxPreviewProvider({
     setPendingReviewCount,
     setW2Documents,
     setAccountDocuments,
+    setAllK1Documents,
     setScheduleCData,
     setEmploymentEntities,
     setAccounts,
@@ -839,6 +846,7 @@ export function TaxPreviewProvider({
     pendingReviewCount,
     w2Documents,
     accountDocuments,
+    allK1Documents,
     reviewedW2Docs,
     reviewed1099Docs,
     reviewedK1Docs,

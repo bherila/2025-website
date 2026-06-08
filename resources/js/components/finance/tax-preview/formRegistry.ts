@@ -16,6 +16,7 @@ export type FormId =
   | 'capital-gains-reconciliation'
   | 'source-overrides'
   | 'k1-all-in-one'
+  | 'k1-multi-year'
   | 'k3-all-in-one'
   | 'form-1040'
   | 'sch-1'
@@ -62,6 +63,7 @@ export const ALL_FORM_IDS = [
   'capital-gains-reconciliation',
   'source-overrides',
   'k1-all-in-one',
+  'k1-multi-year',
   'k3-all-in-one',
   'form-1040',
   'sch-1',

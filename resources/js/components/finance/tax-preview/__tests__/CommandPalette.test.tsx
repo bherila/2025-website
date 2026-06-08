@@ -102,6 +102,14 @@ const mockRegistry: FormRegistry = {
     presentation: 'column',
     ...sharedDefaults,
   },
+  'k1-multi-year': {
+    id: 'k1-multi-year',
+    label: 'Multi-Year K-1',
+    shortLabel: 'K-1 by Year',
+    category: 'App',
+    presentation: 'column',
+    ...sharedDefaults,
+  },
   'k3-all-in-one': {
     id: 'k3-all-in-one',
     label: 'All-in-One K-3',
