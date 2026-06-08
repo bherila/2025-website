@@ -20,6 +20,28 @@ class ComparisonShareRedactorTest extends TestCase
         $this->assertCount(1, $redacted['hypotheticalJobs']);
     }
 
+    public function test_removes_multiple_current_jobs_and_retained_references_from_inputs(): void
+    {
+        $inputs = [
+            'currentJob' => ['id' => 'current-main', 'name' => 'Main current role'],
+            'currentJobs' => [
+                ['id' => 'current-main', 'name' => 'Main current role'],
+                ['id' => 'current-side', 'name' => 'Side current role'],
+            ],
+            'hypotheticalJobs' => [[
+                'id' => 'hyp-1',
+                'name' => 'Offer',
+                'retainedCurrentJobIds' => ['current-main', 'current-side', 'external-current'],
+            ]],
+        ];
+
+        $redacted = $this->redactor()->redactInputs($inputs, ['current-main', 'current-side']);
+
+        $this->assertNull($redacted['currentJob']);
+        $this->assertSame([], $redacted['currentJobs']);
+        $this->assertSame(['external-current'], $redacted['hypotheticalJobs'][0]['retainedCurrentJobIds']);
+    }
+
     public function test_does_not_remove_current_when_identity_does_not_match(): void
     {
         $inputs = ['currentJob' => ['id' => 'current', 'name' => 'Current role']];
@@ -42,6 +64,41 @@ class ComparisonShareRedactorTest extends TestCase
         $jobIds = array_map(fn (array $job): string => $job['id'], $redacted['jobs']);
         $this->assertNotContains('current', $jobIds);
         $this->assertContains('hyp-1', $jobIds);
+    }
+
+    public function test_strips_aggregate_current_series_ids_and_component_warnings_from_projection(): void
+    {
+        $projection = [
+            'currentJobId' => 'current-baseline',
+            'currentJobIds' => ['current-main', 'current-side'],
+            'jobs' => [
+                [
+                    'id' => 'current-baseline',
+                    'name' => 'Current jobs',
+                    'isCurrent' => true,
+                    'componentJobNames' => ['Main current role', 'Side current role'],
+                    'vesting' => [['grantId' => 'side-current-rsu', 'type' => 'rsu', 'year' => 2026]],
+                ],
+                ['id' => 'hyp-1', 'name' => 'Public Offer', 'isCurrent' => false, 'vesting' => []],
+            ],
+            'deltasVsCurrent' => [['jobId' => 'hyp-1']],
+            'warnings' => [
+                'Side current role: growth bands should increase from Low to Medium to High.',
+                'Current jobs: grant side-current-rsu cliff is longer than total vesting.',
+                'Public Offer: private liquidity date is beyond the planning horizon; equity never realizes.',
+            ],
+        ];
+
+        $redacted = $this->redactor()->redactProjection($projection, ['current-main', 'current-side']);
+
+        $this->assertNull($redacted['currentJobId']);
+        $this->assertSame([], $redacted['currentJobIds']);
+        $this->assertSame([], $redacted['deltasVsCurrent']);
+        $this->assertSame(['hyp-1'], array_map(fn (array $job): string => $job['id'], $redacted['jobs']));
+        $this->assertSame(
+            ['Public Offer: private liquidity date is beyond the planning horizon; equity never realizes.'],
+            $redacted['warnings'],
+        );
     }
 
     public function test_drops_current_job_warnings_but_keeps_hypothetical_ones(): void
@@ -68,15 +125,16 @@ class ComparisonShareRedactorTest extends TestCase
         );
     }
 
-    public function test_inclusive_mode_is_handled_by_callers_redactor_only_removes_named_identity(): void
+    public function test_projection_redaction_removes_current_marker_even_when_named_identity_is_missing(): void
     {
-        // The redactor is only invoked for exclusive shares; calling it with a non-present id is a no-op.
+        // The redactor is only invoked for exclusive shares; an isCurrent marker is enough to remove
+        // the baseline even if a legacy caller lacks the canonical current job id list.
         $projection = $this->goldenProjection();
 
         $passthrough = $this->redactor()->redactProjection($projection, 'no-such-job');
 
         $jobIds = array_map(fn (array $job): string => $job['id'], $passthrough['jobs']);
-        $this->assertContains('current', $jobIds);
+        $this->assertNotContains('current', $jobIds);
         $this->assertContains('hyp-1', $jobIds);
     }
 

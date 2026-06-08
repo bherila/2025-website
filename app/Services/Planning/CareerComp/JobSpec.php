@@ -35,6 +35,7 @@ final readonly class JobSpec
                 'currentJobNoticeWeeks' => null,
                 'timeOffBetweenJobsWeeks' => null,
             ],
+            'retainedCurrentJobIds' => [],
             'company' => [
                 'type' => 'public',
                 'currentSharePrice' => 0.0,
@@ -177,6 +178,24 @@ final readonly class JobSpec
     public function grantsOptions(): bool
     {
         return filter_var($this->value('grantTypes.options'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function retainedCurrentJobIds(): array
+    {
+        $ids = $this->value('retainedCurrentJobIds');
+        if (! is_array($ids)) {
+            return [];
+        }
+
+        $strings = array_filter(array_map(
+            static fn (mixed $id): string => trim((string) $id),
+            $ids,
+        ), static fn (string $id): bool => $id !== '');
+
+        return array_values(array_unique($strings));
     }
 
     /**

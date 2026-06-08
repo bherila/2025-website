@@ -41,6 +41,7 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
       currentJobNoticeWeeks: null,
       timeOffBetweenJobsWeeks: null,
     },
+    retainedCurrentJobIds: [],
     company: {
       type: 'public',
       currentSharePrice: 25,
@@ -117,6 +118,6 @@ export const DEFAULT_CAREER_COMP_INPUTS: CareerCompInputs = {
   horizonYears: 10,
   startYear: currentYear,
   modelAssumptions: DEFAULT_MODEL_ASSUMPTIONS,
-  currentJob: null,
+  currentJobs: [],
   hypotheticalJobs: [buildDefaultJob('hyp-1', 'Offer 1')],
 }

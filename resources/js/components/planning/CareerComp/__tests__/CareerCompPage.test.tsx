@@ -35,6 +35,7 @@ const mockSaveShare = saveSharedCareerComparison as jest.Mock
 const mockUpdateExpiration = updateSharedCareerComparisonExpiration as jest.Mock
 const mockDeleteShare = deleteSharedCareerComparison as jest.Mock
 const mockImportRsu = importRsuIntoCurrentJob as jest.Mock
+const currentJobFixture = { ...DEFAULT_CAREER_COMP_INPUTS.hypotheticalJobs[0]!, id: 'current', name: 'Current job' }
 
 const sharedFork: CareerComparisonMeta = {
   id: 2,
@@ -120,7 +121,7 @@ describe('CareerCompPage', () => {
     mockSaveShare.mockResolvedValue(workflowResponse({ id: 2, shortCode: 'share123', shareUrl: sharedFork.shareUrl }))
     mockUpdateExpiration.mockResolvedValue(workflowResponse({ id: 2, shortCode: 'share123', shareUrl: sharedFork.shareUrl, isCreator: true }))
     mockDeleteShare.mockResolvedValue({ deleted: true })
-    mockImportRsu.mockResolvedValue({ currentJob: { ...DEFAULT_CAREER_COMP_INPUTS.currentJob!, rsuGrants: [] }, importedGrants: [] })
+    mockImportRsu.mockResolvedValue({ currentJob: { ...currentJobFixture, rsuGrants: [] }, importedGrants: [] })
     Object.assign(navigator, { clipboard: { writeText: jest.fn().mockResolvedValue(undefined) } })
     window.history.replaceState(null, '', '/financial-planning/career-comparison')
   })
@@ -243,15 +244,13 @@ describe('CareerCompPage', () => {
     const urlInputs: CareerCompInputs = {
       ...DEFAULT_CAREER_COMP_INPUTS,
       horizonYears: 17,
-      currentJob: DEFAULT_CAREER_COMP_INPUTS.currentJob
-        ? {
-            ...DEFAULT_CAREER_COMP_INPUTS.currentJob,
-            comp: {
-              ...DEFAULT_CAREER_COMP_INPUTS.currentJob.comp,
-              baseSalary: 999999,
-            },
-          }
-        : null,
+      currentJobs: [{
+        ...currentJobFixture,
+        comp: {
+          ...currentJobFixture.comp,
+          baseSalary: 999999,
+        },
+      }],
     }
     window.history.replaceState(null, '', `/financial-planning/career-comparison?${serializeCareerCompUrlState(urlInputs)}`)
 
@@ -260,7 +259,7 @@ describe('CareerCompPage', () => {
     await waitFor(() => expect(mockSaveLatest).toHaveBeenCalled())
     const savedInputs = mockSaveLatest.mock.calls[0]?.[0] as CareerCompInputs
     expect(savedInputs.horizonYears).toBe(DEFAULT_CAREER_COMP_INPUTS.horizonYears)
-    expect(savedInputs.currentJob?.comp.baseSalary).toBe(DEFAULT_CAREER_COMP_INPUTS.currentJob?.comp.baseSalary)
+    expect(savedInputs.currentJobs).toHaveLength(0)
   })
 
   it('does not autosave for an anonymous visitor of the public tool', async () => {
@@ -302,11 +301,11 @@ describe('CareerCompPage', () => {
   })
 
   it('imports RSU grants into the current job for authenticated users', async () => {
-    render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true, inputs: { ...DEFAULT_CAREER_COMP_INPUTS, currentJobs: [currentJobFixture] } })} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Import RSU' }))
 
-    await waitFor(() => expect(mockImportRsu).toHaveBeenCalledWith(DEFAULT_CAREER_COMP_INPUTS.currentJob))
+    await waitFor(() => expect(mockImportRsu).toHaveBeenCalledWith(currentJobFixture))
     expect(await screen.findByText('No RSU awards found to import.')).toBeInTheDocument()
   })
 

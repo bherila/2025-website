@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property bool $is_snapshot
  * @property Carbon|null $last_active_at
  * @property int|null $current_job_id
+ * @property list<int> $current_job_ids
  * @property list<int> $hypothetical_job_ids
  * @property string|null $short_code
  * @property bool $share_includes_current
@@ -35,6 +36,7 @@ class CareerComparison extends Model
         'is_snapshot',
         'last_active_at',
         'current_job_id',
+        'current_job_ids',
         'hypothetical_job_ids',
         'short_code',
         'share_includes_current',
@@ -45,6 +47,7 @@ class CareerComparison extends Model
     protected function casts(): array
     {
         return [
+            'current_job_ids' => 'array',
             'hypothetical_job_ids' => 'array',
             'computed_json' => 'array',
             'share_includes_current' => 'boolean',

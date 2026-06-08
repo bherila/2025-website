@@ -20,6 +20,21 @@ class CareerCompWorkbookBuilderTest extends TestCase
         );
     }
 
+    public function test_assumptions_sheet_lists_multiple_current_job_ids(): void
+    {
+        $projection = $this->goldenProjection();
+        $projection['currentJobId'] = 'current-baseline';
+        $projection['currentJobIds'] = ['current-main', 'current-side'];
+        $projection['jobs'][0]['id'] = 'current-baseline';
+        $projection['jobs'][0]['name'] = 'Current jobs';
+        $projection['jobs'][0]['componentJobIds'] = ['current-main', 'current-side'];
+
+        $rows = $this->sheet($this->build($projection), 'Assumptions')['rows'];
+        $currentJobsRows = array_values(array_filter($rows, fn (array $row): bool => ($row['description'] ?? null) === 'Current jobs'));
+
+        $this->assertSame('current-main, current-side', $currentJobsRows[0]['note'] ?? null);
+    }
+
     public function test_summary_total_value_rows_match_projection_lifetime(): void
     {
         $projection = $this->goldenProjection();

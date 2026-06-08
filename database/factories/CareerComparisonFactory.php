@@ -24,6 +24,7 @@ class CareerComparisonFactory extends Factory
             'is_snapshot' => true,
             'last_active_at' => null,
             'current_job_id' => null,
+            'current_job_ids' => [],
             'hypothetical_job_ids' => [],
             'short_code' => ShortCode::generate(
                 fn (string $code): bool => CareerComparison::query()->where('short_code', $code)->exists(),

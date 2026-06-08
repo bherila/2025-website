@@ -13,7 +13,7 @@ function makeInputs(type: 'public' | 'private'): CareerCompInputs {
     ...DEFAULT_CAREER_COMP_INPUTS,
     horizonYears: 10,
     startYear: 2026,
-    currentJob: null,
+    currentJobs: [],
     hypotheticalJobs: [{ ...job, company: { ...job.company, type } }],
   }
 }
@@ -88,6 +88,18 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.queryByText('Annual dilution')).not.toBeInTheDocument()
     expect(screen.queryByText('Liquidity date')).not.toBeInTheDocument()
     expect(screen.getByText('Fully diluted shares')).toBeInTheDocument()
+  })
+
+  it('lets an offer retain selected current jobs', () => {
+    const currentJob = buildDefaultJob('current-1', 'Side role')
+    render(<Harness initial={{ ...makeInputs('public'), currentJobs: [currentJob] }} />)
+
+    expect(screen.getByText('Retained current jobs')).toBeInTheDocument()
+    expect(screen.getByText('None retained; this offer quits every current job.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Side role' }))
+
+    expect(screen.getByText('1 retained alongside this offer.')).toBeInTheDocument()
   })
 
   it('edits the job-level start date without touching grant dates', () => {

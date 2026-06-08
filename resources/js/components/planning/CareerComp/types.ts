@@ -155,6 +155,7 @@ export const jobSpecSchema = z.object({
   startDate: z.string().nullish().default(null),
   priorJobResignationDate: z.string().nullish().default(null),
   transitionOverride: transitionOverrideSchema,
+  retainedCurrentJobIds: z.array(z.string()).default([]),
   company: companySpecSchema,
   comp: cashCompSchema,
   grantTypes: grantTypesSchema,
@@ -168,7 +169,7 @@ export const careerCompInputsSchema = z.object({
   horizonYears: z.number(),
   startYear: z.number(),
   modelAssumptions: modelAssumptionsSchema,
-  currentJob: jobSpecSchema.nullable(),
+  currentJobs: z.array(jobSpecSchema),
   hypotheticalJobs: z.array(jobSpecSchema),
 })
 
@@ -327,6 +328,10 @@ export const jobProjectionSchema = z.object({
   id: z.string(),
   name: z.string(),
   isCurrent: z.boolean(),
+  componentJobIds: z.array(z.string()).optional(),
+  componentJobNames: z.array(z.string()).optional(),
+  retainedCurrentJobIds: z.array(z.string()).optional(),
+  quitCurrentJobIds: z.array(z.string()).optional(),
   annual: z.array(annualProjectionSchema),
   liquidity: z.object({
     low: z.array(liquidityPointSchema),
@@ -357,6 +362,7 @@ export const careerCompProjectionSchema = z.object({
   startYear: z.number(),
   horizonYears: z.number(),
   currentJobId: z.string().nullable(),
+  currentJobIds: z.array(z.string()).default([]),
   jobs: z.array(jobProjectionSchema),
   deltasVsCurrent: z.array(deltaVsCurrentSchema),
   warnings: z.array(z.string()),

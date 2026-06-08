@@ -9,6 +9,7 @@ export const sampleCareerCompProjection: CareerCompProjection = {
   startYear: 2026,
   horizonYears: 3,
   currentJobId: 'current',
+  currentJobIds: ['current'],
   jobs: [
     {
       id: 'current',

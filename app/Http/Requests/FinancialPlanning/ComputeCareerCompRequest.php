@@ -42,9 +42,12 @@ class ComputeCareerCompRequest extends FormRequest
             'inputs.modelAssumptions.careerTransition.currentJobNoticeWeeks' => ['nullable', 'numeric', 'min:0', 'max:52'],
             'inputs.modelAssumptions.careerTransition.timeOffBetweenJobsWeeks' => ['nullable', 'numeric', 'min:0', 'max:52'],
             'inputs.currentJob' => ['nullable', 'array'],
+            'inputs.currentJobs' => ['nullable', 'array', 'max:10'],
+            'inputs.currentJobs.*' => ['required', 'array'],
             'inputs.hypotheticalJobs' => ['required', 'array', 'max:10'],
             'inputs.hypotheticalJobs.*' => ['required', 'array'],
             ...self::jobRules('inputs.currentJob', true),
+            ...self::jobRules('inputs.currentJobs.*', false),
             ...self::jobRules('inputs.hypotheticalJobs.*', false),
         ];
     }
@@ -68,6 +71,8 @@ class ComputeCareerCompRequest extends FormRequest
             "{$prefix}.transitionOverride" => ['nullable', 'array'],
             "{$prefix}.transitionOverride.currentJobNoticeWeeks" => ['nullable', 'numeric', 'min:0', 'max:52'],
             "{$prefix}.transitionOverride.timeOffBetweenJobsWeeks" => ['nullable', 'numeric', 'min:0', 'max:52'],
+            "{$prefix}.retainedCurrentJobIds" => ['nullable', 'array', 'max:10'],
+            "{$prefix}.retainedCurrentJobIds.*" => ['string', 'max:120'],
             "{$prefix}.company" => [$required, 'array'],
             "{$prefix}.company.type" => [$required, Rule::in(['public', 'private'])],
             "{$prefix}.company.currentSharePrice" => ['nullable', 'numeric', 'min:0'],

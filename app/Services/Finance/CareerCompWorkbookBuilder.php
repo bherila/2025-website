@@ -241,12 +241,15 @@ class CareerCompWorkbookBuilder
     private function assumptionsSheet(array $projection, array $jobs): array
     {
         $currentJobId = $projection['currentJobId'] ?? null;
+        $currentJobIds = is_array($projection['currentJobIds'] ?? null)
+            ? array_values(array_filter($projection['currentJobIds'], 'is_string'))
+            : [];
 
         $rows = [
             ['description' => 'Planning assumptions', 'isHeader' => true],
             ['description' => 'Start year', 'note' => (string) (int) ($projection['startYear'] ?? 0)],
             ['description' => 'Horizon (years)', 'note' => (string) (int) ($projection['horizonYears'] ?? 0)],
-            ['description' => 'Current job', 'note' => is_string($currentJobId) && $currentJobId !== '' ? $currentJobId : 'None'],
+            ['description' => 'Current jobs', 'note' => $currentJobIds !== [] ? implode(', ', $currentJobIds) : (is_string($currentJobId) && $currentJobId !== '' ? $currentJobId : 'None')],
             ['description' => 'Jobs compared', 'note' => (string) count($jobs)],
             ['description' => 'Warnings', 'isHeader' => true],
         ];
@@ -679,12 +682,9 @@ class CareerCompWorkbookBuilder
     private function currentJob(array $projection, array $jobs): ?array
     {
         $currentJobId = $projection['currentJobId'] ?? null;
-        if (! is_string($currentJobId) || $currentJobId === '') {
-            return null;
-        }
 
         foreach ($jobs as $job) {
-            if (($job['id'] ?? null) === $currentJobId) {
+            if (($job['isCurrent'] ?? false) === true || (is_string($currentJobId) && $currentJobId !== '' && ($job['id'] ?? null) === $currentJobId)) {
                 return $job;
             }
         }

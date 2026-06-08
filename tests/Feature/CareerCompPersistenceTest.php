@@ -46,6 +46,44 @@ class CareerCompPersistenceTest extends TestCase
         $this->assertSame(1, CareerComparison::query()->where('user_id', $user->id)->whereNull('short_code')->count());
     }
 
+    public function test_autosave_round_trips_multiple_current_jobs(): void
+    {
+        $user = User::factory()->create();
+        $inputs = CareerCompInputs::defaults();
+        $primaryCurrent = $inputs['currentJob'];
+        $primaryCurrent['id'] = 'current-main';
+        $primaryCurrent['name'] = 'Primary current role';
+        $sideCurrent = $primaryCurrent;
+        $sideCurrent['id'] = 'current-side';
+        $sideCurrent['name'] = 'Side current role';
+        $sideCurrent['comp']['baseSalary'] = 25000;
+        $inputs['currentJobs'] = [$primaryCurrent, $sideCurrent];
+        $inputs['hypotheticalJobs'][0]['retainedCurrentJobIds'] = ['current-side'];
+
+        $response = $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', [
+            'inputs' => $inputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('inputs.currentJobs.0.name', 'Primary current role');
+        $response->assertJsonPath('inputs.currentJobs.1.name', 'Side current role');
+        $response->assertJsonPath('inputs.currentJob.name', 'Primary current role');
+        $response->assertJsonPath('inputs.hypotheticalJobs.0.retainedCurrentJobIds', ['current-side']);
+        $response->assertJsonPath('projection.currentJobIds', ['current-main', 'current-side']);
+
+        $stored = CareerComparison::query()->where('user_id', $user->id)->whereNull('short_code')->firstOrFail();
+        $this->assertCount(2, $stored->current_job_ids);
+        $this->assertSame($stored->current_job_ids[0], $stored->current_job_id);
+
+        $storedSpecs = CareerJob::query()
+            ->whereIn('id', $stored->current_job_ids)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (CareerJob $job): string => (string) $job->spec_json['id'])
+            ->all();
+        $this->assertSame(['current-main', 'current-side'], $storedSpecs);
+    }
+
     public function test_save_latest_validates_nested_jobs(): void
     {
         $user = User::factory()->create();
@@ -225,6 +263,60 @@ class CareerCompPersistenceTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('inputs.currentJob', null);
         $this->assertSame($storedCurrentJobId, CareerComparison::query()->where('short_code', $code)->value('current_job_id'));
+    }
+
+    public function test_confidential_share_hides_multiple_current_jobs_from_non_creator_and_preserves_them_on_save(): void
+    {
+        $this->withoutVite();
+        $owner = User::factory()->create();
+        $visitor = User::factory()->create();
+        $inputs = CareerCompInputs::defaults();
+        $primaryCurrent = $inputs['currentJob'];
+        $primaryCurrent['id'] = 'current-main';
+        $primaryCurrent['name'] = 'Confidential primary current';
+        $sideCurrent = $primaryCurrent;
+        $sideCurrent['id'] = 'current-side';
+        $sideCurrent['name'] = 'Confidential side current';
+        $sideCurrent['comp']['baseSalary'] = 25000;
+        $inputs['currentJobs'] = [$primaryCurrent, $sideCurrent];
+        $inputs['hypotheticalJobs'][0]['retainedCurrentJobIds'] = ['current-side'];
+
+        $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => $inputs,
+            'shareIncludesCurrent' => false,
+        ]);
+        $code = $share->json('shortCode');
+        $stored = CareerComparison::query()->where('short_code', $code)->firstOrFail();
+        $storedCurrentJobIds = $stored->current_job_ids;
+        $this->assertCount(2, $storedCurrentJobIds);
+
+        $page = $this->actingAs($visitor)->get("/financial-planning/career-comparison/s/{$code}");
+
+        $page->assertOk();
+        $content = (string) $page->getContent();
+        $this->assertStringNotContainsString('Confidential primary current', $content);
+        $this->assertStringNotContainsString('Confidential side current', $content);
+        $this->assertStringContainsString('"currentJobs":[]', $content);
+
+        $redactedInputs = CareerCompInputs::defaults();
+        $redactedInputs['currentJobs'] = [];
+        $redactedInputs['currentJob'] = null;
+        $redactedInputs['hypotheticalJobs'][0]['name'] = 'Visitor offer edit';
+        $redactedInputs['hypotheticalJobs'][0]['retainedCurrentJobIds'] = [];
+
+        $response = $this->actingAs($visitor)->putJson("/api/financial-planning/career-comparison/s/{$code}", [
+            'inputs' => $redactedInputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('inputs.currentJobs', []);
+        $response->assertJsonPath('inputs.currentJob', null);
+        $response->assertJsonPath('projection.currentJobIds', []);
+
+        $stored->refresh();
+        $this->assertSame($storedCurrentJobIds, $stored->current_job_ids);
+        $this->assertSame($storedCurrentJobIds[0], $stored->current_job_id);
+        $this->assertSame(['current-main', 'current-side'], $stored->computed_json['currentJobIds'] ?? []);
     }
 
     public function test_published_share_is_marked_as_a_snapshot(): void
