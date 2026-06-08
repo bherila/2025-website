@@ -48,6 +48,7 @@ class TaxPreviewDataService
             'pendingReviewCount' => $this->pendingReviewCount($userId, $year),
             'w2Documents' => $this->documentsForYear($userId, $year, FileForTaxDocument::W2_FORM_TYPES),
             'accountDocuments' => $this->documentsForYear($userId, $year, FileForTaxDocument::ACCOUNT_FORM_TYPES),
+            'allK1Documents' => $this->k1DocumentsForAllYears($userId),
             'scheduleCData' => $scheduleCData,
             'employmentEntities' => $this->employmentEntities($userId),
             'accounts' => $accounts,
@@ -125,6 +126,26 @@ class TaxPreviewDataService
             ->where('genai_status', 'parsed')
             ->where('is_reviewed', false)
             ->count();
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function k1DocumentsForAllYears(int $userId): array
+    {
+        $documents = FileForTaxDocument::where('user_id', $userId)
+            ->where('form_type', 'k1')
+            ->with([
+                'uploader:id,name',
+                'employmentEntity:id,display_name',
+                'account:acct_id,acct_name,acct_number',
+                'accountLinks.account:acct_id,acct_name,acct_number',
+            ])
+            ->orderBy('tax_year', 'asc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return $this->parsedDataNormalizer->documentsForResponse($documents);
     }
 
     /**

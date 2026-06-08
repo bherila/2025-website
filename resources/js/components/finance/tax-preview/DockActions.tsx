@@ -66,7 +66,7 @@ export function DockActionsProvider({
   openTaxReturnPdfExport,
   isExportingPdf,
 }: DockActionsProviderProps): React.ReactElement {
-  const { accountDocuments, w2Documents, refreshAll, year: selectedYear, isLoading } = useTaxPreview()
+  const { accountDocuments, allK1Documents, w2Documents, refreshAll, year: selectedYear, isLoading } = useTaxPreview()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
   const [reviewFocusFieldId, setReviewFocusFieldId] = useState<string | undefined>(undefined)
@@ -88,7 +88,7 @@ export function DockActionsProvider({
 
   const openReviewDoc = useCallback(
     (docId: number, focusFieldId?: string) => {
-      const target = [...accountDocuments, ...w2Documents].find((doc) => doc.id === docId)
+      const target = [...accountDocuments, ...allK1Documents, ...w2Documents].find((doc) => doc.id === docId)
       if (!target) {
         return false
       }
@@ -97,7 +97,7 @@ export function DockActionsProvider({
       setReviewOpen(true)
       return true
     },
-    [accountDocuments, w2Documents],
+    [accountDocuments, allK1Documents, w2Documents],
   )
 
   const reviewK1Doc = useCallback((docId: number, focusFieldId?: string) => {
@@ -191,7 +191,7 @@ export function DockActionsProvider({
       {children}
       <TaxDocumentReviewModal
         open={reviewOpen}
-        taxYear={selectedYear}
+        taxYear={reviewDoc?.tax_year ?? selectedYear}
         {...(reviewDoc ? { document: reviewDoc } : {})}
         focusFieldId={reviewFocusFieldId}
         onClose={() => {

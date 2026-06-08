@@ -17,6 +17,7 @@ import Form8606Preview from '@/components/finance/Form8606Preview'
 import Form8949Preview from '@/components/finance/Form8949Preview'
 import Form8995Preview from '@/components/finance/Form8995Preview'
 import K1AllInOneView from '@/components/finance/K1AllInOneView'
+import K1MultiYearView from '@/components/finance/K1MultiYearView'
 import K3AllInOneView from '@/components/finance/K3AllInOneView'
 import PayslipDataSourceModal from '@/components/finance/PayslipDataSourceModal'
 import Schedule1Preview from '@/components/finance/Schedule1Preview'
@@ -606,7 +607,10 @@ interface TaxDocumentMutationResponse {
   taxFacts?: TaxPreviewFacts
 }
 
-function saveParsedDataOverride(state: FormRenderProps['state']): (docId: number, parsedData: FK1StructuredData) => Promise<void> {
+function saveParsedDataOverride(
+  state: FormRenderProps['state'],
+  options: { alwaysRefreshTaxFacts?: boolean } = {},
+): (docId: number, parsedData: FK1StructuredData) => Promise<void> {
   return async (docId, parsedData) => {
     const response = (await fetchWrapper.put(`/api/finance/tax-documents/${docId}?include_tax_facts=1`, {
       parsed_data: parsedData,
@@ -614,12 +618,17 @@ function saveParsedDataOverride(state: FormRenderProps['state']): (docId: number
 
     if (response.document) {
       state.setAccountDocuments((docs) => docs.map((doc) => (doc.id === response.document!.id ? response.document! : doc)))
+      state.setAllK1Documents((docs) => docs.map((doc) => (doc.id === response.document!.id ? response.document! : doc)))
     } else {
       await state.refreshAll({ includeTaxFacts: true })
       return
     }
 
-    if (response.taxFacts) {
+    // The mutation response computes taxFacts for the EDITED document's year. From the
+    // multi-year column the edited K-1 may belong to a different year than the page, so
+    // applying it directly would overwrite page-wide facts with the wrong year. In that
+    // case refresh for the page's selected year instead.
+    if (response.taxFacts && !options.alwaysRefreshTaxFacts) {
       state.setTaxFacts(response.taxFacts)
     } else {
       await state.refreshAll({ includeTaxFacts: true })
@@ -638,6 +647,18 @@ function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
       onSaveParsedData={saveParsedDataOverride(state)}
       onExportXlsx={exportXlsx}
       isExportingXlsx={isExportingXlsx}
+    />
+  )
+}
+
+function K1MultiYearAdapter({ state }: FormRenderProps): React.ReactElement {
+  const { reviewK1Doc } = useDockActions()
+  return (
+    <K1MultiYearView
+      k1Docs={state.allK1Documents}
+      availableYears={state.availableYears}
+      onReviewDoc={reviewK1Doc}
+      onSaveParsedData={saveParsedDataOverride(state, { alwaysRefreshTaxFacts: true })}
     />
   )
 }
@@ -1156,6 +1177,17 @@ const rawFormRegistry: FormRegistry = {
     size: 'viewport',
     component: K1AllInOneAdapter,
     hasData: (state) => state.reviewedK1Docs.length > 0,
+  },
+  'k1-multi-year': {
+    id: 'k1-multi-year',
+    label: 'Multi-Year K-1',
+    shortLabel: 'K-1 by Year',
+    keywords: ['K-1', 'multi-year', 'year over year', 'trend', 'partnership', 'account'],
+    category: 'App',
+    presentation: 'column',
+    size: 'viewport',
+    component: K1MultiYearAdapter,
+    hasData: (state) => state.allK1Documents.length > 0,
   },
   'k3-all-in-one': {
     id: 'k3-all-in-one',
