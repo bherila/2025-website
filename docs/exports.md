@@ -15,18 +15,18 @@ This document enumerates every place the application produces downloadable files
 - **Format:** XLSX (PhpSpreadsheet 3.x), auto-sized columns, bold headers/totals.
 - **Current watermark:** none.
 
-### 2. Tax Preview IRS PDF export readiness
+### 2. Tax Preview IRS PDF export
 
 - **Endpoint:** `POST /finance/tax-preview/export-pdf`
 - **Controller:** `app/Http/Controllers/FinanceTool/TaxReturnPdfExportController.php` (`export()`)
 - **Client:** `TaxPreviewPage.tsx` and `TaxReturnPdfExportDialog.tsx`
-- **Contents:** Intended to populate IRS Form 1040 from backend Tax Preview facts and backend-owned tax-return profile data.
-- **Format:** PDF (`application/pdf`) when a native editable AcroForm engine is available.
-- **Current status:** blocked/readiness MVP. The pinned official 2025 Form 1040 template and field map are present, field inspection works, and export attempts are audited, but the native editable fill engine is intentionally unavailable because FPDM cannot fill the raw IRS PDF and qpdf-normalized committed-template candidates still are not FPDM-fillable.
+- **Contents:** Populates IRS Form 1040 from backend Tax Preview facts and backend-owned tax-return profile data.
+- **Format:** PDF (`application/pdf`) via FPDI background import plus TCPDF field redraw.
+- **Current status:** implemented for pinned 2025 Form 1040 in `editable` and `print` modes. Editable mode recreates fillable fields with namespaced hashed output names; print mode emits a flat PDF. Complete-return export is limited to Form 1040 and blocks when unsupported schedules appear required.
 - **Generated file retention:** no generated PDFs are persisted by default.
-- **Current watermark:** none; no PDF is generated in the blocked MVP.
+- **Current watermark:** none.
 
-See `docs/finance/tax-return-pdf.md` for the spike result, pinned-template workflow, and production path.
+See `docs/finance/tax-return-pdf.md` for the renderer, pinned-template workflow, and validation commands.
 
 ### 3. Brokerage / bank statement PDFs
 
@@ -127,7 +127,7 @@ Signed-URL passthrough for files uploaded into the client-management module. All
 | # | Export | Format | Surface | Watermark today |
 |---|--------|--------|---------|-----------------|
 | 1 | Tax Preview workbook | XLSX | server | none |
-| 2 | Tax Preview IRS PDF readiness | PDF | server | none (blocked MVP) |
+| 2 | Tax Preview IRS PDF export | PDF | server | none |
 | 3 | Brokerage/bank statements | PDF | server (passthrough) | none |
 | 4 | Tax documents | PDF | server (passthrough) | none |
 | 5 | Utility bill PDFs | PDF | server (passthrough) | none |

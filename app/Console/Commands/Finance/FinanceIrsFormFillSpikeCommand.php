@@ -25,7 +25,7 @@ class FinanceIrsFormFillSpikeCommand extends Command
     public function handle(): int
     {
         if (! class_exists('FPDM')) {
-            $this->error('FPDM is not installed. It was removed after the spike showed the raw IRS Form 1040 PDF fails in FPDM and qpdf-normalized committed-template candidates still are not FPDM-fillable.');
+            $this->error('FPDM is not installed. The raw IRS Form 1040 PDF failed FPDM parsing, and the export path now uses the committed qpdf-normalized background with FPDI/TCPDF redraw instead.');
 
             return self::FAILURE;
         }

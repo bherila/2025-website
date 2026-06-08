@@ -5,7 +5,7 @@ namespace App\Providers;
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\ClientManagement\ClientCompany;
 use App\Services\Finance\TaxReturnPdf\IrsAcroFormFillEngine;
-use App\Services\Finance\TaxReturnPdf\UnavailableAcroFormFillEngine;
+use App\Services\Finance\TaxReturnPdf\TcpdfFpdiFormEngine;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
@@ -23,7 +23,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(IrsAcroFormFillEngine::class, UnavailableAcroFormFillEngine::class);
+        $this->app->singleton(IrsAcroFormFillEngine::class, TcpdfFpdiFormEngine::class);
     }
 
     /**

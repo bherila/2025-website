@@ -2,10 +2,12 @@
     {
         "name": "f1_01[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "680_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -21,10 +23,12 @@
     {
         "name": "f1_02[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "681_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -40,10 +44,12 @@
     {
         "name": "f1_03[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "682_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 2,
         "rect": [
@@ -59,10 +65,12 @@
     {
         "name": "c1_1[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "683_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 0 0.502 rg /ZaDb 5.6 Tf 0 0 0.502 rg",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -83,10 +91,12 @@
     {
         "name": "c1_2[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "684_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 0 0.502 rg /ZaDb 5.6 Tf 0 0 0.502 rg",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -107,10 +117,12 @@
     {
         "name": "c1_3[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "686_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 0 0.502 rg /ZaDb 5.6 Tf 0 0 0.502 rg",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -131,10 +143,12 @@
     {
         "name": "f1_04[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "685_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -150,10 +164,12 @@
     {
         "name": "f1_05[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "687_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 2,
         "rect": [
@@ -169,10 +185,12 @@
     {
         "name": "f1_06[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "688_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 2,
         "rect": [
@@ -188,10 +206,12 @@
     {
         "name": "f1_07[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "689_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 4,
         "rect": [
@@ -207,10 +227,12 @@
     {
         "name": "f1_08[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "690_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 2,
         "rect": [
@@ -226,10 +248,12 @@
     {
         "name": "f1_09[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "691_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 2,
         "rect": [
@@ -245,10 +269,12 @@
     {
         "name": "f1_10[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "692_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 4,
         "rect": [
@@ -264,10 +290,12 @@
     {
         "name": "c1_4[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "693_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 0 0.502 rg /ZaDb 5.6 Tf 0 0 0.502 rg",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -288,10 +316,12 @@
     {
         "name": "f1_11[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "694_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -307,10 +337,12 @@
     {
         "name": "f1_12[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "695_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -326,10 +358,12 @@
     {
         "name": "f1_13[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "696_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -345,10 +379,12 @@
     {
         "name": "f1_14[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "697_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -364,10 +400,12 @@
     {
         "name": "f1_15[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "698_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -383,10 +421,12 @@
     {
         "name": "f1_16[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "699_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 9,
         "rect": [
@@ -402,10 +442,12 @@
     {
         "name": "f1_17[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "700_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -421,10 +463,12 @@
     {
         "name": "f1_18[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "701_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -440,10 +484,12 @@
     {
         "name": "f1_19[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "702_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 9,
         "rect": [
@@ -459,10 +505,12 @@
     {
         "name": "c1_5[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "704_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -483,10 +531,12 @@
     {
         "name": "f1_20[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "823_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -502,10 +552,12 @@
     {
         "name": "f1_21[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "824_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -521,10 +573,12 @@
     {
         "name": "f1_22[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "825_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -540,10 +594,12 @@
     {
         "name": "f1_23[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "826_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -559,10 +615,12 @@
     {
         "name": "f1_24[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "827_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -578,10 +636,12 @@
     {
         "name": "c1_6[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "705_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -602,10 +662,12 @@
     {
         "name": "c1_7[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "706_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -626,10 +688,12 @@
     {
         "name": "f1_25[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "828_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -645,10 +709,12 @@
     {
         "name": "f1_26[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "829_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -664,10 +730,12 @@
     {
         "name": "f1_27[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "830_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -683,10 +751,12 @@
     {
         "name": "c1_8[0]",
         "type": "Btn",
+        "fieldKind": "radio",
         "page": 1,
         "objectId": "819_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -707,10 +777,12 @@
     {
         "name": "c1_8[0]",
         "type": "Btn",
+        "fieldKind": "radio",
         "page": 1,
         "objectId": "708_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -731,10 +803,12 @@
     {
         "name": "c1_8[1]",
         "type": "Btn",
+        "fieldKind": "radio",
         "page": 1,
         "objectId": "820_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -755,10 +829,12 @@
     {
         "name": "c1_8[1]",
         "type": "Btn",
+        "fieldKind": "radio",
         "page": 1,
         "objectId": "709_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -779,10 +855,12 @@
     {
         "name": "c1_8[2]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "821_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -803,10 +881,12 @@
     {
         "name": "f1_28[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "822_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -822,10 +902,12 @@
     {
         "name": "f1_29[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "710_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -841,10 +923,12 @@
     {
         "name": "c1_9[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "711_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -865,10 +949,12 @@
     {
         "name": "f1_30[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "712_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -884,10 +970,12 @@
     {
         "name": "c1_10[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "713_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -908,10 +996,12 @@
     {
         "name": "c1_10[1]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "714_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -932,10 +1022,12 @@
     {
         "name": "f1_31[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "814_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -951,10 +1043,12 @@
     {
         "name": "f1_32[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "815_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -970,10 +1064,12 @@
     {
         "name": "f1_33[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "816_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -989,10 +1085,12 @@
     {
         "name": "f1_34[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "817_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1008,10 +1106,12 @@
     {
         "name": "f1_35[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "810_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1027,10 +1127,12 @@
     {
         "name": "f1_36[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "811_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1046,10 +1148,12 @@
     {
         "name": "f1_37[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "812_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1065,10 +1169,12 @@
     {
         "name": "f1_38[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "813_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1084,10 +1190,12 @@
     {
         "name": "f1_39[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "806_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 9,
         "rect": [
@@ -1103,10 +1211,12 @@
     {
         "name": "f1_40[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "807_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 9,
         "rect": [
@@ -1122,10 +1232,12 @@
     {
         "name": "f1_41[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "808_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 9,
         "rect": [
@@ -1141,10 +1253,12 @@
     {
         "name": "f1_42[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "809_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 9,
         "rect": [
@@ -1160,10 +1274,12 @@
     {
         "name": "f1_43[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "802_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1179,10 +1295,12 @@
     {
         "name": "f1_44[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "803_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1198,10 +1316,12 @@
     {
         "name": "f1_45[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "804_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1217,10 +1337,12 @@
     {
         "name": "f1_46[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "805_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1236,10 +1358,12 @@
     {
         "name": "c1_12[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "800_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1260,10 +1384,12 @@
     {
         "name": "c1_14[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "798_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1284,10 +1410,12 @@
     {
         "name": "c1_16[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "796_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1308,10 +1436,12 @@
     {
         "name": "c1_18[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "794_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1332,10 +1462,12 @@
     {
         "name": "c1_11[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "818_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1356,10 +1488,12 @@
     {
         "name": "c1_13[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "801_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1380,10 +1514,12 @@
     {
         "name": "c1_15[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "799_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1404,10 +1540,12 @@
     {
         "name": "c1_17[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "797_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1428,10 +1566,12 @@
     {
         "name": "c1_19[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "795_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1452,10 +1592,12 @@
     {
         "name": "c1_20[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "788_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1476,10 +1618,12 @@
     {
         "name": "c1_21[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "789_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1500,10 +1644,12 @@
     {
         "name": "c1_22[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "786_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1524,10 +1670,12 @@
     {
         "name": "c1_23[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "787_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1548,10 +1696,12 @@
     {
         "name": "c1_24[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "784_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1572,10 +1722,12 @@
     {
         "name": "c1_25[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "785_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1596,10 +1748,12 @@
     {
         "name": "c1_26[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "782_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1620,10 +1774,12 @@
     {
         "name": "c1_27[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "783_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1644,10 +1800,12 @@
     {
         "name": "c1_28[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "776_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1668,10 +1826,12 @@
     {
         "name": "c1_28[1]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "777_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1692,10 +1852,12 @@
     {
         "name": "c1_29[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "774_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1716,10 +1878,12 @@
     {
         "name": "c1_29[1]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "775_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1740,10 +1904,12 @@
     {
         "name": "c1_30[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "772_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1764,10 +1930,12 @@
     {
         "name": "c1_30[1]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "773_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1788,10 +1956,12 @@
     {
         "name": "c1_31[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "770_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1812,10 +1982,12 @@
     {
         "name": "c1_31[1]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "771_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1836,10 +2008,12 @@
     {
         "name": "c1_32[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "717_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -1860,10 +2034,12 @@
     {
         "name": "f1_47[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "718_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1879,10 +2055,12 @@
     {
         "name": "f1_48[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "719_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1898,10 +2076,12 @@
     {
         "name": "f1_49[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "720_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1917,10 +2097,12 @@
     {
         "name": "f1_50[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "721_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1936,10 +2118,12 @@
     {
         "name": "f1_51[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "722_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1955,10 +2139,12 @@
     {
         "name": "f1_52[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "723_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1974,10 +2160,12 @@
     {
         "name": "f1_53[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "724_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -1993,10 +2181,12 @@
     {
         "name": "f1_54[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "725_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2012,10 +2202,12 @@
     {
         "name": "f1_55[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "726_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2031,10 +2223,12 @@
     {
         "name": "f1_56[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "727_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2050,10 +2244,12 @@
     {
         "name": "f1_57[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "728_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2069,10 +2265,12 @@
     {
         "name": "f1_58[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "729_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2088,10 +2286,12 @@
     {
         "name": "f1_59[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "730_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2107,10 +2307,12 @@
     {
         "name": "f1_60[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "731_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2126,10 +2328,12 @@
     {
         "name": "f1_61[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "732_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2145,10 +2349,12 @@
     {
         "name": "c1_33[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "733_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2169,10 +2375,12 @@
     {
         "name": "c1_34[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "734_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2193,10 +2401,12 @@
     {
         "name": "f1_62[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "735_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2212,10 +2422,12 @@
     {
         "name": "f1_63[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "736_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2231,10 +2443,12 @@
     {
         "name": "c1_35[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "737_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2255,10 +2469,12 @@
     {
         "name": "c1_36[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "738_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2279,10 +2495,12 @@
     {
         "name": "c1_37[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "739_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2303,10 +2521,12 @@
     {
         "name": "f1_64[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "740_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2322,10 +2542,12 @@
     {
         "name": "f1_65[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "741_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2341,10 +2563,12 @@
     {
         "name": "f1_66[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "742_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2360,10 +2584,12 @@
     {
         "name": "c1_38[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "743_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2384,10 +2610,12 @@
     {
         "name": "c1_39[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "744_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2408,10 +2636,12 @@
     {
         "name": "c1_40[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "745_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2432,10 +2662,12 @@
     {
         "name": "f1_67[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "746_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2451,10 +2683,12 @@
     {
         "name": "f1_68[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "747_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2470,10 +2704,12 @@
     {
         "name": "f1_69[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "748_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2489,10 +2725,12 @@
     {
         "name": "c1_41[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "749_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2513,10 +2751,12 @@
     {
         "name": "c1_42[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "750_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2537,10 +2777,12 @@
     {
         "name": "f1_70[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "751_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2556,10 +2798,12 @@
     {
         "name": "c1_43[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "752_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2580,10 +2824,12 @@
     {
         "name": "c1_44[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 1,
         "objectId": "753_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2604,10 +2850,12 @@
     {
         "name": "f1_71[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "754_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2623,10 +2871,12 @@
     {
         "name": "f1_72[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "755_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2642,10 +2892,12 @@
     {
         "name": "f1_73[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "756_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2661,10 +2913,12 @@
     {
         "name": "f1_74[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "757_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2680,10 +2934,12 @@
     {
         "name": "f1_75[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 1,
         "objectId": "758_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2699,10 +2955,12 @@
     {
         "name": "f2_01[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "831_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2718,10 +2976,12 @@
     {
         "name": "c2_1[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "832_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2742,10 +3002,12 @@
     {
         "name": "c2_2[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "833_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2766,10 +3028,12 @@
     {
         "name": "c2_3[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "834_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2790,10 +3054,12 @@
     {
         "name": "c2_4[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "835_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2814,10 +3080,12 @@
     {
         "name": "c2_5[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "836_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2838,10 +3106,12 @@
     {
         "name": "c2_6[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "837_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2862,10 +3132,12 @@
     {
         "name": "c2_7[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "838_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2886,10 +3158,12 @@
     {
         "name": "c2_8[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "839_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -2910,10 +3184,12 @@
     {
         "name": "f2_02[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "840_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2929,10 +3205,12 @@
     {
         "name": "f2_03[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "841_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2948,10 +3226,12 @@
     {
         "name": "f2_04[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "842_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2967,10 +3247,12 @@
     {
         "name": "f2_05[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "843_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -2986,10 +3268,12 @@
     {
         "name": "f2_06[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "844_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3005,10 +3289,12 @@
     {
         "name": "c2_9[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "845_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3029,10 +3315,12 @@
     {
         "name": "c2_10[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "846_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3053,10 +3341,12 @@
     {
         "name": "c2_11[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "847_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3077,10 +3367,12 @@
     {
         "name": "f2_07[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "848_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3096,10 +3388,12 @@
     {
         "name": "f2_08[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "849_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3115,10 +3409,12 @@
     {
         "name": "f2_09[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "850_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3134,10 +3430,12 @@
     {
         "name": "f2_10[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "851_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3153,10 +3451,12 @@
     {
         "name": "f2_11[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "852_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3172,10 +3472,12 @@
     {
         "name": "f2_12[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "853_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3191,10 +3493,12 @@
     {
         "name": "f2_13[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "854_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3210,10 +3514,12 @@
     {
         "name": "f2_14[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "855_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3229,10 +3535,12 @@
     {
         "name": "f2_15[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "856_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3248,10 +3556,12 @@
     {
         "name": "f2_16[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "857_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3267,10 +3577,12 @@
     {
         "name": "f2_17[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "858_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3286,10 +3598,12 @@
     {
         "name": "f2_18[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "859_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3305,10 +3619,12 @@
     {
         "name": "f2_19[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "676_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3324,10 +3640,12 @@
     {
         "name": "f2_20[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "860_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3343,10 +3661,12 @@
     {
         "name": "f2_21[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "861_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3362,10 +3682,12 @@
     {
         "name": "f2_22[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "904_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 16777216,
         "maxLength": 9,
         "rect": [
@@ -3381,10 +3703,12 @@
     {
         "name": "f2_23[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "863_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3400,10 +3724,12 @@
     {
         "name": "c2_12[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "864_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3424,10 +3750,12 @@
     {
         "name": "c2_13[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "865_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3448,10 +3776,12 @@
     {
         "name": "c2_14[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "903_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3472,10 +3802,12 @@
     {
         "name": "f2_24[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "867_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3491,10 +3823,12 @@
     {
         "name": "f2_25[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "868_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3510,10 +3844,12 @@
     {
         "name": "f2_26[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "869_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3529,10 +3865,12 @@
     {
         "name": "f2_27[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "870_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3548,10 +3886,12 @@
     {
         "name": "f2_28[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "871_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3567,10 +3907,12 @@
     {
         "name": "f2_29[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "872_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3586,10 +3928,12 @@
     {
         "name": "f2_30[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "873_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3605,10 +3949,12 @@
     {
         "name": "c2_15[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "874_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3629,10 +3975,12 @@
     {
         "name": "f2_31[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "875_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3648,10 +3996,12 @@
     {
         "name": "c2_16[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "877_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3672,10 +4022,12 @@
     {
         "name": "c2_16[1]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "878_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3696,10 +4048,12 @@
     {
         "name": "f2_32[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "902_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 9,
         "rect": [
@@ -3715,10 +4069,12 @@
     {
         "name": "f2_33[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "901_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 17,
         "rect": [
@@ -3734,10 +4090,12 @@
     {
         "name": "f2_34[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "880_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3753,10 +4111,12 @@
     {
         "name": "f2_35[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "881_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3772,10 +4132,12 @@
     {
         "name": "f2_36[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "882_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3791,10 +4153,12 @@
     {
         "name": "c2_17[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "883_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3815,10 +4179,12 @@
     {
         "name": "c2_17[1]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "884_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -3839,10 +4205,12 @@
     {
         "name": "f2_39[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "887_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 5,
         "rect": [
@@ -3868,10 +4236,12 @@
     {
         "name": "f2_37[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "885_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8392704,
         "maxLength": null,
         "rect": [
@@ -3887,10 +4257,12 @@
     {
         "name": "f2_38[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "886_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3906,10 +4278,12 @@
     {
         "name": "f2_40[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "888_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3925,10 +4299,12 @@
     {
         "name": "f2_41[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "889_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 6,
         "rect": [
@@ -3954,10 +4330,12 @@
     {
         "name": "f2_42[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "890_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -3973,10 +4351,12 @@
     {
         "name": "f2_43[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "891_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 25165824,
         "maxLength": 6,
         "rect": [
@@ -4002,10 +4382,12 @@
     {
         "name": "f2_44[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "892_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -4021,10 +4403,12 @@
     {
         "name": "f2_45[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "893_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -4040,10 +4424,12 @@
     {
         "name": "c2_18[0]",
         "type": "Btn",
+        "fieldKind": "checkbox",
         "page": 2,
         "objectId": "896_0",
         "value": "Off",
         "defaultValue": null,
+        "defaultAppearance": "/ZaDb 5.6 Tf 0 g /ZaDb 5.6 Tf 0 g",
         "flags": null,
         "maxLength": null,
         "rect": [
@@ -4064,10 +4450,12 @@
     {
         "name": "f2_46[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "894_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -4083,10 +4471,12 @@
     {
         "name": "f2_47[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "895_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 11,
         "rect": [
@@ -4102,10 +4492,12 @@
     {
         "name": "f2_48[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "897_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -4121,10 +4513,12 @@
     {
         "name": "f2_49[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "898_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -4140,10 +4534,12 @@
     {
         "name": "f2_50[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "899_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": 8388608,
         "maxLength": null,
         "rect": [
@@ -4159,10 +4555,12 @@
     {
         "name": "f2_51[0]",
         "type": "Tx",
+        "fieldKind": "text",
         "page": 2,
         "objectId": "900_0",
         "value": null,
         "defaultValue": null,
+        "defaultAppearance": "/HelveticaLTStd-Bold 8.00 Tf 0.000 0.000 0.502 rg",
         "flags": null,
         "maxLength": 10,
         "rect": [

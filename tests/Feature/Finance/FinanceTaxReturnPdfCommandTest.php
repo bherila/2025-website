@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Finance;
 
+use App\Models\FinanceTool\FinTaxReturnProfile;
 use App\Models\User;
 use App\Services\Finance\TaxReturnPdf\Data\TaxReturnPdfOptions;
 use App\Services\Finance\TaxReturnPdf\IrsReturnPdfBuilder;
@@ -49,6 +50,43 @@ class FinanceTaxReturnPdfCommandTest extends TestCase
         ])->assertExitCode(Command::SUCCESS);
 
         $this->assertFileExists($out);
+        unlink($out);
+    }
+
+    public function test_command_writes_editable_pdf_with_real_renderer(): void
+    {
+        $user = User::factory()->create();
+        FinTaxReturnProfile::factory()->for($user, 'user')->create([
+            'tax_year' => 2025,
+            'taxpayer_first_name' => 'Ada',
+            'taxpayer_last_name' => 'Lovelace',
+            'taxpayer_ssn' => '123-45-6789',
+            'address_line1' => '1 Main St',
+            'city' => 'London',
+            'state' => 'CA',
+            'postal_code' => '94105',
+            'digital_assets_answer' => 'no',
+        ]);
+        $out = storage_path('app/testing/finance-tax-return-pdf-renderer-test.pdf');
+
+        if (is_file($out)) {
+            unlink($out);
+        }
+
+        $this->artisan('finance:tax-return-pdf', [
+            '--user' => (string) $user->id,
+            '--year' => '2025',
+            '--form' => 'form-1040',
+            '--mode' => 'editable',
+            '--out' => 'storage/app/testing/finance-tax-return-pdf-renderer-test.pdf',
+        ])->assertExitCode(Command::SUCCESS);
+
+        $content = (string) file_get_contents($out);
+
+        $this->assertStringStartsWith('%PDF', $content);
+        $this->assertStringContainsString('Ada', $content);
+        $this->assertStringContainsString('/AcroForm', $content);
+
         unlink($out);
     }
 }

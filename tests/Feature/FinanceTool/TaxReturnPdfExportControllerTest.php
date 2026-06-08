@@ -10,6 +10,7 @@ use App\Services\Finance\TaxReturnPdf\IrsReturnPdfBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery\MockInterface;
 use RuntimeException;
+use Smalot\PdfParser\Parser;
 use Tests\TestCase;
 
 class TaxReturnPdfExportControllerTest extends TestCase
@@ -130,11 +131,19 @@ class TaxReturnPdfExportControllerTest extends TestCase
         ]);
     }
 
-    public function test_individual_form_1040_editable_export_is_blocked_when_native_engine_is_unavailable(): void
+    public function test_individual_form_1040_editable_export_returns_pdf_and_audits_success(): void
     {
         $user = User::factory()->create();
         FinTaxReturnProfile::factory()->for($user, 'user')->create([
             'tax_year' => 2025,
+            'taxpayer_first_name' => 'Ada',
+            'taxpayer_last_name' => 'Lovelace',
+            'taxpayer_ssn' => '123-45-6789',
+            'address_line1' => '1 Main St',
+            'city' => 'London',
+            'state' => 'CA',
+            'postal_code' => '94105',
+            'digital_assets_answer' => 'no',
         ]);
         $unexpectedPath = storage_path('app/testing/tax-return-pdf-feature.pdf');
 
@@ -150,13 +159,16 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'filename' => 'tax return form 1040.pdf',
         ]);
 
-        $response->assertUnprocessable();
-        $response->assertJsonPath('message', 'Tax return PDF export is not ready.');
-        $this->assertNotEmpty(array_filter(
-            $response->json('errors'),
-            static fn (string $error): bool => str_contains($error, 'qpdf normalization'),
-        ));
-        $this->assertStringNotContainsString('application/pdf', (string) $response->headers->get('content-type'));
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
+        $this->assertSame('attachment; filename="tax-return-form-1040.pdf"', $response->headers->get('content-disposition'));
+
+        $content = (string) $response->getContent();
+
+        $this->assertStringStartsWith('%PDF', $content);
+        $this->assertSame(2, count((new Parser)->parseContent($content)->getPages()));
+        $this->assertStringContainsString('Ada', $content);
+        $this->assertStringContainsString('/AcroForm', $content);
         $this->assertFileDoesNotExist($unexpectedPath);
 
         $this->assertDatabaseHas('fin_tax_return_pdf_exports', [
@@ -164,11 +176,54 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'tax_year' => 2025,
             'scope' => 'form',
             'mode' => 'editable',
-            'status' => 'blocked',
+            'status' => 'succeeded',
             'filename' => 'tax-return-form-1040.pdf',
         ]);
 
         $audit = FinTaxReturnPdfExport::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
         $this->assertSame(['form-1040'], $audit->form_ids);
+    }
+
+    public function test_individual_form_1040_print_export_returns_flat_pdf(): void
+    {
+        $user = User::factory()->create();
+        FinTaxReturnProfile::factory()->for($user, 'user')->create([
+            'tax_year' => 2025,
+            'taxpayer_first_name' => 'Ada',
+            'taxpayer_last_name' => 'Lovelace',
+            'taxpayer_ssn' => '123-45-6789',
+            'address_line1' => '1 Main St',
+            'city' => 'London',
+            'state' => 'CA',
+            'postal_code' => '94105',
+            'digital_assets_answer' => 'no',
+        ]);
+
+        $response = $this->actingAs($user)->postJson('/finance/tax-preview/export-pdf', [
+            'year' => 2025,
+            'scope' => 'form',
+            'formId' => 'form-1040',
+            'mode' => 'print',
+            'filename' => 'tax return form 1040 print.pdf',
+        ]);
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
+
+        $content = (string) $response->getContent();
+
+        $this->assertStringStartsWith('%PDF', $content);
+        $this->assertSame(2, count((new Parser)->parseContent($content)->getPages()));
+        $this->assertStringContainsString('Ada', $content);
+        $this->assertStringNotContainsString('/AcroForm', $content);
+
+        $this->assertDatabaseHas('fin_tax_return_pdf_exports', [
+            'user_id' => $user->id,
+            'tax_year' => 2025,
+            'scope' => 'form',
+            'mode' => 'print',
+            'status' => 'succeeded',
+            'filename' => 'tax-return-form-1040-print.pdf',
+        ]);
     }
 }

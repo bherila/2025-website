@@ -19,7 +19,7 @@ class FinanceTaxReturnPdfCommand extends BaseFinanceCommand
         {--out=storage/app/testing/2025-form-1040-editable.pdf : Output PDF path}
         {--format=table : Reserved for finance CLI compatibility}';
 
-    protected $description = 'Generate an IRS tax return PDF from backend Tax Preview facts when a native AcroForm engine is available.';
+    protected $description = 'Generate an IRS tax return PDF from backend Tax Preview facts using the FPDI/TCPDF renderer.';
 
     public function __construct(
         private readonly IrsReturnPdfBuilder $pdfBuilder,

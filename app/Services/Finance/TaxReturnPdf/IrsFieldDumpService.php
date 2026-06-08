@@ -25,33 +25,57 @@ class IrsFieldDumpService
 
         $document = (new Parser)->parseFile($templatePath);
         $pageNumbers = $this->pageNumbers($document);
-        $fields = [];
+        $pendingFields = [];
+        $nameCounts = [];
 
         foreach ($document->getObjectsByType('Annot', 'Widget') as $objectId => $object) {
             if (! $object instanceof PDFObject) {
                 continue;
             }
 
-            $name = $this->stringValue($object->get('T'));
+            $name = $this->fieldName($object);
             if ($name === null || $name === '') {
                 continue;
             }
 
             $appearanceStates = $this->appearanceStates($object);
 
+            $pendingFields[] = [
+                'name' => $name,
+                'type' => $this->stringValue($this->inheritedValue($object, 'FT')),
+                'page' => $this->pageNumber($object, $pageNumbers),
+                'objectId' => (string) $objectId,
+                'value' => $this->stringValue($this->inheritedValue($object, 'V')),
+                'defaultValue' => $this->stringValue($this->inheritedValue($object, 'DV')),
+                'defaultAppearance' => $this->stringValue($this->inheritedValue($object, 'DA')),
+                'flags' => $this->intValue($this->inheritedValue($object, 'Ff')),
+                'maxLength' => $this->intValue($this->inheritedValue($object, 'MaxLen')),
+                'rect' => $this->arrayValue($object->get('Rect')),
+                'options' => $this->options($this->inheritedValue($object, 'Opt')),
+                'states' => $appearanceStates,
+                'onValues' => array_values(array_filter($appearanceStates, static fn (string $state): bool => $state !== 'Off')),
+            ];
+            $nameCounts[$name] = ($nameCounts[$name] ?? 0) + 1;
+        }
+
+        $fields = [];
+
+        foreach ($pendingFields as $field) {
             $fields[] = new IrsFieldDefinition(
-                name: $name,
-                type: $this->stringValue($object->get('FT')),
-                page: $this->pageNumber($object, $pageNumbers),
-                objectId: (string) $objectId,
-                value: $this->stringValue($object->get('V')),
-                defaultValue: $this->stringValue($object->get('DV')),
-                flags: $this->intValue($object->get('Ff')),
-                maxLength: $this->intValue($object->get('MaxLen')),
-                rect: $this->arrayValue($object->get('Rect')),
-                options: $this->options($object->get('Opt')),
-                states: $appearanceStates,
-                onValues: array_values(array_filter($appearanceStates, static fn (string $state): bool => $state !== 'Off')),
+                name: $field['name'],
+                type: $field['type'],
+                page: $field['page'],
+                fieldKind: $this->fieldKind($field['type'], $field['flags'], $nameCounts[$field['name']] ?? 1),
+                objectId: $field['objectId'],
+                value: $field['value'],
+                defaultValue: $field['defaultValue'],
+                defaultAppearance: $field['defaultAppearance'],
+                flags: $field['flags'],
+                maxLength: $field['maxLength'],
+                rect: $field['rect'],
+                options: $field['options'],
+                states: $field['states'],
+                onValues: $field['onValues'],
             );
         }
 
@@ -66,6 +90,42 @@ class IrsFieldDumpService
         });
 
         return $fields;
+    }
+
+    private function fieldName(PDFObject $object): ?string
+    {
+        return $this->stringValue($this->inheritedValue($object, 'T'));
+    }
+
+    private function inheritedValue(PDFObject $object, string $key): mixed
+    {
+        $value = $object->get($key);
+
+        if (! $value instanceof ElementMissing) {
+            return $value;
+        }
+
+        $parent = $object->get('Parent');
+
+        if ($parent instanceof PDFObject) {
+            return $parent->get($key);
+        }
+
+        return $value;
+    }
+
+    private function fieldKind(?string $type, ?int $flags, int $nameCount): ?string
+    {
+        return match ($type) {
+            'Tx' => 'text',
+            'Btn' => $this->flagIsSet($flags, 32768) || $nameCount > 1 ? 'radio' : 'checkbox',
+            default => $type,
+        };
+    }
+
+    private function flagIsSet(?int $flags, int $flag): bool
+    {
+        return $flags !== null && ($flags & $flag) === $flag;
     }
 
     /**

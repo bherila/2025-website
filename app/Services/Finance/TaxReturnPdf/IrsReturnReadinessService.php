@@ -56,12 +56,6 @@ class IrsReturnReadinessService
             foreach ($unsupportedForms as $unsupportedForm) {
                 $errors[] = "Complete federal return export is blocked because {$unsupportedForm} appears required but is not pinned or mapped yet.";
             }
-
-            if ($mode === 'editable') {
-                $errors[] = 'Editable complete-return merge is blocked until field-collision behavior is proven safe.';
-            } else {
-                $errors[] = 'Print packet export is not implemented without a safe static/flattening path.';
-            }
         } else {
             foreach ($this->missingProfileFields($profile) as $label) {
                 $warnings[] = "Form 1040 can be generated with {$label} blank, but the user must complete it manually.";
@@ -70,10 +64,6 @@ class IrsReturnReadinessService
 
         if ($mode === 'editable' && ! $this->fillEngine->supportsEditableOutput()) {
             $errors[] = UnavailableAcroFormFillEngine::REASON;
-        }
-
-        if ($mode === 'print') {
-            $errors[] = 'Static IRS print PDF export is not implemented in this MVP.';
         }
 
         return new IrsReturnReadinessResult(

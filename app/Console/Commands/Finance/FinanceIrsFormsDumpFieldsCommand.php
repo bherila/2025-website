@@ -60,17 +60,20 @@ class FinanceIrsFormsDumpFieldsCommand extends Command
 
         foreach ($fields as $field) {
             $lines[] = sprintf(
-                '%s | type=%s | page=%s | object=%s | value=%s | default=%s | flags=%s | maxLength=%s | rect=%s | states=%s | options=%s',
+                '%s | type=%s | kind=%s | page=%s | object=%s | value=%s | default=%s | da=%s | flags=%s | maxLength=%s | rect=%s | states=%s | onValues=%s | options=%s',
                 $field->name,
                 $field->type ?? '',
+                $field->fieldKind ?? '',
                 $field->page === null ? '' : (string) $field->page,
                 $field->objectId ?? '',
                 $field->value ?? '',
                 $field->defaultValue ?? '',
+                $field->defaultAppearance ?? '',
                 $field->flags === null ? '' : (string) $field->flags,
                 $field->maxLength === null ? '' : (string) $field->maxLength,
                 implode(',', $field->rect),
                 implode(',', $field->states),
+                implode(',', $field->onValues),
                 implode(',', $field->options),
             );
         }

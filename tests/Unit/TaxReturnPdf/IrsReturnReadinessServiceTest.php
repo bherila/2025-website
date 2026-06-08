@@ -34,7 +34,7 @@ class IrsReturnReadinessServiceTest extends TestCase
         ));
     }
 
-    public function test_individual_form_reports_missing_profile_as_warnings_but_engine_as_error(): void
+    public function test_individual_form_reports_missing_profile_as_warnings_without_blocking_export(): void
     {
         $user = User::factory()->create();
 
@@ -48,12 +48,9 @@ class IrsReturnReadinessServiceTest extends TestCase
             facts: ['form1040' => []],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertNotEmpty($readiness->warnings);
-        $this->assertNotEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'qpdf normalization'),
-        ));
+        $this->assertSame([], $readiness->errors);
     }
 
     public function test_complete_return_profile_requirements_pass_for_complete_single_profile(): void
@@ -71,13 +68,7 @@ class IrsReturnReadinessServiceTest extends TestCase
             facts: ['form1040' => []],
         );
 
-        $this->assertEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'requires taxpayer first name'),
-        ));
-        $this->assertNotEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'Editable complete-return merge'),
-        ));
+        $this->assertTrue($readiness->isReady());
+        $this->assertSame([], $readiness->errors);
     }
 }

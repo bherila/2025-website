@@ -44,6 +44,15 @@ class IrsPdfTemplateRepository
         return base_path($template->path);
     }
 
+    public function backgroundPath(IrsFormTemplate $template): string
+    {
+        if ($template->backgroundPath === null || $template->backgroundPath === '') {
+            throw new RuntimeException("IRS PDF background template is not pinned for {$template->formId}.");
+        }
+
+        return base_path($template->backgroundPath);
+    }
+
     public function validateTemplate(IrsFormTemplate $template): void
     {
         $path = $this->templatePath($template);
@@ -56,6 +65,27 @@ class IrsPdfTemplateRepository
 
         if ($sha256 !== $template->sha256) {
             throw new RuntimeException("IRS PDF template hash mismatch for {$template->formId}. Expected {$template->sha256}, got {$sha256}.");
+        }
+
+        $this->validateBackgroundTemplate($template);
+    }
+
+    public function validateBackgroundTemplate(IrsFormTemplate $template): void
+    {
+        if ($template->backgroundPath === null || $template->backgroundSha256 === null) {
+            return;
+        }
+
+        $path = $this->backgroundPath($template);
+
+        if (! is_file($path)) {
+            throw new RuntimeException("IRS PDF background template file is missing for {$template->formId}: {$path}");
+        }
+
+        $sha256 = hash_file('sha256', $path);
+
+        if ($sha256 !== $template->backgroundSha256) {
+            throw new RuntimeException("IRS PDF background template hash mismatch for {$template->formId}. Expected {$template->backgroundSha256}, got {$sha256}.");
         }
     }
 }

@@ -96,7 +96,7 @@ export function TaxReturnPdfExportDialog({
                 <FileText className="h-4 w-4" aria-hidden="true" />
                 <span className="grid gap-0.5">
                   <span className="text-sm">Form 1040</span>
-                  <span className="text-xs font-normal opacity-75">Individual editable file</span>
+                  <span className="text-xs font-normal opacity-75">Individual PDF</span>
                 </span>
               </Button>
               <Button

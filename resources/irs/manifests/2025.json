@@ -8,6 +8,8 @@
       "taxYear": 2025,
       "path": "resources/irs/forms/2025/f1040.pdf",
       "sha256": "3d31c226df0d189ced80e039d01cf0f8820c1019681a0f0ca6264de277b7e982",
+      "backgroundPath": "resources/irs/forms/2025/f1040-bg.pdf",
+      "backgroundSha256": "5c9df498d4b8443dbfb67b17df8d6a7abeb5288706fe98bbce6a28e426b5b3b3",
       "sourceUrl": "https://www.irs.gov/pub/irs-pdf/f1040.pdf",
       "revision": "2025",
       "fillable": true

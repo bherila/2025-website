@@ -13,6 +13,8 @@ readonly class IrsFormTemplate
         public string $sourceUrl,
         public string $revision,
         public bool $fillable,
+        public ?string $backgroundPath = null,
+        public ?string $backgroundSha256 = null,
     ) {}
 
     /**
@@ -29,6 +31,8 @@ readonly class IrsFormTemplate
             sourceUrl: (string) ($data['sourceUrl'] ?? ''),
             revision: (string) ($data['revision'] ?? ''),
             fillable: (bool) ($data['fillable'] ?? false),
+            backgroundPath: isset($data['backgroundPath']) ? (string) $data['backgroundPath'] : null,
+            backgroundSha256: isset($data['backgroundSha256']) ? strtolower((string) $data['backgroundSha256']) : null,
         );
     }
 }
