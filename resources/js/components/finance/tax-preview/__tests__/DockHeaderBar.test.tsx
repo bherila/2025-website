@@ -5,13 +5,17 @@ import { DockHeaderBar } from '../DockHeaderBar'
 
 const mockSetPaletteOpen = jest.fn()
 const mockExportXlsx = jest.fn()
+const mockOpenTaxReturnPdfExport = jest.fn()
 const mockOpenReviewQueue = jest.fn()
 let mockIsExportingXlsx = false
+let mockIsExportingPdf = false
 
 jest.mock('../DockActions', () => ({
   useDockActions: () => ({
     exportXlsx: mockExportXlsx,
     isExportingXlsx: mockIsExportingXlsx,
+    openTaxReturnPdfExport: mockOpenTaxReturnPdfExport,
+    isExportingPdf: mockIsExportingPdf,
     openReviewQueue: mockOpenReviewQueue,
     setPaletteOpen: mockSetPaletteOpen,
   }),
@@ -22,6 +26,7 @@ function renderHeader(overrides: Partial<ComponentProps<typeof DockHeaderBar>> =
     selectedYear: 2025,
     availableYears: [2025, 2024],
     isExportXlsxDisabled: false,
+    isExportPdfDisabled: false,
     isLoadingYears: false,
     pendingReviewCount: 0,
     onYearChange: jest.fn(),
@@ -38,8 +43,27 @@ describe('DockHeaderBar', () => {
   beforeEach(() => {
     mockSetPaletteOpen.mockClear()
     mockExportXlsx.mockClear()
+    mockOpenTaxReturnPdfExport.mockClear()
     mockOpenReviewQueue.mockClear()
     mockIsExportingXlsx = false
+    mockIsExportingPdf = false
+  })
+
+  it('opens the IRS PDF export action from the tax preview chrome', () => {
+    renderHeader()
+
+    const exportButton = screen.getByRole('button', { name: /irs pdf/i })
+    expect(exportButton).toBeInTheDocument()
+    fireEvent.click(exportButton)
+    expect(mockOpenTaxReturnPdfExport).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables the IRS PDF export action while generating', () => {
+    mockIsExportingPdf = true
+
+    renderHeader()
+
+    expect(screen.getByRole('button', { name: /generating/i })).toBeDisabled()
   })
 
   it('shows the XLSX export action in the tax preview chrome', () => {

@@ -21,6 +21,7 @@
         "maennchen/zipstream-php": "^3.2",
         "phpoffice/phpspreadsheet": "^5.7",
         "sentry/sentry-laravel": "^4.23",
+        "setasign/fpdi": "^2.6",
         "smalot/pdfparser": "^2.12",
         "spatie/laravel-csp": "^3.23",
         "storviaio/vantage": "^0.1.24",
