@@ -158,6 +158,7 @@ class Form1040FactsBuilderTest extends TestCase
             charitableNoncashTotal: 0.0,
             charitableTotal: 0.0,
             otherItemizedSources: [],
+            otherItemizedTransactions: [],
             otherItemizedTotal: 0.0,
             totalItemizedDeductions: 0.0,
             standardDeductionSingle: $standardDeductionSingle,

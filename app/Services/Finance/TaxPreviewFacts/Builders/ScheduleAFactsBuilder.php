@@ -11,6 +11,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\ScheduleAFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewTransaction;
 use App\Services\Tax\PureTaxMath\ItemizedDeductions;
 use App\Support\Finance\FederalStandardDeduction;
 
@@ -20,8 +21,9 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
      * @param  FileForTaxDocument[]  $k1Docs
      * @param  FileForTaxDocument[]  $w2Docs
      * @param  UserDeduction[]  $userDeductions
+     * @param  TaxPreviewTransaction[]  $otherItemizedTransactions
      */
-    public function build(array $k1Docs, array $w2Docs, array $userDeductions, Form4952Facts $form4952, int $year, ?float $magi = null, bool $magiIsEstimated = false): ScheduleAFacts
+    public function build(array $k1Docs, array $w2Docs, array $userDeductions, Form4952Facts $form4952, int $year, array $otherItemizedTransactions = [], ?float $magi = null, bool $magiIsEstimated = false): ScheduleAFacts
     {
         $stateIncomeTaxSources = [
             ...$this->w2StateTaxSources($w2Docs),
@@ -64,7 +66,8 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
         $charitableCashTotal = $this->sumSources($charitableCashSources);
         $charitableNoncashTotal = $this->sumSources($charitableNoncashSources);
         $charitableTotal = $this->sumMoney([$charitableCashTotal, $charitableNoncashTotal]);
-        $otherItemizedTotal = $this->sumSources($otherItemizedSources);
+        $otherItemizedTransactionTotal = $this->sumMoney(array_map(static fn (TaxPreviewTransaction $transaction): float => $transaction->amount, $otherItemizedTransactions));
+        $otherItemizedTotal = $this->sumMoney([$this->sumSources($otherItemizedSources), $otherItemizedTransactionTotal]);
         $totalInterest = $this->sumMoney([$mortgageInterestTotal, $investmentInterestTotal]);
         $totalItemizedDeductions = $this->sumMoney([$saltDeduction, $totalInterest, $charitableTotal, $otherItemizedTotal]);
         $standardSingle = $this->standardDeduction($year, false);
@@ -100,6 +103,7 @@ class ScheduleAFactsBuilder extends TaxPreviewFactBuilder
             charitableNoncashTotal: $charitableNoncashTotal,
             charitableTotal: $charitableTotal,
             otherItemizedSources: $otherItemizedSources,
+            otherItemizedTransactions: $otherItemizedTransactions,
             otherItemizedTotal: $otherItemizedTotal,
             totalItemizedDeductions: $totalItemizedDeductions,
             standardDeductionSingle: $standardSingle,

@@ -562,6 +562,7 @@ investmentInterestSources: Array<TaxFactSource>;
 charitableCashSources: Array<TaxFactSource>;
 charitableNoncashSources: Array<TaxFactSource>;
 otherItemizedSources: Array<TaxFactSource>;
+otherItemizedTransactions: Array<TaxPreviewTransaction>;
 stateIncomeTaxTotal: number;
 salesTaxTotal: number;
 selectedLine5aType: string;
@@ -801,6 +802,13 @@ form8995: Form8995Facts;
 form6251: Form6251Facts;
 form8582: Form8582Facts;
 form1040: Form1040Facts;
+};
+export type TaxPreviewTransaction = {
+transactionId: number;
+date: string;
+description: string | null;
+amount: number;
+accountId: number | null;
 };
 export type WashSaleAdjustmentFact = {
 id: string;

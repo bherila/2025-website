@@ -1,10 +1,18 @@
 'use client'
 
 import currency from 'currency.js'
+import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { useState } from 'react'
 
+import {
+  TransactionList,
+  type TransactionListColumn,
+} from '@/components/finance/tax-preview/TransactionList'
 import { FactsLoadingPlaceholder, FormBlock, FormLine, FormTotalLine, InfoTooltip } from '@/components/finance/tax-preview-primitives'
 import { taxFactSourcesNeedReview } from '@/components/finance/TaxFactSourceDetailColumn'
-import type { ScheduleAFacts, TaxFactSource } from '@/types/generated/tax-preview-facts'
+import { Button } from '@/components/ui/button'
+import { transactionsUrl } from '@/lib/financeRouteBuilder'
+import type { ScheduleAFacts, TaxFactSource, TaxPreviewTransaction } from '@/types/generated/tax-preview-facts'
 
 interface ScheduleAPreviewProps {
   selectedYear: number
@@ -14,12 +22,55 @@ interface ScheduleAPreviewProps {
   onOpenDetail?: (instanceKey: string) => void
 }
 
+const otherItemizedTransactionColumns: TransactionListColumn<TaxPreviewTransaction>[] = [
+  {
+    key: 'date',
+    label: 'Date',
+    render: (transaction) => transaction.date,
+    className: 'font-mono text-muted-foreground',
+  },
+  {
+    key: 'description',
+    label: 'Description',
+    render: (transaction) => transaction.description ?? 'Transaction',
+    className: 'truncate text-muted-foreground',
+  },
+  {
+    key: 'amount',
+    label: 'Amount',
+    align: 'right',
+    render: (transaction) => currency(transaction.amount).format(),
+    className: 'font-mono text-muted-foreground',
+  },
+]
+
+function otherItemizedTransactionAction(transaction: TaxPreviewTransaction) {
+  if (transaction.accountId === null) {
+    return null
+  }
+
+  return (
+    <a
+      href={transactionsUrl(transaction.accountId, { hash: `t_id=${transaction.transactionId}` })}
+      target="_blank"
+      rel="noreferrer"
+      title="Go to transaction"
+    >
+      <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Go to transaction">
+        <ExternalLink className="h-4 w-4" />
+      </Button>
+    </a>
+  )
+}
+
 export default function ScheduleAPreview({
   selectedYear,
   isMarried = false,
   scheduleAFacts,
   onOpenDetail,
 }: ScheduleAPreviewProps) {
+  const [showLine16Transactions, setShowLine16Transactions] = useState(false)
+
   if (!scheduleAFacts) {
     return <FactsLoadingPlaceholder label="Schedule A" />
   }
@@ -37,6 +88,10 @@ export default function ScheduleAPreview({
     ? 'State/local general sales taxes'
     : 'State income tax withheld / estimated tax paid'
   const investmentInterestNeedsReview = taxFactSourcesNeedReview(scheduleAFacts.investmentInterestSources)
+  const otherItemizedTransactions = scheduleAFacts.otherItemizedTransactions ?? []
+  const otherItemizedTransactionTotal = otherItemizedTransactions
+    .reduce((sum, transaction) => sum.add(transaction.amount), currency(0))
+    .value
 
   const sourceClickProps = (key: string, title: string, sources: TaxFactSource[]) =>
     sources.length > 0 && onOpenDetail
@@ -147,8 +202,34 @@ export default function ScheduleAPreview({
               {...sourceClickProps('sch-a:line-16', 'Schedule A Line 16 Supporting Details', scheduleAFacts.otherItemizedSources)}
             />
           ))}
-          {scheduleAFacts.otherItemizedSources.length === 0 && (
+          {scheduleAFacts.otherItemizedSources.length === 0 && otherItemizedTransactions.length === 0 && (
             <FormLine label="No other itemized deductions" raw="—" />
+          )}
+          {otherItemizedTransactions.length > 0 && (
+            <div className="space-y-2 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-medium">Ledger transactions</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => setShowLine16Transactions((value) => !value)}
+                >
+                  {showLine16Transactions ? 'Hide' : 'Show'}
+                  {showLine16Transactions ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </Button>
+              </div>
+              {showLine16Transactions && (
+                <TransactionList
+                  rows={otherItemizedTransactions}
+                  columns={otherItemizedTransactionColumns}
+                  getRowKey={(transaction) => transaction.transactionId}
+                  rowAction={otherItemizedTransactionAction}
+                  total={currency(otherItemizedTransactionTotal).format()}
+                />
+              )}
+            </div>
           )}
           <FormTotalLine
             boxRef="16"

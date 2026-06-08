@@ -318,6 +318,7 @@ function makeTaxFacts(): TaxPreviewFacts {
       charitableNoncashTotal: 0,
       charitableTotal: 0,
       otherItemizedSources: [],
+      otherItemizedTransactions: [],
       otherItemizedTotal: 0,
       totalItemizedDeductions: 0,
       standardDeductionSingle: 15750,

@@ -1284,6 +1284,81 @@ class TaxPreviewFactsServiceTest extends TestCase
         $this->assertSame('schedule_a_line_5a', $facts['scheduleA']['salesTaxSources'][0]['routing']);
     }
 
+    public function test_schedule_a_line16_includes_supported_fee_ledger_transactions(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createAccount($user->id);
+        $personalFeeTag = (int) DB::table('fin_account_tag')->insertGetId([
+            'tag_userid' => (string) $user->id,
+            'tag_color' => '#2563eb',
+            'tag_label' => 'Personal fees',
+            'tax_characteristic' => 'fee_irc67g',
+            'employment_entity_id' => null,
+        ]);
+        $scheduleEFeeTag = (int) DB::table('fin_account_tag')->insertGetId([
+            'tag_userid' => (string) $user->id,
+            'tag_color' => '#2563eb',
+            'tag_label' => 'Schedule E fees',
+            'tax_characteristic' => 'fee_schE',
+            'employment_entity_id' => null,
+        ]);
+
+        $feeChargeId = $this->createTaggedLineItem($account->acct_id, $personalFeeTag, [
+            't_date' => '2025-02-01',
+            't_type' => 'Fee',
+            't_amt' => -30,
+            't_description' => 'Personal advisory fee',
+        ]);
+        $feeCreditId = $this->createTaggedLineItem($account->acct_id, $personalFeeTag, [
+            't_date' => '2025-03-01',
+            't_type' => 'Advisory Fee',
+            't_amt' => 10,
+            't_description' => 'Personal advisory fee credit',
+        ]);
+        $embeddedFeeId = $this->createTaggedLineItem($account->acct_id, $personalFeeTag, [
+            't_date' => '2025-04-01',
+            't_type' => 'Buy',
+            't_amt' => -1000,
+            't_fee' => 5,
+            't_description' => 'Embedded fee row',
+        ]);
+        $this->createTaggedLineItem($account->acct_id, $scheduleEFeeTag, [
+            't_date' => '2025-05-01',
+            't_type' => 'Fee',
+            't_amt' => -90,
+            't_description' => 'Schedule E fee',
+        ]);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2025, 'scheduleA');
+
+        $this->assertSame(25.0, $facts['scheduleA']['otherItemizedTotal']);
+        $this->assertSame(25.0, $facts['scheduleA']['totalItemizedDeductions']);
+        $this->assertSame([], $facts['scheduleA']['otherItemizedSources']);
+        $this->assertSame([
+            [
+                'transactionId' => $feeChargeId,
+                'date' => '2025-02-01',
+                'description' => 'Personal advisory fee',
+                'amount' => 30.0,
+                'accountId' => (int) $account->acct_id,
+            ],
+            [
+                'transactionId' => $feeCreditId,
+                'date' => '2025-03-01',
+                'description' => 'Personal advisory fee credit',
+                'amount' => -10.0,
+                'accountId' => (int) $account->acct_id,
+            ],
+            [
+                'transactionId' => $embeddedFeeId,
+                'date' => '2025-04-01',
+                'description' => 'Embedded fee row',
+                'amount' => 5.0,
+                'accountId' => (int) $account->acct_id,
+            ],
+        ], $facts['scheduleA']['otherItemizedTransactions']);
+    }
+
     public function test_schedule_a_uses_2026_standard_deduction_values(): void
     {
         $user = $this->createUser();
@@ -3540,6 +3615,29 @@ class TaxPreviewFactsServiceTest extends TestCase
             't_id' => $transactionId,
             'tag_id' => $tagId,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createTaggedLineItem(int $accountId, int $tagId, array $overrides = []): int
+    {
+        $transactionId = (int) DB::table('fin_account_line_items')->insertGetId(array_merge([
+            't_account' => $accountId,
+            't_date' => '2025-01-01',
+            't_type' => 'Debit',
+            't_amt' => 0,
+            't_description' => 'Tagged ledger transaction',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], $overrides));
+
+        DB::table('fin_account_line_item_tag_map')->insert([
+            't_id' => $transactionId,
+            'tag_id' => $tagId,
+        ]);
+
+        return $transactionId;
     }
 
     /**

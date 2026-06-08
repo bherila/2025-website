@@ -55,6 +55,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\TaxPreviewTransaction;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
@@ -63,6 +64,8 @@ use RuntimeException;
 class TaxPreviewFactsService
 {
     private const array SUPPORTED_SLICES = ['all', 'schedule1', 'schedule3', 'scheduleB', 'scheduleC', 'form8829', 'scheduleF', 'scheduleSE', 'form8959', 'form4952', 'scheduleA', 'scheduleE', 'form6781', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582', 'form1040'];
+
+    private const array FEE_TRANSACTION_TYPES = ['fee', 'advisory fee', 'management fee'];
 
     public function __construct(
         private readonly CapitalGainsTaxReportService $capitalGainsTaxReportService,
@@ -174,7 +177,16 @@ class TaxPreviewFactsService
         $estimatedMagi = $userId !== null ? $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD) : null;
         $deductionMagi = $magi ?? $estimatedMagi;
         $deductionMagiIsEstimated = $magi === null && $estimatedMagi !== null;
-        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $deductionMagi, $deductionMagiIsEstimated);
+        $scheduleA = $this->scheduleAFactsBuilder->build(
+            $k1Docs,
+            $w2Docs,
+            $userDeductions,
+            $form4952,
+            $year,
+            $userId !== null ? $this->otherItemizedTransactionsForYear($userId, $year) : [],
+            $deductionMagi,
+            $deductionMagiIsEstimated,
+        );
         $taxableIncomeBeforeQbi = $this->taxableIncomeBeforeQbi($deductionMagi ?? 0.0, $scheduleA, $isMarried);
         $form8949 = $this->form8949FactsBuilder->build($capitalGainsReport);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099, $form4952);
@@ -597,7 +609,7 @@ class TaxPreviewFactsService
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $this->isMarried($userId, $year));
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797, $form4952);
         $estimatedMagi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
-        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $estimatedMagi, true);
+        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $this->otherItemizedTransactionsForYear($userId, $year), $estimatedMagi, true);
 
         return $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $scheduleA, $estimatedMagi, $userId, $year, true);
     }
@@ -620,7 +632,7 @@ class TaxPreviewFactsService
         $scheduleD = $this->scheduleDFactsForSlice($k1Docs, $docs1099, $userId, $year, $form4797);
         $estimatedMagi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
 
-        return $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $estimatedMagi, true);
+        return $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $this->otherItemizedTransactionsForYear($userId, $year), $estimatedMagi, true);
     }
 
     /**
@@ -641,7 +653,7 @@ class TaxPreviewFactsService
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $isMarried);
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797, $form4952);
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
-        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi, true);
+        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $this->otherItemizedTransactionsForYear($userId, $year), $magi, true);
 
         return $this->form8995FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
     }
@@ -664,7 +676,7 @@ class TaxPreviewFactsService
         $scheduleSE = $this->scheduleSEFactsBuilder->build($k1Docs, $w2Docs, $scheduleC, $scheduleF, $year, $userId, $isMarried);
         $schedule1 = $this->schedule1FactsBuilder->build($k1Docs, $docs1099, $scheduleC, $scheduleSE, $scheduleF, $form4797, $form4952);
         $magi = $this->estimatedMagi($w2Docs, $docs1099, $scheduleB, $schedule1, $scheduleD);
-        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $magi, true);
+        $scheduleA = $this->scheduleAFactsBuilder->build($k1Docs, $w2Docs, $userDeductions, $form4952, $year, $this->otherItemizedTransactionsForYear($userId, $year), $magi, true);
         $form8995 = $this->form8995FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $scheduleC, $scheduleF, $scheduleSE, $scheduleD, $this->taxableIncomeBeforeQbi($magi, $scheduleA, $isMarried), $year, $isMarried);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099, $form4952);
         $taxableIncome = $this->estimatedTaxableIncome($magi, $scheduleA, $form8995->deduction, $isMarried);
@@ -1007,6 +1019,57 @@ class TaxPreviewFactsService
         }
 
         return $sources;
+    }
+
+    /**
+     * @return TaxPreviewTransaction[]
+     */
+    private function otherItemizedTransactionsForYear(int $userId, int $year): array
+    {
+        $rows = FinAccountLineItems::query()
+            ->whereHas('account', function ($query) use ($userId): void {
+                $query->withoutGlobalScopes()->where('acct_owner', $userId);
+            })
+            ->whereHas('tags', function ($query): void {
+                $query->where('tax_characteristic', 'fee_irc67g');
+            })
+            ->where('t_date', '>=', "{$year}-01-01")
+            ->where('t_date', '<', ($year + 1).'-01-01')
+            ->orderBy('t_date')
+            ->orderBy('t_id')
+            ->get(['t_id', 't_date', 't_description', 't_amt', 't_fee', 't_type', 't_account']);
+
+        $transactions = [];
+        foreach ($rows as $row) {
+            $amount = $this->feeCostAmount($row);
+            if ($amount === 0.0) {
+                continue;
+            }
+
+            $transactions[] = new TaxPreviewTransaction(
+                transactionId: (int) $row->t_id,
+                date: substr((string) $row->t_date, 0, 10),
+                description: isset($row->t_description) ? (string) $row->t_description : null,
+                amount: $amount,
+                accountId: isset($row->t_account) ? (int) $row->t_account : null,
+            );
+        }
+
+        return $transactions;
+    }
+
+    private function feeCostAmount(FinAccountLineItems $row): float
+    {
+        if ($this->isFeeTransactionType($row->t_type)) {
+            return $this->roundMoney(MoneyMath::subtract(0, (float) ($row->t_amt ?? 0.0)));
+        }
+
+        return $this->roundMoney((float) ($row->t_fee ?? 0.0));
+    }
+
+    private function isFeeTransactionType(mixed $type): bool
+    {
+        return is_string($type) && in_array(strtolower(trim($type)), self::FEE_TRANSACTION_TYPES, true);
     }
 
     private function isShortDividend(FinAccountLineItems $transaction): bool
