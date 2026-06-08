@@ -238,6 +238,13 @@ amount: number;
 description: string;
 requiresStatementReview: boolean;
 };
+export type Form6781Facts = {
+shortTermSources: Array<TaxFactSource>;
+longTermSources: Array<TaxFactSource>;
+shortTermTotal: number;
+longTermTotal: number;
+netGain: number;
+};
 export type Form8582ActivityFact = {
 activityName: string;
 ein: string | null;
@@ -783,6 +790,7 @@ scheduleB: ScheduleBFacts;
 form4952: Form4952Facts;
 scheduleA: ScheduleAFacts;
 scheduleE: ScheduleEFacts;
+form6781: Form6781Facts;
 scheduleD: ScheduleDFacts;
 form8949: Form8949Facts;
 form4797: Form4797Facts;

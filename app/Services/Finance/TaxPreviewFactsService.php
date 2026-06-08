@@ -18,6 +18,7 @@ use App\Services\Finance\TaxPreviewFacts\Builders\Form1116FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form4797FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form4952FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form6251FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form6781FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8582FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8606FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8829FactsBuilder;
@@ -61,7 +62,7 @@ use RuntimeException;
 
 class TaxPreviewFactsService
 {
-    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'schedule3', 'scheduleB', 'scheduleC', 'form8829', 'scheduleF', 'scheduleSE', 'form8959', 'form4952', 'scheduleA', 'scheduleE', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582', 'form1040'];
+    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'schedule3', 'scheduleB', 'scheduleC', 'form8829', 'scheduleF', 'scheduleSE', 'form8959', 'form4952', 'scheduleA', 'scheduleE', 'form6781', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582', 'form1040'];
 
     public function __construct(
         private readonly CapitalGainsTaxReportService $capitalGainsTaxReportService,
@@ -76,6 +77,7 @@ class TaxPreviewFactsService
         private readonly ScheduleFFactsBuilder $scheduleFFactsBuilder,
         private readonly ScheduleSEFactsBuilder $scheduleSEFactsBuilder,
         private readonly Form8959FactsBuilder $form8959FactsBuilder,
+        private readonly Form6781FactsBuilder $form6781FactsBuilder,
         private readonly ScheduleDFactsBuilder $scheduleDFactsBuilder,
         private readonly Form8949FactsBuilder $form8949FactsBuilder,
         private readonly Form4797FactsBuilder $form4797FactsBuilder,
@@ -150,10 +152,12 @@ class TaxPreviewFactsService
         $capitalGainsReport = $userId !== null
             ? $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)
             : $this->emptyCapitalGainsReport($year);
+        $form6781 = $this->form6781FactsBuilder->build($k1Docs);
         $scheduleD = $this->scheduleDFactsBuilder->build(
             $k1Docs,
             $docs1099,
             $capitalGainsReport['scheduleDRollup'],
+            $form6781,
             $form4797,
             $userId !== null ? $this->scheduleDCarryoverInputForYear($userId, $year) : null,
         );
@@ -196,6 +200,7 @@ class TaxPreviewFactsService
             form4952: $form4952,
             scheduleA: $scheduleA,
             scheduleE: $scheduleE,
+            form6781: $form6781,
             scheduleD: $scheduleD,
             form8949: $form8949,
             form4797: $form4797,
@@ -273,6 +278,10 @@ class TaxPreviewFactsService
                     $docs1099,
                     $this->buildForm4952ForSlice($k1Docs, $docs1099, $this->scheduleBFactsBuilder->build($k1Docs, $docs1099), $userId, $year),
                 )->toArray(),
+            ],
+            'form6781' => [
+                'year' => $year,
+                'form6781' => $this->form6781FactsBuilder->build($k1Docs)->toArray(),
             ],
             'scheduleD' => [
                 'year' => $year,
@@ -419,6 +428,10 @@ class TaxPreviewFactsService
                 'year' => $facts['year'],
                 'scheduleE' => $facts['scheduleE'],
             ],
+            'form6781' => [
+                'year' => $facts['year'],
+                'form6781' => $facts['form6781'],
+            ],
             'scheduleD' => [
                 'year' => $facts['year'],
                 'scheduleD' => $facts['scheduleD'],
@@ -553,10 +566,13 @@ class TaxPreviewFactsService
      */
     private function scheduleDFactsForSlice(array $k1Docs, array $docs1099, int $userId, int $year, ?Form4797Facts $form4797 = null): ScheduleDFacts
     {
+        $form6781 = $this->form6781FactsBuilder->build($k1Docs);
+
         return $this->scheduleDFactsBuilder->build(
             $k1Docs,
             $docs1099,
             $this->capitalGainsTaxReportService->reportForUserYear($userId, $year)['scheduleDRollup'],
+            $form6781,
             $form4797,
             $this->scheduleDCarryoverInputForYear($userId, $year),
         );

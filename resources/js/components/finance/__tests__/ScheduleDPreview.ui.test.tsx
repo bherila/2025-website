@@ -224,7 +224,9 @@ describe('ScheduleDPreview detail navigation', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Long-term loss carryover').value).toBe('5000')
   })
 
-  it('renders Section 1256 Form 6781 allocations on Schedule D lines 4 and 11', () => {
+  it('renders Section 1256 allocations on Schedule D lines 4 and 11 with Form 6781 drill buttons', () => {
+    const onGoToForm6781 = jest.fn()
+
     render(
       <ScheduleDPreview
         taxFacts={makeFacts({
@@ -232,12 +234,14 @@ describe('ScheduleDPreview detail navigation', () => {
             id: 'section-1256-short',
             label: 'AQR — K-1 Box 11C Form 6781 40% S/T allocation',
             amount: 13018,
+            sourceType: 'k1_section_1256_short_term',
             formType: 'k1',
           })],
           line11Sources: [makeSource({
             id: 'section-1256-long',
             label: 'AQR — K-1 Box 11C Form 6781 60% L/T allocation',
             amount: 19527,
+            sourceType: 'k1_section_1256_long_term',
             formType: 'k1',
           })],
           line4GainLoss: 13018,
@@ -248,12 +252,20 @@ describe('ScheduleDPreview detail navigation', () => {
           line21LimitedLossOrGain: 32545,
         })}
         selectedYear={2025}
+        onGoToForm6781={onGoToForm6781}
       />,
     )
 
-    expect(screen.getAllByText('AQR — K-1 Box 11C Form 6781 40% S/T allocation')).toHaveLength(2)
-    expect(screen.getAllByText('AQR — K-1 Box 11C Form 6781 60% L/T allocation')).toHaveLength(2)
-    expect(screen.getByText(/Schedule D lines 4 and 11/)).toBeInTheDocument()
+    expect(screen.getByText('AQR — K-1 Box 11C Form 6781 40% S/T allocation')).toBeInTheDocument()
+    expect(screen.getByText('AQR — K-1 Box 11C Form 6781 60% L/T allocation')).toBeInTheDocument()
+    expect(screen.queryByText('Form 6781 — Section 1256 Contracts & Straddles')).not.toBeInTheDocument()
+
+    const buttons = screen.getAllByRole('button', { name: 'View Form 6781' })
+    expect(buttons).toHaveLength(2)
+    fireEvent.click(buttons[0]!)
+    fireEvent.click(buttons[1]!)
+
+    expect(onGoToForm6781).toHaveBeenCalledTimes(2)
   })
 
   it('drills into a tax-source-detail column from Schedule D line 5', () => {
