@@ -34,6 +34,8 @@ class FinDocumentDetailResource extends JsonResource
         return [
             'id' => (int) $document->id,
             'document_kind' => (string) $document->document_kind,
+            'document_type' => $document->document_type,
+            'document_date' => $this->dateString($document->document_date),
             'tax_year' => $document->tax_year,
             'period_start' => $this->dateString($document->period_start),
             'period_end' => $this->dateString($document->period_end),

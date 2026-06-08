@@ -30,6 +30,54 @@ class FinDocument extends Model
 
     public const string KIND_MANUAL = 'manual';
 
+    public const string TYPE_STATEMENT = 'statement';
+
+    public const string TYPE_CONFIRM = 'confirm';
+
+    public const string TYPE_CAPITAL_ACCOUNT_STATEMENT = 'capital_account_statement';
+
+    public const string TYPE_FINANCIAL_STATEMENTS = 'financial_statements';
+
+    public const string TYPE_UNAUDITED_FINANCIALS = 'unaudited_financials';
+
+    public const string TYPE_CAPITAL_CALL_NOTICE = 'capital_call_notice';
+
+    public const string TYPE_DISTRIBUTION_NOTICE = 'distribution_notice';
+
+    public const string TYPE_SCHEDULE_K1 = 'schedule_k1';
+
+    public const string TYPE_SCHEDULE_K1_AMENDED = 'schedule_k1_amended';
+
+    public const string TYPE_TERM_SHEET = 'term_sheet';
+
+    public const string TYPE_FUND_PERFORMANCE_REPORT = 'fund_performance_report';
+
+    public const string TYPE_INVESTOR_SIGNATURE_PACKAGE = 'investor_signature_package';
+
+    public const string TYPE_LIMITED_PARTNERSHIP_AGREEMENT = 'limited_partnership_agreement';
+
+    public const string TYPE_PARTNERSHIP_AGREEMENT = 'partnership_agreement';
+
+    public const string TYPE_MANAGEMENT_AGREEMENT = 'management_agreement';
+
+    public const string TYPE_SUBSCRIPTION_AGREEMENT = 'subscription_agreement';
+
+    public const string TYPE_SUBSCRIBER_INFORMATION = 'subscriber_information';
+
+    public const string TYPE_INVESTOR_QUESTIONNAIRE = 'investor_questionnaire';
+
+    public const string TYPE_W9 = 'w9';
+
+    public const string TYPE_PPM = 'ppm';
+
+    public const string TYPE_ADV = 'adv';
+
+    public const string TYPE_TRANSPARENCY_REPORT = 'transparency_report';
+
+    public const string TYPE_LP_UPDATE = 'lp_update';
+
+    public const string TYPE_OTHER = 'other';
+
     public const array DOCUMENT_KINDS = [
         self::KIND_TAX_FORM,
         self::KIND_STATEMENT,
@@ -44,6 +92,8 @@ class FinDocument extends Model
     protected $fillable = [
         'user_id',
         'document_kind',
+        'document_type',
+        'document_date',
         'tax_year',
         'period_start',
         'period_end',
@@ -69,6 +119,7 @@ class FinDocument extends Model
     protected function casts(): array
     {
         return [
+            'document_date' => 'date',
             'tax_year' => 'integer',
             'period_start' => 'date',
             'period_end' => 'date',
@@ -192,5 +243,11 @@ class FinDocument extends Model
     public function lots(): HasMany
     {
         return $this->hasMany(FinAccountLot::class, 'document_id');
+    }
+
+    /** @return HasMany<FinStatementInvestment, $this> */
+    public function statementInvestments(): HasMany
+    {
+        return $this->hasMany(FinStatementInvestment::class, 'document_id');
     }
 }

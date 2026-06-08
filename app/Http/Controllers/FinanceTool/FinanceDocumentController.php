@@ -55,6 +55,11 @@ class FinanceDocumentController extends Controller
             $query->whereIn('document_kind', $kinds);
         }
 
+        if ($request->filled('document_type')) {
+            $types = array_filter(array_map('trim', explode(',', (string) $request->input('document_type'))));
+            $query->whereIn('document_type', $types);
+        }
+
         if ($request->filled('tax_year')) {
             $query->where('tax_year', (int) $request->input('tax_year'));
         }
@@ -134,6 +139,7 @@ class FinanceDocumentController extends Controller
             'kind_asc' => $query->reorder('document_kind')->orderByDesc('created_at'),
             'tax_year_desc' => $query->reorder('tax_year', 'desc')->orderByDesc('created_at'),
             'period_end_desc' => $query->reorder('period_end', 'desc')->orderByDesc('created_at'),
+            'document_date_desc' => $query->reorder('document_date', 'desc')->orderByDesc('created_at'),
             'created_desc' => $query->reorder()->orderByDesc('created_at')->orderByDesc('id'),
             default => null,
         };
