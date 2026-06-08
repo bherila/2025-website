@@ -120,6 +120,16 @@ export const transitionOverrideSchema = z
   })
   .prefault({})
 
+export const rsuVestingEventSchema = z.object({
+  vestDate: z.string(),
+  shareCount: z.number(),
+  sourceAwardId: z.string().nullish(),
+  sourceAwardRowId: z.number().nullish(),
+  symbol: z.string().nullish(),
+  grantPrice: z.number().nullish(),
+  vestPrice: z.number().nullish(),
+})
+
 export const rsuGrantSchema = z.object({
   id: z.string(),
   kind: z.enum(['hire', 'refresher']),
@@ -132,6 +142,7 @@ export const rsuGrantSchema = z.object({
   vestingYears: z.number(),
   vestingFrequency: vestingFrequencySchema,
   vestingSchedule: vestingScheduleSchema,
+  vestingEvents: z.array(rsuVestingEventSchema).default([]),
 })
 
 export const optionGrantSchema = z.object({
@@ -407,6 +418,7 @@ export type CashComp = z.infer<typeof cashCompSchema>
 export type VestingFrequency = z.infer<typeof vestingFrequencySchema>
 export type VestingSchedule = z.infer<typeof vestingScheduleSchema>
 export type RefresherPolicy = z.infer<typeof refresherPolicySchema>
+export type RsuVestingEvent = z.infer<typeof rsuVestingEventSchema>
 export type RsuGrant = z.infer<typeof rsuGrantSchema>
 export type OptionGrant = z.infer<typeof optionGrantSchema>
 export type JobSpec = z.infer<typeof jobSpecSchema>

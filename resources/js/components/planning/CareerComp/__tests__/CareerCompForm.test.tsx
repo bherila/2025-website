@@ -3,9 +3,9 @@ import '@testing-library/jest-dom'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { type ReactElement, useState } from 'react'
 
-import { CareerCompFormSection, GrantEditorColumn, type GrantType, OfferNotesColumn, ValuationTimelineColumn } from '../CareerCompForm'
-import { buildDefaultJob, DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
-import type { CareerCompInputs } from '../types'
+import { CareerCompFormSection, duplicateRsuGrant, GrantEditorColumn, type GrantType, OfferNotesColumn, rsuScheduleEditPatch, ValuationTimelineColumn } from '../CareerCompForm'
+import { buildDefaultJob, buildDefaultRsuGrant, DEFAULT_CAREER_COMP_INPUTS } from '../defaults'
+import type { CareerCompInputs, RsuGrant } from '../types'
 
 jest.mock('@/components/ui/code-editor', () => ({
   CodeEditor({
@@ -83,6 +83,20 @@ function Harness({ initial }: { initial: CareerCompInputs }): ReactElement {
 }
 
 describe('CareerCompForm public/private gating + grant column entry', () => {
+  it('clears imported RSU vesting events when visible schedule fields are edited or duplicated', () => {
+    const original: RsuGrant = {
+      ...buildDefaultRsuGrant('current', 1),
+      vestingEvents: [{ vestDate: '2027-01-01', shareCount: 100, sourceAwardId: 'RSU-1' }],
+    }
+
+    expect(rsuScheduleEditPatch({ shareCount: 200 })).toEqual({ shareCount: 200, vestingEvents: [] })
+    expect(duplicateRsuGrant(original, [original], 'current')).toMatchObject({
+      id: 'current-rsu-2',
+      shareCount: original.shareCount,
+      vestingEvents: [],
+    })
+  })
+
   it('edits model assumptions in their own section', () => {
     function AssumptionsHarness(): ReactElement {
       const [inputs, setInputs] = useState(() => makeInputs('private'))

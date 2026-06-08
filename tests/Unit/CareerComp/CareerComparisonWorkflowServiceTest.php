@@ -79,6 +79,7 @@ class CareerComparisonWorkflowServiceTest extends TestCase
         $this->assertSame(3, $grant['vestingYears']);
         $this->assertSame('annual', $grant['vestingFrequency']);
         $this->assertSame(300.0, $grant['shareCount']);
+        $this->assertSame(['2026-01-01', '2027-01-01', '2028-01-01'], array_column($grant['vestingEvents'], 'vestDate'));
     }
 
     public function test_quarterly_cadence_is_inferred_from_median_vest_gap(): void
@@ -123,7 +124,7 @@ class CareerComparisonWorkflowServiceTest extends TestCase
         $this->assertSame(1.25, $grant['vestingYears']);
         $this->assertSame('monthly', $grant['vestingFrequency']);
         $this->assertSame(
-            [2026 => 320.0, 2027 => 80.0],
+            [2026 => 100.0, 2027 => 300.0],
             $this->sharesByYear((new RsuVestingExpander)->expand(JobSpec::nullableFromArray($result['currentJob'], true), 2026, 2)),
         );
     }
@@ -232,6 +233,14 @@ class CareerComparisonWorkflowServiceTest extends TestCase
             CareerJob::query()->whereIn('id', $bJobIds)->count(),
             "User B's jobs must survive cleanup triggered by user A",
         );
+    }
+
+    public function test_php_rsu_defaults_include_empty_vesting_events_to_match_frontend_defaults(): void
+    {
+        $defaults = CareerCompInputs::defaults();
+
+        $this->assertSame([], $defaults['currentJobs'][0]['rsuGrants'][0]['vestingEvents']);
+        $this->assertSame([], $defaults['currentJob']['rsuGrants'][0]['vestingEvents']);
     }
 
     private function latestInputs(string $tag): CareerCompInputs

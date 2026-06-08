@@ -9,6 +9,7 @@ use App\Services\Planning\CareerComp\JobSpec;
 use App\Services\Planning\CareerComp\OptionsVestingService;
 use App\Services\Planning\CareerComp\RsuVestingExpander;
 use App\Support\Finance\FederalIncomeTax;
+use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 
 class CareerCompCalculatorTest extends TestCase
@@ -252,6 +253,61 @@ class CareerCompCalculatorTest extends TestCase
 
         // Both annual grants release their full amount at the one-year mark and aggregate into 2027.
         $this->assertSame([2027 => 1800.0], $this->sharesByYear($rows));
+    }
+
+    public function test_rsu_all_invalid_vesting_events_falls_back_to_synthetic_schedule(): void
+    {
+        // A grant with a positive grantShareCount and a vestingEvents array whose
+        // every entry is invalid (shareCount <= 0, or unparseable vestDate) must fall
+        // back to the synthetic schedule rather than silently yielding zero shares.
+        $job = JobSpec::nullableFromArray([
+            'id' => 'rsu-fallback-job',
+            'name' => 'RSU fallback job',
+            'rsuGrants' => [[
+                'id' => 'rsu-fallback',
+                'kind' => 'hire',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 400,
+                'cliffMonths' => 0,
+                'vestingYears' => 1,
+                'vestingFrequency' => 'annual',
+                // Every event is invalid: shareCount is 0 (filtered) and another has
+                // an unparseable vestDate (filtered). Neither contributes shares.
+                'vestingEvents' => [
+                    ['shareCount' => 0, 'vestDate' => '2030-01-01'],
+                    ['shareCount' => 100, 'vestDate' => 'not-a-date'],
+                ],
+            ]],
+        ], false);
+
+        $rows = (new RsuVestingExpander)->expand($job, 2026, 3);
+
+        // Synthetic schedule: 400 shares vest at the 1-year mark → 2027.
+        $this->assertSame([2027 => 400.0], $this->sharesByYear($rows));
+    }
+
+    public function test_rsu_valid_vesting_events_filtered_by_cutoff_do_not_fall_back_to_synthetic_schedule(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'rsu-cutoff-job',
+            'name' => 'RSU cutoff job',
+            'rsuGrants' => [[
+                'id' => 'rsu-cutoff',
+                'kind' => 'hire',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 400,
+                'cliffMonths' => 0,
+                'vestingYears' => 1,
+                'vestingFrequency' => 'annual',
+                'vestingEvents' => [
+                    ['shareCount' => 400, 'vestDate' => '2027-01-01'],
+                ],
+            ]],
+        ], false);
+
+        $rows = (new RsuVestingExpander)->expand($job, 2026, 3, new DateTimeImmutable('2026-12-31'));
+
+        $this->assertSame([], $this->sharesByYear($rows));
     }
 
     public function test_multiple_option_grants_pool_iso_100k_limit_within_a_year(): void

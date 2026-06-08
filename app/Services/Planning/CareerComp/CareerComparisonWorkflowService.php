@@ -434,6 +434,13 @@ class CareerComparisonWorkflowService
                 ->map(fn (FinEquityAwards $award): ?float => $award->grant_price !== null ? (float) $award->grant_price : null)
                 ->first(fn (?float $price): bool => $price !== null);
 
+            $vestingEvents = $group
+                ->map(fn (FinEquityAwards $award): ?array => $this->vestingEventFromAward($award))
+                ->filter(fn (?array $event): bool => $event !== null)
+                ->sortBy(fn (array $event): string => (string) $event['vestDate'])
+                ->values()
+                ->all();
+
             $grants[] = [
                 'id' => 'rsu-tool-'.preg_replace('/[^A-Za-z0-9_-]+/', '-', strtolower((string) $first->award_id ?: (string) $first->id)),
                 'kind' => 'hire',
@@ -444,10 +451,33 @@ class CareerComparisonWorkflowService
                 'cliffMonths' => $cliffMonths,
                 'vestingYears' => $vestingYears,
                 'vestingFrequency' => $this->inferVestingFrequency($vestDates),
+                'vestingEvents' => $vestingEvents,
             ];
         }
 
         return $grants;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function vestingEventFromAward(FinEquityAwards $award): ?array
+    {
+        $vestDate = (string) $award->vest_date;
+        $shareCount = (float) $award->share_count;
+        if ($vestDate === '' || $shareCount <= 0.0) {
+            return null;
+        }
+
+        return [
+            'vestDate' => $vestDate,
+            'shareCount' => $shareCount,
+            'sourceAwardId' => $award->award_id,
+            'sourceAwardRowId' => $award->id,
+            'symbol' => $award->symbol,
+            'grantPrice' => $award->grant_price !== null ? MoneyMath::round((float) $award->grant_price) : null,
+            'vestPrice' => $award->vest_price !== null ? MoneyMath::round((float) $award->vest_price) : null,
+        ];
     }
 
     /**

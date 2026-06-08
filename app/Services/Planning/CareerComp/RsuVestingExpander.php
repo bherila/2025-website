@@ -39,6 +39,11 @@ final class RsuVestingExpander
      */
     private function sharesByYear(array $grant, ?DateTimeImmutable $vestingThrough): array
     {
+        $explicitShares = $this->explicitSharesByYear($grant, $vestingThrough);
+        if ($explicitShares !== null) {
+            return $explicitShares;
+        }
+
         $grantDate = $this->date((string) ($grant['grantDate'] ?? ''));
         if (! $grantDate instanceof DateTimeImmutable) {
             return [];
@@ -59,6 +64,50 @@ final class RsuVestingExpander
         }
 
         ksort($sharesByYear);
+
+        return $sharesByYear;
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     * @return array<int, float>|null
+     */
+    private function explicitSharesByYear(array $grant, ?DateTimeImmutable $vestingThrough): ?array
+    {
+        $events = $grant['vestingEvents'] ?? null;
+        if (! is_array($events) || $events === []) {
+            return null;
+        }
+
+        $sharesByYear = [];
+        $hasValidExplicitEvent = false;
+        foreach (array_values(array_filter($events, 'is_array')) as $event) {
+            $vestDate = $this->date((string) ($event['vestDate'] ?? ''));
+            if (! $vestDate instanceof DateTimeImmutable) {
+                continue;
+            }
+
+            $shares = is_numeric($event['shareCount'] ?? null) ? (float) $event['shareCount'] : 0.0;
+            if ($shares <= 0.0) {
+                continue;
+            }
+
+            $hasValidExplicitEvent = true;
+            if ($vestingThrough instanceof DateTimeImmutable && $vestDate > $vestingThrough) {
+                continue;
+            }
+
+            $year = (int) $vestDate->format('Y');
+            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $shares;
+        }
+
+        ksort($sharesByYear);
+
+        // Fall back only when all explicit rows are structurally invalid. Valid rows
+        // filtered out by vestingThrough still mean the explicit schedule vests nothing.
+        if (! $hasValidExplicitEvent) {
+            return null;
+        }
 
         return $sharesByYear;
     }

@@ -561,5 +561,62 @@ class CareerCompPersistenceTest extends TestCase
         $response->assertJsonPath('currentJob.rsuGrants.0.shareCount', 50);
         $response->assertJsonPath('currentJob.rsuGrants.0.grantPrice', 10);
         $response->assertJsonPath('currentJob.rsuGrants.0.vestingFrequency', 'quarterly');
+        $response->assertJsonPath('currentJob.rsuGrants.0.vestingEvents.0.vestDate', '2026-04-15');
+        $response->assertJsonPath('currentJob.rsuGrants.0.vestingEvents.0.shareCount', 25);
+        $response->assertJsonPath('currentJob.rsuGrants.0.vestingEvents.1.vestDate', '2026-07-15');
+    }
+
+    public function test_imported_rsu_vesting_events_are_persisted_and_recalculated_after_reload(): void
+    {
+        $user = User::factory()->create();
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-2027',
+            'grant_date' => '2025-02-15',
+            'vest_date' => '2027-02-15',
+            'share_count' => 568,
+            'symbol' => 'TEST',
+            'grant_price' => 500,
+            'vest_price' => 593,
+        ]);
+
+        $baseCurrentJob = CareerCompInputs::defaults()['currentJob'];
+        $baseCurrentJob['company']['currentSharePrice'] = 0;
+
+        $import = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/latest/import-rsu', [
+            'currentJob' => $baseCurrentJob,
+        ]);
+        $import->assertOk();
+
+        $inputs = CareerCompInputs::defaults();
+        $inputs['startYear'] = 2027;
+        $inputs['horizonYears'] = 1;
+        $inputs['currentJob'] = $import->json('currentJob');
+        $inputs['currentJobs'] = [$inputs['currentJob']];
+        $inputs['hypotheticalJobs'][0] = array_replace_recursive($inputs['hypotheticalJobs'][0], [
+            'id' => 'hyp-1',
+            'name' => 'Future offer',
+            'startDate' => '2027-03-01',
+            'priorJobResignationDate' => '2027-02-16',
+            'transitionOverride' => [
+                'currentJobNoticeWeeks' => 0,
+                'timeOffBetweenJobsWeeks' => 0,
+            ],
+            'comp' => ['baseSalary' => 0, 'cashBonus' => 0, 'annualRaisePct' => 0],
+            'rsuGrants' => [],
+            'optionGrants' => [],
+        ]);
+
+        $save = $this->actingAs($user)->putJson('/api/financial-planning/career-comparison/latest', [
+            'inputs' => $inputs,
+        ]);
+        $save->assertOk();
+        $save->assertJsonPath('inputs.currentJob.rsuGrants.0.vestingEvents.0.vestDate', '2027-02-15');
+        $save->assertJsonPath('projection.jobs.1.annual.0.shareSaleProceeds', 336824);
+
+        $latest = $this->actingAs($user)->getJson('/api/financial-planning/career-comparison/latest');
+        $latest->assertOk();
+        $latest->assertJsonPath('workflow.inputs.currentJob.rsuGrants.0.vestingEvents.0.vestDate', '2027-02-15');
+        $latest->assertJsonPath('workflow.projection.jobs.1.annual.0.shareSaleProceeds', 336824);
     }
 }

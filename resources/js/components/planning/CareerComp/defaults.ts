@@ -12,6 +12,7 @@ export function buildDefaultRsuGrant(jobId: string, ordinal: number): RsuGrant {
     cliffMonths: 12,
     vestingYears: 4,
     vestingFrequency: 'monthly',
+    vestingEvents: [],
   }
 }
 
