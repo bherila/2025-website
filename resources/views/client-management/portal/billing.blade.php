@@ -4,13 +4,13 @@
 
 @push('data-head')
 <script id="client-portal-initial-data" type="application/json">
-{!! json_encode([
+@portalJson([
   'slug' => $slug,
   'companyName' => $company->company_name,
   'companyId' => $company->id,
   'stripeBillingEnabled' => $stripeBillingEnabled ?? true,
   'stripePublishableKey' => $stripePublishableKey ?? null,
-], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+])
 </script>
 @endpush
 
