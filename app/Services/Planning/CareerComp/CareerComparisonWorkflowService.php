@@ -99,7 +99,10 @@ class CareerComparisonWorkflowService
      */
     private function writeComparison(?CareerComparison $existing, CareerCompInputs $inputs, ?int $jobOwnerId, ?callable $metaForCreate, bool $preserveCurrent = false): CareerComparison
     {
-        $projection = $this->calculator->project($inputs)->toArray();
+        $projectionInputs = $preserveCurrent && $existing instanceof CareerComparison
+            ? $this->withStoredCurrentJob($existing, $inputs)
+            : $inputs;
+        $projection = $this->calculator->project($projectionInputs)->toArray();
 
         return DB::transaction(function () use ($existing, $inputs, $jobOwnerId, $metaForCreate, $preserveCurrent, $projection): CareerComparison {
             if ($existing instanceof CareerComparison) {
@@ -134,6 +137,17 @@ class CareerComparisonWorkflowService
                 'computed_json' => $projection,
             ], $metaForCreate !== null ? $metaForCreate() : []));
         });
+    }
+
+    /**
+     * Keep confidential-share projections aligned with the current job that remains stored.
+     */
+    private function withStoredCurrentJob(CareerComparison $existing, CareerCompInputs $inputs): CareerCompInputs
+    {
+        $projectionInputs = $inputs->toArray();
+        $projectionInputs['currentJob'] = $this->inputsFromComparison($existing)->toArray()['currentJob'] ?? null;
+
+        return CareerCompInputs::fromArray($projectionInputs);
     }
 
     /**

@@ -184,6 +184,51 @@ class CareerCompPersistenceTest extends TestCase
         $this->assertSame($storedCurrentJobId, CareerComparison::query()->where('short_code', $code)->value('current_job_id'));
     }
 
+    public function test_confidential_share_rejects_forged_current_job_projection_from_link_holder(): void
+    {
+        $this->withoutVite();
+
+        $owner = User::factory()->create();
+        $visitor = User::factory()->create();
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob']['id'] = 'real-current-secret-id';
+        $inputs['currentJob']['name'] = 'Secret current role';
+        $inputs['currentJob']['comp']['baseSalary'] = 424242;
+        $inputs['currentJob']['comp']['cashBonus'] = 31337;
+
+        $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => $inputs,
+            'shareIncludesCurrent' => false,
+        ]);
+        $code = $share->json('shortCode');
+        $storedCurrentJobId = CareerComparison::query()->where('short_code', $code)->value('current_job_id');
+
+        $forgedInputs = CareerCompInputs::defaults();
+        $forgedInputs['currentJob']['id'] = 'attacker-forged-current-id';
+        $forgedInputs['hypotheticalJobs'][0]['name'] = 'Link holder offer edit';
+
+        $response = $this->actingAs($visitor)->putJson("/api/financial-planning/career-comparison/s/{$code}", [
+            'inputs' => $forgedInputs,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('inputs.currentJob', null);
+        $response->assertJsonPath('projection.currentJobId', null);
+        $response->assertJsonMissing(['name' => 'Secret current role']);
+        $response->assertJsonMissing(['baseSalary' => 424242]);
+        $this->assertSame($storedCurrentJobId, CareerComparison::query()->where('short_code', $code)->value('current_job_id'));
+        $this->assertSame(
+            'real-current-secret-id',
+            CareerComparison::query()->where('short_code', $code)->firstOrFail()->computed_json['currentJobId'] ?? null,
+        );
+
+        $page = $this->get("/financial-planning/career-comparison/s/{$code}");
+
+        $page->assertOk();
+        $page->assertDontSee('Secret current role');
+        $page->assertDontSee('424242');
+    }
+
     public function test_show_by_code_404s_for_unknown_code(): void
     {
         $this->withoutVite();

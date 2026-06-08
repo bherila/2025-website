@@ -194,6 +194,7 @@ class CareerCompController extends Controller
             $inputs = is_array($response['inputs'] ?? null) ? $response['inputs'] : [];
             $projection = is_array($response['projection'] ?? null) ? $response['projection'] : null;
             [$response['inputs'], $response['projection']] = $this->redactCurrent($inputs, $projection);
+            $response['title'] = 'Career comparison';
         }
 
         return $response;
@@ -206,9 +207,7 @@ class CareerCompController extends Controller
      */
     private function redactCurrent(array $inputs, ?array $projection): array
     {
-        $currentJobId = is_array($projection) && is_string($projection['currentJobId'] ?? null)
-            ? $projection['currentJobId']
-            : (is_array($inputs['currentJob'] ?? null) ? ($inputs['currentJob']['id'] ?? null) : null);
+        $currentJobId = is_array($inputs['currentJob'] ?? null) ? ($inputs['currentJob']['id'] ?? null) : null;
         $redacted = $this->shareRedactor->redact($inputs, $projection, is_string($currentJobId) ? $currentJobId : null);
 
         return [$redacted['inputs'], $redacted['projection']];
@@ -227,7 +226,7 @@ class CareerCompController extends Controller
             'shareIncludesCurrent' => $comparison->share_includes_current,
             'expiresAt' => $comparison->expires_at?->toIso8601String(),
             'isCreator' => $isCreator,
-            'title' => $comparison->title,
+            'title' => ! $comparison->share_includes_current && ! $isCreator ? 'Career comparison' : $comparison->title,
         ];
     }
 }
