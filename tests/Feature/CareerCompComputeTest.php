@@ -569,6 +569,166 @@ class CareerCompComputeTest extends TestCase
         $response->assertJsonPath('jobs.1.paperEquity.totalsByOutcome.medium', 95000);
     }
 
+    public function test_compute_uses_explicit_rsu_vest_dates_for_future_resignation_cutoffs(): void
+    {
+        $currentJob = $this->cashOnlyJob('current', 'Current job', 0);
+        $currentJob['company']['currentSharePrice'] = 593;
+        $currentJob['rsuGrants'] = [[
+            'id' => 'current-rsu-explicit',
+            'kind' => 'hire',
+            'grantDate' => '2025-02-15',
+            'shareCount' => 568,
+            'grantPrice' => 500,
+            'cliffMonths' => 0,
+            'vestingYears' => 4,
+            'vestingFrequency' => 'quarterly',
+            'vestingEvents' => [[
+                'vestDate' => '2027-02-15',
+                'shareCount' => 568,
+                'sourceAwardId' => 'RSU-2027',
+                'sourceAwardRowId' => 123,
+                'symbol' => 'TEST',
+                'grantPrice' => 500,
+                'vestPrice' => 593,
+            ]],
+        ]];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 1,
+                'startYear' => 2027,
+                'currentJob' => $currentJob,
+                'hypotheticalJobs' => [[
+                    ...$this->cashOnlyJob('hyp-1', 'Future offer', 100000),
+                    'startDate' => '2027-03-01',
+                    'priorJobResignationDate' => '2027-02-16',
+                    'transitionOverride' => [
+                        'currentJobNoticeWeeks' => 0,
+                        'timeOffBetweenJobsWeeks' => 0,
+                    ],
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.1.annual.0.shareSaleProceeds', 336824);
+        $response->assertJsonPath('jobs.1.vesting.0.vestedShares', 568);
+    }
+
+    public function test_compute_applies_explicit_rsu_active_through_boundaries(): void
+    {
+        foreach ([
+            '2027-02-15' => 0,
+            '2027-02-16' => 1000,
+            '2027-02-17' => 1000,
+        ] as $resignationDate => $expectedProceeds) {
+            $currentJob = $this->cashOnlyJob('current', 'Current job', 0);
+            $currentJob['company']['currentSharePrice'] = 10;
+            $currentJob['rsuGrants'] = [[
+                'id' => 'current-rsu-explicit',
+                'kind' => 'hire',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 100,
+                'cliffMonths' => 0,
+                'vestingYears' => 1,
+                'vestingFrequency' => 'monthly',
+                'vestingEvents' => [[
+                    'vestDate' => '2027-02-15',
+                    'shareCount' => 100,
+                ]],
+            ]];
+
+            $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+                'inputs' => [
+                    'horizonYears' => 1,
+                    'startYear' => 2027,
+                    'currentJob' => $currentJob,
+                    'hypotheticalJobs' => [[
+                        ...$this->cashOnlyJob('hyp-1', 'Future offer', 0),
+                        'startDate' => '2027-03-01',
+                        'priorJobResignationDate' => $resignationDate,
+                        'transitionOverride' => [
+                            'currentJobNoticeWeeks' => 0,
+                            'timeOffBetweenJobsWeeks' => 0,
+                        ],
+                    ]],
+                ],
+            ]);
+
+            $response->assertOk();
+            $this->assertSame($expectedProceeds, $response->json('jobs.1.annual.0.shareSaleProceeds'), "Resignation {$resignationDate}");
+        }
+    }
+
+    public function test_compute_keeps_synthetic_rsu_vesting_for_manual_grants(): void
+    {
+        $currentJob = $this->cashOnlyJob('current', 'Current job', 0);
+        $currentJob['company']['currentSharePrice'] = 10;
+        $currentJob['rsuGrants'] = [[
+            'id' => 'manual-rsu',
+            'kind' => 'hire',
+            'grantDate' => '2027-01-01',
+            'shareCount' => 120,
+            'cliffMonths' => 0,
+            'vestingYears' => 1,
+            'vestingFrequency' => 'monthly',
+        ]];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 1,
+                'startYear' => 2027,
+                'currentJob' => $currentJob,
+                'currentJobs' => [$currentJob],
+                'hypotheticalJobs' => [[
+                    ...$this->cashOnlyJob('archived-offer', 'Archived offer', 0),
+                    'archived' => true,
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('jobs.0.annual.0.shareSaleProceeds', 1100);
+        $response->assertJsonPath('jobs.0.vesting.0.vestedShares', 110);
+    }
+
+    public function test_combined_job_suppresses_component_negative_cash_flow_warning_when_combined_cash_flow_is_positive(): void
+    {
+        $startupComponent = $this->cashOnlyJob('startup-component', 'Startup component', 100000);
+        $startupComponent['optionGrants'] = [[
+            'id' => 'startup-options',
+            'kind' => 'hire',
+            'type' => 'nso',
+            'grantDate' => '2027-01-01',
+            'shareCount' => 12000,
+            'strike' => 50,
+            'cliffMonths' => 0,
+            'vestingYears' => 1,
+            'vestingFrequency' => 'monthly',
+            'earlyExercise83b' => false,
+        ]];
+        $cashComponent = $this->cashOnlyJob('cash-component', 'Cash component', 500000);
+        $startupComponent['growthBands'] = ['lowPct' => -10, 'mediumPct' => 0, 'highPct' => 10];
+        $cashComponent['growthBands'] = ['lowPct' => -10, 'mediumPct' => 0, 'highPct' => 10];
+
+        $response = $this->postJson('/api/financial-planning/career-comparison/compute', [
+            'inputs' => [
+                'horizonYears' => 1,
+                'startYear' => 2027,
+                'currentJob' => $startupComponent,
+                'currentJobs' => [$startupComponent, $cashComponent],
+                'hypotheticalJobs' => [[
+                    ...$this->cashOnlyJob('archived-offer', 'Archived offer', 0),
+                    'archived' => true,
+                ]],
+            ],
+        ]);
+
+        $response->assertOk();
+        $this->assertGreaterThan(0, $response->json('jobs.0.annual.0.freeCashFlow'));
+        $this->assertSame([], $response->json('warnings'));
+    }
+
     public function test_compute_rejects_invalid_private_valuation_scenario_rows(): void
     {
         $inputs = CareerCompInputs::defaults();

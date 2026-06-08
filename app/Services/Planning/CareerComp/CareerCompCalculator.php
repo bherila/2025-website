@@ -344,11 +344,33 @@ final class CareerCompCalculator
 
         return [
             'job' => $combined,
-            'warnings' => array_merge(...array_map(
-                static fn (array $entry): array => $entry['warnings'],
-                $projected,
-            )),
+            'warnings' => $this->combinedWarnings($projected, $annual, $name),
         ];
+    }
+
+    /**
+     * @param  list<array{job:array<string, mixed>,warnings:list<string>}>  $projected
+     * @param  list<array<string, mixed>>  $annual
+     * @return list<string>
+     */
+    private function combinedWarnings(array $projected, array $annual, string $name): array
+    {
+        $warnings = array_merge(...array_map(
+            static fn (array $entry): array => $entry['warnings'],
+            $projected,
+        ));
+        $nonCashFlowWarnings = array_values(array_filter(
+            $warnings,
+            static fn (string $warning): bool => ! str_contains($warning, ': negative free cash flow in '),
+        ));
+
+        foreach ($annual as $row) {
+            if ((float) ($row['freeCashFlow'] ?? 0.0) < 0.0) {
+                return array_merge($nonCashFlowWarnings, ["{$name}: negative free cash flow in {$row['year']}."]);
+            }
+        }
+
+        return $nonCashFlowWarnings;
     }
 
     /**
