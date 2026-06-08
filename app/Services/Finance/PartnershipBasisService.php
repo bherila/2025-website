@@ -1189,27 +1189,32 @@ class PartnershipBasisService
 
         // Tax-basis capital uses the same increase/decrease set as outside basis EXCEPT liability
         // share changes (which affect outside basis but not tax-basis capital). §179 and depletion
-        // reduce capital even when basis-limited, so they must be subtracted here too.
-        $currentYear = $events->whereIn('event_type', [
+        // reduce capital even when basis-limited, so they must be subtracted here too. Amounts are
+        // taken as magnitudes (like the outside-basis rollforward) so a signed manual amount cannot
+        // flip a decrease into an increase.
+        $absSum = fn (array $eventTypes): int => (int) $events
+            ->whereIn('event_type', $eventTypes)
+            ->sum(fn (FinPartnershipBasisEvent $event): int => abs((int) $event->amount_cents));
+
+        $currentYear = $absSum([
             'capital_contribution_cash',
             'capital_contribution_property_basis',
             'taxable_income',
             'tax_exempt_income',
             'manual_increase_to_outside_basis',
-        ])->sum('amount_cents')
-            - $events->whereIn('event_type', [
-                'cash_distribution',
-                'property_distribution_basis',
-                'marketable_securities_distribution',
-                'deductible_loss',
-                'nondeductible_expense',
-                'foreign_tax',
-                'section179',
-                'depletion',
-                'manual_decrease_to_outside_basis',
-            ])->sum('amount_cents');
+        ]) - $absSum([
+            'cash_distribution',
+            'property_distribution_basis',
+            'marketable_securities_distribution',
+            'deductible_loss',
+            'nondeductible_expense',
+            'foreign_tax',
+            'section179',
+            'depletion',
+            'manual_decrease_to_outside_basis',
+        ]);
 
-        return $beginning + (int) $currentYear;
+        return $beginning + $currentYear;
     }
 
     /**
@@ -1292,9 +1297,11 @@ class PartnershipBasisService
     }
 
     /**
-     * Liquidation gain/loss is a review-only estimate: gain equals recognized excess-distribution
-     * gain; otherwise the remaining outside basis is a candidate capital loss. The true result
-     * depends on the character of property received, so the year is always flagged needs_review.
+     * Liquidation / sale gain/loss is a review-only estimate. A sale or exchange realizes proceeds
+     * against the remaining outside basis (gain = proceeds − basis), plus any recognized
+     * excess-distribution gain. With no sale proceeds it is recognized excess-distribution gain, or
+     * otherwise the remaining outside basis as a candidate capital loss. The true result depends on
+     * the character of property received, so the year is always flagged needs_review.
      *
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      */
@@ -1302,6 +1309,13 @@ class PartnershipBasisService
     {
         if (! $this->hasLiquidationEvent($events)) {
             return null;
+        }
+
+        $saleProceeds = abs((int) $events->where('event_type', PartnershipBasisEventType::SaleExchange->value)->sum('amount_cents'));
+        if ($saleProceeds > 0) {
+            // Proceeds less the basis remaining after distributions, plus any cash-distribution
+            // excess-of-basis gain already recognized this year.
+            return $saleProceeds - $endingOutside + $distributionGain;
         }
 
         return $distributionGain > 0 ? $distributionGain : -$endingOutside;

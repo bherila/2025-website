@@ -166,8 +166,11 @@ class PartnershipBasisFactsBuilder
     }
 
     /**
-     * Latest dated distribution/liquidation event in the year, used as the deemed disposition date
-     * for holding-period and Form 8949 sold-date purposes. Null when no distribution carries a date.
+     * Latest dated cash-distribution event in the year, used as the deemed disposition date for
+     * holding-period and Form 8949 sold-date purposes on §731 excess cash-distribution gain. Only
+     * gain-triggering (cash / marketable-securities / liquidation-cash) distributions count —
+     * property distributions reduce basis without creating cash gain, so their dates must not move
+     * the gain's holding period. Null when no qualifying distribution carries a date.
      *
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      */
@@ -176,9 +179,7 @@ class PartnershipBasisFactsBuilder
         $distributionTypes = [
             PartnershipBasisEventType::CashDistribution->value,
             PartnershipBasisEventType::MarketableSecuritiesDistribution->value,
-            PartnershipBasisEventType::PropertyDistributionBasis->value,
             PartnershipBasisEventType::LiquidationDistributionCash->value,
-            PartnershipBasisEventType::LiquidationDistributionProperty->value,
         ];
 
         $latest = null;

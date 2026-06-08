@@ -757,6 +757,42 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(150_00, $this->basisYearForInterest($interest, 2024)->ending_outside_basis_cents);
     }
 
+    public function test_sale_exchange_proceeds_produce_disposition_gain(): void
+    {
+        $interest = $this->interest('Sale LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->manualEvent($interest, 2024, 'sale_exchange', 150_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        // Proceeds 150 − basis 100 = 50 gain, not a −100 loss from ignoring the sale amount.
+        $this->assertSame(50_00, $basisYear->liquidation_gain_loss_cents);
+        $this->assertSame('needs_review', $basisYear->review_status);
+    }
+
+    public function test_sale_exchange_below_basis_produces_loss(): void
+    {
+        $interest = $this->interest('Sale Loss LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->manualEvent($interest, 2024, 'sale_exchange', 60_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(-40_00, $basisYear->liquidation_gain_loss_cents);
+    }
+
+    public function test_signed_manual_loss_does_not_inflate_tax_basis_capital(): void
+    {
+        $interest = $this->interest('Signed Capital LP');
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 100_00);
+        // A signed (negative) manual loss reduces capital by its magnitude, not increase it.
+        $this->manualEvent($interest, 2024, 'deductible_loss', -100_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(0, $basisYear->ending_tax_basis_capital_cents);
+    }
+
     public function test_recompute_interest_year_range_refreshes_intervening_and_future_years(): void
     {
         $interest = $this->interest('Span LP');

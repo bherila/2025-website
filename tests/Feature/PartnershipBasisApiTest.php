@@ -180,6 +180,38 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertEmpty($facts['partnershipBasis']['form8949Rows']);
     }
 
+    public function test_property_distribution_date_does_not_extend_holding_period_of_cash_gain(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Dating Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Dating LP',
+            'normalized_partnership_name' => 'dating lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2023-12-01',
+        ]);
+
+        // Cash distribution (creates the §731 gain) is dated before the one-year mark; a later
+        // property distribution is dated after it. The gain's holding period must follow the cash
+        // distribution date (short-term), not the later property date.
+        $this->datedEvent($user->id, $interest->id, 2024, 'beginning_basis', 30_00, null);
+        $this->datedEvent($user->id, $interest->id, 2024, 'cash_distribution', 50_00, '2024-11-15');
+        $this->datedEvent($user->id, $interest->id, 2024, 'property_distribution_basis', 10_00, '2024-12-20');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $gain = collect($facts['partnershipBasis']['distributionGainSources'])
+            ->firstWhere('sourceType', 'partnership_excess_distribution_gain');
+        $this->assertNotNull($gain);
+        $this->assertSame(20.0, $gain['amount']);
+        $this->assertSame('schedule_d_line_3', $gain['routing']);
+        $this->assertSame(20.0, $facts['scheduleD']['line3GainLoss']);
+    }
+
     public function test_update_interest_endpoint_sets_holding_period_inputs(): void
     {
         $user = User::factory()->create();
@@ -457,6 +489,20 @@ class PartnershipBasisApiTest extends TestCase
             'amount_cents' => $amountCents,
             'source_type' => 'manual',
             'review_status' => $reviewStatus,
+        ]);
+    }
+
+    private function datedEvent(int $userId, int $interestId, int $year, string $eventType, int $amountCents, ?string $eventDate): void
+    {
+        FinPartnershipBasisEvent::create([
+            'user_id' => $userId,
+            'partnership_interest_id' => $interestId,
+            'tax_year' => $year,
+            'event_date' => $eventDate,
+            'event_type' => $eventType,
+            'amount_cents' => $amountCents,
+            'source_type' => 'manual',
+            'review_status' => 'reviewed',
         ]);
     }
 }
