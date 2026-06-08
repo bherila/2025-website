@@ -25,9 +25,9 @@ import {
   CareerCompFormSection,
   type CareerCompFormSectionId,
   GrantEditorColumn,
-  MAX_HYPOTHETICAL_JOBS,
   type GrantType,
   JobEditorColumn,
+  MAX_HYPOTHETICAL_JOBS,
   notRenderedViaMillerShell,
   OfferNotesColumn,
   ValuationTimelineColumn,
@@ -795,7 +795,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
             >
               <Copy className="size-4" />
             </Button>
-            <Button type="button" variant="ghost" size="sm" aria-label={`Open notes for ${jobForActions.name}`} title={`Open notes for ${jobForActions.name}`} onClick={() => onOpenOfferNotes(jobForActions.id)}>
+            <Button type="button" variant="ghost" size="sm" aria-label={`Open notes for ${jobForActions.name}`} title={`Open notes for ${jobForActions.name}`} onClick={() => openOfferNotes(jobForActions.id)}>
               <FileText className="size-4" />
             </Button>
             <Button type="button" variant="ghost" size="sm" aria-label={`Archive ${jobForActions.name}`} title={`Archive ${jobForActions.name}`} onClick={archiveOffer}>
