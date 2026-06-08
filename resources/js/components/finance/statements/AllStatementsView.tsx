@@ -188,7 +188,14 @@ function formatComparisonValue(value: number | undefined, isPercentage: boolean)
 }
 
 function formatStatementDate(date: string): string {
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const normalizedDate = date.split(/[ T]/)[0] ?? date
+  const [year, month, day] = normalizedDate.split('-').map(Number)
+
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 function buildComparisonFilename(accountId: number): string {
