@@ -343,7 +343,9 @@ function optionGrantFullyDilutedAsOfGrantDate(job: JobSpec, startYear: number, g
   }
 
   const yearsSinceStart = Math.max(0, asOfYear - startYear)
-  const dilutionRate = Math.max(0, job.company.annualDilutionPct) / 100
+  // Dilution only applies to private companies, matching the valuation engine
+  // (CareerCompLtvDetailColumn); public companies carry no modeled dilution.
+  const dilutionRate = job.company.type === 'private' ? Math.max(0, job.company.annualDilutionPct) / 100 : 0
   const dilutedShares = currency(job.company.fullyDilutedShares)
     .multiply((1 - dilutionRate) ** yearsSinceStart)
     .value
@@ -364,7 +366,9 @@ function optionGrantShareCountToPercent(shareCount: number, asOfShareCount: numb
     return 0
   }
 
-  return currency(shareCount).divide(asOfShareCount).multiply(100).value
+  // Higher precision so sub-1% grants (e.g. 4,000 shares of 100M) don't round the
+  // ratio to zero before scaling to a percentage and corrupt the stored share count.
+  return currency(shareCount, { precision: 8 }).divide(asOfShareCount).multiply(100).value
 }
 
 /** Stable, collision-free id for a freshly added or duplicated grant within a job. */

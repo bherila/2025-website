@@ -288,7 +288,8 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
   })
 
   it('lets option shares be entered as a percent of fully diluted shares as of grant date', () => {
-    const baseInputs = makeInputs('public')
+    // Private company so as-of-grant-date dilution applies (public companies are not diluted).
+    const baseInputs = makeInputs('private')
     const baseOffer = baseInputs.hypotheticalJobs[0]!
     const inputs: CareerCompInputs = {
       ...baseInputs,
