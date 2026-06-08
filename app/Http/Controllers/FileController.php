@@ -724,9 +724,10 @@ class FileController extends Controller
         $document = $statement->document_id
             ? FinDocument::whereKey($statement->document_id)
                 ->where('user_id', $userId)
+                ->where('document_kind', FinDocument::KIND_STATEMENT)
                 ->first()
             : null;
-        if ($document instanceof FinDocument && $document->s3_path) {
+        if ($document instanceof FinDocument && $this->isValidStatementDocumentPath($document, (int) $userId)) {
             $filename = $document->original_filename
                 ?? $document->stored_filename
                 ?? basename($document->s3_path);
@@ -748,6 +749,26 @@ class FileController extends Controller
         }
 
         return response()->json(['error' => 'No file found for this statement.'], 404);
+    }
+
+    private function isValidStatementDocumentPath(FinDocument $document, int $userId): bool
+    {
+        if (! is_string($document->s3_path) || $document->s3_path === '') {
+            return false;
+        }
+
+        $expectedPrefix = FinDocument::generateS3Path($userId, '', FinDocument::KIND_STATEMENT);
+        if (! str_starts_with($document->s3_path, $expectedPrefix)) {
+            return false;
+        }
+
+        $storedFilename = basename($document->s3_path);
+        $keySuffix = substr($document->s3_path, strlen($expectedPrefix));
+
+        return $storedFilename !== ''
+            && $storedFilename !== '.'
+            && $storedFilename !== '..'
+            && $keySuffix === $storedFilename;
     }
 
     /**

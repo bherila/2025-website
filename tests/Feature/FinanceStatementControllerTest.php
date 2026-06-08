@@ -443,6 +443,83 @@ class FinanceStatementControllerTest extends TestCase
             ]);
     }
 
+    public function test_view_statement_pdf_does_not_sign_linked_fin_document_with_invalid_statement_path(): void
+    {
+        $user = $this->createUser();
+        $otherUser = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $document = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_STATEMENT,
+            'original_filename' => 'statement.pdf',
+            'stored_filename' => 'statement.pdf',
+            's3_path' => "fin_documents/{$otherUser->id}/statement/statement.pdf",
+            'mime_type' => 'application/pdf',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'document_id' => $document->id,
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock): void {
+            $mock->shouldNotReceive('getSignedViewUrl');
+            $mock->shouldNotReceive('getSignedDownloadUrl');
+        });
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/statements/{$statementId}/pdf");
+
+        $response->assertNotFound();
+    }
+
+    public function test_view_statement_pdf_does_not_sign_linked_non_statement_fin_document(): void
+    {
+        $user = $this->createUser();
+
+        $acctId = DB::table('fin_accounts')->insertGetId([
+            'acct_owner' => $user->id,
+            'acct_name' => 'Savings',
+            'acct_last_balance' => '0',
+        ]);
+
+        $document = FinDocument::create([
+            'user_id' => $user->id,
+            'document_kind' => FinDocument::KIND_CSV_IMPORT,
+            'original_filename' => 'statement.csv',
+            'stored_filename' => 'statement.csv',
+            's3_path' => "fin_documents/{$user->id}/csv_import/statement.csv",
+            'mime_type' => 'text/csv',
+        ]);
+
+        $statementId = DB::table('fin_statements')->insertGetId([
+            'document_id' => $document->id,
+            'acct_id' => $acctId,
+            'balance' => '5000',
+            'statement_closing_date' => '2025-01-31',
+            'cost_basis' => 0,
+            'is_cost_basis_override' => 0,
+        ]);
+
+        $this->mock(FileStorageService::class, function ($mock): void {
+            $mock->shouldNotReceive('getSignedViewUrl');
+            $mock->shouldNotReceive('getSignedDownloadUrl');
+        });
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$acctId}/statements/{$statementId}/pdf");
+
+        $response->assertNotFound();
+    }
+
     public function test_view_statement_pdf_does_not_resolve_linked_fin_document_for_another_user(): void
     {
         $user = $this->createUser();

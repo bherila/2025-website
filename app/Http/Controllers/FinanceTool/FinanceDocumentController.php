@@ -375,9 +375,9 @@ class FinanceDocumentController extends Controller
 
     private function storeStatement(Request $request): JsonResponse
     {
-        $request->validate($this->statementValidationRules());
+        $validated = $this->validatedStatementPayload($request);
 
-        $result = $this->documentIngestionService->ingestStatementDocument((int) Auth::id(), $request->all());
+        $result = $this->documentIngestionService->ingestStatementDocument((int) Auth::id(), $validated);
 
         $this->markGenAiResultImported($request, (int) Auth::id());
 
@@ -390,9 +390,9 @@ class FinanceDocumentController extends Controller
 
     private function storeCsv(Request $request): JsonResponse
     {
-        $request->validate($this->statementValidationRules());
+        $validated = $this->validatedStatementPayload($request);
 
-        $result = $this->documentIngestionService->ingestCsvDocument((int) Auth::id(), $request->all());
+        $result = $this->documentIngestionService->ingestCsvDocument((int) Auth::id(), $validated);
 
         $this->markGenAiResultImported($request, (int) Auth::id());
 
@@ -401,6 +401,27 @@ class FinanceDocumentController extends Controller
             'document' => $result['document'],
             'accounts' => $result['accounts'],
         ], 201);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validatedStatementPayload(Request $request): array
+    {
+        $validated = $request->validate($this->statementValidationRules());
+        $s3Key = $validated['s3_key'] ?? null;
+
+        if (is_string($s3Key) && $s3Key !== '') {
+            $validatedS3 = $this->validateS3Key(
+                $s3Key,
+                (int) Auth::id(),
+                (string) $validated['document_kind'],
+            );
+            $validated['s3_key'] = $validatedS3['s3_key'];
+            $validated['stored_filename'] = $validatedS3['stored_filename'];
+        }
+
+        return $validated;
     }
 
     /**
