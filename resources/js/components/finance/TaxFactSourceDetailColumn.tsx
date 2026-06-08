@@ -4,7 +4,7 @@ import currency from 'currency.js'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { Schedule1Facts, ScheduleAFacts, ScheduleDFacts, TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
+import type { Form1040Facts, Schedule1Facts, ScheduleAFacts, ScheduleDFacts, TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import { fmtAmt, NavGlyphIcon } from './tax-preview-primitives'
 
@@ -36,8 +36,8 @@ export interface TaxFactSourceDetailPayload {
   positiveAmountTone: AmountTone
 }
 
-function signed(title: string, sources: TaxFactSource[], total: number): TaxFactSourceDetailPayload {
-  return { title, sources, total, amountMode: 'signed', positiveAmountTone: 'success' }
+function signed(title: string, sources: TaxFactSource[], total: number, description?: string): TaxFactSourceDetailPayload {
+  return { title, ...(description ? { description } : {}), sources, total, amountMode: 'signed', positiveAmountTone: 'success' }
 }
 
 function splitKey(key: string): [form: string, line: string] {
@@ -124,13 +124,79 @@ function scheduleDDetail(f: ScheduleDFacts, line: string): TaxFactSourceDetailPa
   }
 }
 
+function form1040LineDetail(
+  lineNumber: string,
+  label: string,
+  sources: TaxFactSource[],
+  total: number,
+): TaxFactSourceDetailPayload {
+  return signed(`Form 1040 Line ${lineNumber} Supporting Details`, sources, total, label)
+}
+
+function form1040Detail(f: Form1040Facts, line: string): TaxFactSourceDetailPayload | null {
+  switch (line) {
+    case 'line-1z':
+      return form1040LineDetail('1z', 'Wages, salaries, tips', f.line1zSources, f.line1z)
+    case 'line-2a':
+      return form1040LineDetail('2a', 'Tax-exempt interest', f.line2aSources, f.line2a)
+    case 'line-2b':
+      return form1040LineDetail('2b', 'Taxable interest', f.line2bSources, f.line2b)
+    case 'line-3a':
+      return form1040LineDetail('3a', 'Qualified dividends', f.line3aSources, f.line3a)
+    case 'line-3b':
+      return form1040LineDetail('3b', 'Ordinary dividends', f.line3bSources, f.line3b)
+    case 'line-4a':
+      return form1040LineDetail('4a', 'IRA distributions', f.line4aSources, f.line4a)
+    case 'line-4b':
+      return form1040LineDetail('4b', 'Taxable IRA distributions', f.line4bSources, f.line4b)
+    case 'line-5a':
+      return form1040LineDetail('5a', 'Pensions and annuities', f.line5aSources, f.line5a)
+    case 'line-5b':
+      return form1040LineDetail('5b', 'Taxable pensions and annuities', f.line5bSources, f.line5b)
+    case 'line-6a':
+      return form1040LineDetail('6a', 'Social security benefits', f.line6aSources, f.line6a)
+    case 'line-6b':
+      return form1040LineDetail('6b', 'Taxable social security benefits', f.line6bSources, f.line6b)
+    case 'line-7':
+      return form1040LineDetail('7', 'Capital gain or loss', f.line7Sources, f.line7)
+    case 'line-8':
+      return form1040LineDetail('8', 'Additional income from Schedule 1', f.line8Sources, f.line8)
+    case 'line-10':
+      return form1040LineDetail('10', 'Adjustments to income', f.line10Sources, f.line10)
+    case 'line-12':
+      return form1040LineDetail('12', 'Standard deduction or itemized deductions', f.line12Sources, f.line12)
+    case 'line-13':
+      return form1040LineDetail('13', 'Qualified business income deduction', f.line13Sources, f.line13)
+    case 'line-16':
+      return form1040LineDetail('16', 'Tax', f.line16Sources, f.line16)
+    case 'line-17':
+      return form1040LineDetail('17', 'Amount from Schedule 2, line 3', f.line17Sources, f.line17)
+    case 'line-20':
+      return form1040LineDetail('20', 'Nonrefundable credits from Schedule 3', f.line20Sources, f.line20)
+    case 'line-23':
+      return form1040LineDetail('23', 'Other taxes', f.line23Sources, f.line23)
+    case 'line-25a':
+      return form1040LineDetail('25a', 'Federal income tax withheld from W-2', f.line25aSources, f.line25a)
+    case 'line-25b':
+      return form1040LineDetail('25b', 'Federal income tax withheld from 1099', f.line25bSources, f.line25b)
+    case 'line-25c':
+      return form1040LineDetail('25c', 'Federal income tax withheld from other forms', f.line25cSources, f.line25c)
+    case 'line-26':
+      return form1040LineDetail('26', 'Estimated tax payments', f.line26Sources, f.line26)
+    case 'line-31':
+      return form1040LineDetail('31', 'Other payments and refundable credits from Schedule 3', f.line31Sources, f.line31)
+    default:
+      return null
+  }
+}
+
 /**
  * Resolves the source-detail payload behind a tax-preview form line from a stable
  * `<form>:<line>` instance key (e.g. `sch-a:line-8`).
  *
  * This is the keyed derivation that consolidates what used to be built inline as
- * per-form `setActiveSources` modal state across Schedule 1, Schedule A, and
- * Schedule D. The returned payload drives {@link TaxFactSourceDetailColumn},
+ * per-form `setActiveSources` modal state across Form 1040, Schedule 1,
+ * Schedule A, and Schedule D. The returned payload drives {@link TaxFactSourceDetailColumn},
  * which opens as a Miller column. Returns `null` when the key is unknown (a stale
  * route after the facts changed) or when its facts slice is missing.
  */
@@ -143,6 +209,8 @@ export function taxFactSourceDetailColumn(
   }
   const [form, line] = splitKey(key)
   switch (form) {
+    case 'form-1040':
+      return facts.form1040 ? form1040Detail(facts.form1040, line) : null
     case 'sch-1':
       return schedule1Detail(facts.schedule1, line)
     case 'sch-a':
@@ -166,6 +234,18 @@ function toneClass(amount: number, tone: AmountTone): string {
     return 'text-destructive'
   }
   return tone === 'destructive' ? 'text-destructive' : 'text-success'
+}
+
+function sourceDetailNote(source: TaxFactSource): string | null {
+  if (source.notes) {
+    return source.notes
+  }
+
+  if (source.formType && source.box) {
+    return `${source.formType} box ${source.box}`
+  }
+
+  return source.routingReason
 }
 
 function goToLabel(source: TaxFactSource): string {
@@ -214,6 +294,7 @@ export default function TaxFactSourceDetailColumn({
         <div className="space-y-3">
           {sources.map((source, index) => {
             const isReviewed = source.isReviewed !== false
+            const detailNote = sourceDetailNote(source)
 
             return (
               <div
@@ -224,7 +305,7 @@ export default function TaxFactSourceDetailColumn({
                   <div className="min-w-0 space-y-1">
                     <div className="text-sm font-medium leading-snug">{source.label}</div>
                     {!isReviewed && <div className="text-xs font-medium text-warning">Estimated — review required</div>}
-                    {source.notes && <div className="text-xs leading-snug text-muted-foreground">{source.notes}</div>}
+                    {detailNote && <div className="text-xs leading-snug text-muted-foreground">{detailNote}</div>}
                     {!isReviewed && source.reviewAction && (
                       <div className="text-xs leading-snug text-warning">{source.reviewAction}</div>
                     )}
