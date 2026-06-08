@@ -289,13 +289,14 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
   it('lets option shares be entered as a percent of fully diluted shares as of grant date', () => {
     const baseInputs = makeInputs('public')
-    const inputs = {
+    const baseOffer = baseInputs.hypotheticalJobs[0]!
+    const inputs: CareerCompInputs = {
       ...baseInputs,
       startYear: 2026,
       hypotheticalJobs: [{
-        ...baseInputs.hypotheticalJobs[0],
+        ...baseOffer,
         company: {
-          ...baseInputs.hypotheticalJobs[0].company,
+          ...baseOffer.company,
           fullyDilutedShares: 1000,
           annualDilutionPct: 10,
         },
