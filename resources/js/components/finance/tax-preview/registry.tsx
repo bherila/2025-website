@@ -11,6 +11,7 @@ import Form4797Preview from '@/components/finance/Form4797Preview'
 import Form4952DetailColumn, { focusFieldIdFor } from '@/components/finance/Form4952DetailColumn'
 import Form4952Preview from '@/components/finance/Form4952Preview'
 import Form6251Preview from '@/components/finance/Form6251Preview'
+import Form6781Preview from '@/components/finance/Form6781Preview'
 import Form8582Preview from '@/components/finance/Form8582Preview'
 import Form8606Preview from '@/components/finance/Form8606Preview'
 import Form8949Preview from '@/components/finance/Form8949Preview'
@@ -129,7 +130,19 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
       onOpenDoc={openTaxDocumentDetail}
       onOpenDetail={(instance) => onDrill({ id: 'tax-source-detail', instance })}
       onGoToForm1040={() => onDrill({ id: 'form-1040', placement: 'left-of-current' })}
+      onGoToForm6781={() => onDrill({ id: 'form-6781' })}
       onCarryoverSaved={() => state.refreshAll({ includeTaxFacts: true })}
+    />
+  )
+}
+
+function Form6781Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  const { openTaxDocumentDetail } = useDockActions()
+  return (
+    <Form6781Preview
+      form6781Facts={state.taxFacts?.form6781 ?? null}
+      onOpenDoc={openTaxDocumentDetail}
+      onGoToScheduleD={() => onDrill({ id: 'sch-d' })}
     />
   )
 }
@@ -779,6 +792,7 @@ const rawFormRegistry: FormRegistry = {
     category: 'Schedule',
     presentation: 'column',
     component: ScheduleDAdapter,
+    relatedForms: ['form-6781'],
     keyAmounts: (state) => {
       const sD = state.taxFacts?.scheduleD
       if (!sD) {
@@ -866,6 +880,28 @@ const rawFormRegistry: FormRegistry = {
     relatedForms: ['form-4952'],
     size: 'wide',
     drillOnly: true,
+  },
+  'form-6781': {
+    id: 'form-6781',
+    label: 'Form 6781 — Section 1256 Contracts & Straddles',
+    shortLabel: '6781',
+    formNumber: '6781',
+    keywords: ['6781', 'section 1256', 'straddles', 'contracts', 'mark to market'],
+    category: 'Form',
+    presentation: 'column',
+    component: Form6781Adapter,
+    relatedForms: ['sch-d'],
+    keyAmounts: (state) => {
+      const f = state.taxFacts?.form6781
+      if (!f || (f.shortTermSources.length === 0 && f.longTermSources.length === 0)) {
+        return null
+      }
+      return [{ label: 'Net gain', value: f.netGain }]
+    },
+    hasData: (state) => {
+      const f = state.taxFacts?.form6781
+      return f != null && (f.shortTermSources.length > 0 || f.longTermSources.length > 0)
+    },
   },
   'tax-source-detail': {
     id: 'tax-source-detail',

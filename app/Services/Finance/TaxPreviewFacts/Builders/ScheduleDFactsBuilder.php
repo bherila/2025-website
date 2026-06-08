@@ -8,6 +8,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\Finance\CapitalGains\ScheduleDRollupInput;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4797Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\Form6781Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleDRollupFact;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
@@ -25,6 +26,7 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         array $k1Docs,
         array $docs1099,
         array $rollups,
+        Form6781Facts $form6781,
         ?Form4797Facts $form4797 = null,
         ?ScheduleDCarryoverInput $carryoverInput = null,
     ): ScheduleDFacts {
@@ -40,12 +42,11 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
             $lineBuckets[$rollup->scheduleDLine]['gainLoss'] = $this->sumMoney([$lineBuckets[$rollup->scheduleDLine]['gainLoss'], $rollup->netGainOrLoss]);
         }
 
-        $section1256Sources = $this->scheduleDSection1256Sources($k1Docs);
         $line3Sources = [];
-        $line4Sources = $section1256Sources['shortTerm'];
+        $line4Sources = $form6781->shortTermSources;
         $line10Sources = [];
         $line11Sources = [
-            ...$section1256Sources['longTerm'],
+            ...$form6781->longTermSources,
             ...($form4797 instanceof Form4797Facts ? $form4797->scheduleDSources : []),
         ];
         $line5Sources = $this->scheduleDLine5Sources($k1Docs);
@@ -123,69 +124,6 @@ class ScheduleDFactsBuilder extends TaxPreviewFactBuilder
         $amount = $lossCarryover ?? 0.0;
 
         return $amount > 0.0 ? -$this->roundMoney($amount) : 0.0;
-    }
-
-    /**
-     * @param  FileForTaxDocument[]  $k1Docs
-     * @return array{shortTerm:TaxFactSource[],longTerm:TaxFactSource[]}
-     */
-    private function scheduleDSection1256Sources(array $k1Docs): array
-    {
-        $shortTerm = [];
-        $longTerm = [];
-
-        foreach ($k1Docs as $doc) {
-            $data = $this->k1Data($doc);
-            if ($data === null) {
-                continue;
-            }
-
-            $partnerName = $this->k1PartnerName($doc, $data);
-            foreach ($this->k1CodeItems($data, '11', 'C') as $index => $item) {
-                $amount = $this->parseMoney($item['value'] ?? null) ?? 0.0;
-                if ($amount === 0.0) {
-                    continue;
-                }
-
-                $allocation = MoneyMath::allocateRatio($amount, 40, 100);
-                $shortTermAmount = $allocation['allocated'];
-                $longTermAmount = $allocation['remainder'];
-                $shortTerm[] = new TaxFactSource(
-                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line4",
-                    label: "{$partnerName} — K-1 Box 11C Form 6781 40% S/T allocation",
-                    amount: $shortTermAmount,
-                    sourceType: TaxFactSourceType::K1Section1256ShortTerm,
-                    taxDocumentId: $doc->id,
-                    formType: 'k1',
-                    box: '11',
-                    code: 'C',
-                    routing: TaxFactRouting::ScheduleDLine4,
-                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781; the short-term portion flows to Schedule D line 4.',
-                    notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
-                    isReviewed: $this->sourceIsReviewed($doc),
-                    reviewStatus: $this->reviewStatus($doc),
-                    reviewAction: $this->reviewAction($doc),
-                );
-                $longTerm[] = new TaxFactSource(
-                    id: "k1-{$doc->id}-11C-{$index}-schedule-d-line11",
-                    label: "{$partnerName} — K-1 Box 11C Form 6781 60% L/T allocation",
-                    amount: $longTermAmount,
-                    sourceType: TaxFactSourceType::K1Section1256LongTerm,
-                    taxDocumentId: $doc->id,
-                    formType: 'k1',
-                    box: '11',
-                    code: 'C',
-                    routing: TaxFactRouting::ScheduleDLine11,
-                    routingReason: 'Section 1256 contracts are split 40% short-term and 60% long-term through Form 6781; the long-term portion flows to Schedule D line 11.',
-                    notes: is_string($item['notes'] ?? null) ? $item['notes'] : null,
-                    isReviewed: $this->sourceIsReviewed($doc),
-                    reviewStatus: $this->reviewStatus($doc),
-                    reviewAction: $this->reviewAction($doc),
-                );
-            }
-        }
-
-        return ['shortTerm' => $shortTerm, 'longTerm' => $longTerm];
     }
 
     /**

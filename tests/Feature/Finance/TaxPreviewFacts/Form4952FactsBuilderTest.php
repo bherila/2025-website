@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance\TaxPreviewFacts;
 use App\Models\Files\FileForTaxDocument;
 use App\Services\Finance\DocumentIngestionService;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form4952FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\Form6781FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleBFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleDFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Data\Form4952Facts;
@@ -372,7 +373,12 @@ class Form4952FactsBuilderTest extends TestCase
      */
     private function buildScheduleD(array $k1Docs): ScheduleDFacts
     {
-        return app(ScheduleDFactsBuilder::class)->build($k1Docs, [], []);
+        return app(ScheduleDFactsBuilder::class)->build(
+            $k1Docs,
+            [],
+            [],
+            app(Form6781FactsBuilder::class)->build($k1Docs),
+        );
     }
 
     /**

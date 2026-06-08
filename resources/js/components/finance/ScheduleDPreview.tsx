@@ -1,7 +1,7 @@
 'use client'
 
 import currency from 'currency.js'
-import { ChevronLeft, Loader2, Save } from 'lucide-react'
+import { ArrowRight, ChevronLeft, Loader2, Save } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 
@@ -23,6 +23,7 @@ interface ScheduleDPreviewProps {
   /** Push a `tax-source-detail` Miller column for a `<form>:<line>` instance key. */
   onOpenDetail?: (instanceKey: string) => void
   onGoToForm1040?: () => void
+  onGoToForm6781?: () => void
   onCarryoverSaved?: (() => Promise<void> | void) | undefined
 }
 
@@ -113,6 +114,14 @@ function RollupLine({ rollup }: { rollup: ScheduleDRollupFact }) {
   )
 }
 
+function isSection1256ShortTermSource(source: TaxFactSource): boolean {
+  return source.sourceType === 'k1_section_1256_short_term'
+}
+
+function isSection1256LongTermSource(source: TaxFactSource): boolean {
+  return source.sourceType === 'k1_section_1256_long_term'
+}
+
 function carryoverNoticeFor({
   taxYear,
   availableYears,
@@ -158,6 +167,7 @@ export default function ScheduleDPreview({
   onOpenDoc,
   onOpenDetail,
   onGoToForm1040,
+  onGoToForm6781,
   onCarryoverSaved,
 }: ScheduleDPreviewProps) {
   const taxYear = selectedYear ?? new Date().getFullYear()
@@ -257,8 +267,10 @@ export default function ScheduleDPreview({
   const longTermRollups = taxFacts.form8949Rollups.filter((rollup) => !rollup.isShortTerm)
   const hasBrokerData = taxFacts.form8949Rollups.length > 0
   const has11sAmbiguous = taxFacts.ambiguous11SSources.length > 0
-  const section1256ShortTermTotal = taxFacts.line4Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
-  const section1256LongTermTotal = taxFacts.line11Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
+  const form6781Line4Sources = taxFacts.line4Sources.filter(isSection1256ShortTermSource)
+  const form6781Line11Sources = taxFacts.line11Sources.filter(isSection1256LongTermSource)
+  const form6781Line4Total = form6781Line4Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
+  const form6781Line11Total = form6781Line11Sources.reduce((acc, source) => acc.add(source.amount), currency(0)).value
 
   return (
     <div className="space-y-5">
@@ -268,27 +280,6 @@ export default function ScheduleDPreview({
           Capital gains, losses, and Section 1256 contract analysis.
         </p>
       </div>
-
-      {(taxFacts.line4Sources.length > 0 || taxFacts.line11Sources.length > 0) && (
-        <>
-          <FormBlock title="Form 6781 — Section 1256 Contracts &amp; Straddles">
-            {taxFacts.line4Sources.map((source) => (
-              <SourceLine key={source.id} source={source} boxRef="4" {...(onOpenDoc ? { onOpenDoc } : {})} />
-            ))}
-            {taxFacts.line11Sources.map((source) => (
-              <SourceLine key={source.id} source={source} boxRef="11" {...(onOpenDoc ? { onOpenDoc } : {})} />
-            ))}
-            <FormTotalLine label="Total Sec. 1256 short-term allocation" value={section1256ShortTermTotal} />
-            <FormTotalLine label="Total Sec. 1256 long-term allocation" value={section1256LongTermTotal} />
-          </FormBlock>
-          <Callout kind="info" title="ℹ Section 1256 Contracts">
-            <p>
-              Section 1256 contracts are marked to market at year-end. 60% of the gain/loss is treated as long-term
-              regardless of holding period. The backend facts route the 40%/60% split to Schedule D lines 4 and 11.
-            </p>
-          </Callout>
-        </>
-      )}
 
       {has11sAmbiguous && (
         <Callout kind="warn" title="⚠ Box 11S — Confirm S/T vs. L/T character">
@@ -425,6 +416,32 @@ export default function ScheduleDPreview({
           {taxFacts.line4Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="4" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}
+          {form6781Line4Sources.length > 0 && (
+            <FormTotalLine
+              boxRef="4"
+              label={(
+                <span className="flex flex-wrap items-center gap-2">
+                  <span>Line 4 total — Form 6781 short-term allocation</span>
+                  {onGoToForm6781 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1.5 px-2 text-[11px]"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onGoToForm6781()
+                      }}
+                    >
+                      View Form 6781
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                  )}
+                </span>
+              )}
+              value={form6781Line4Total}
+            />
+          )}
           {taxFacts.line5Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="5" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}
@@ -465,6 +482,32 @@ export default function ScheduleDPreview({
           {taxFacts.line11Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="11" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}
+          {form6781Line11Sources.length > 0 && (
+            <FormTotalLine
+              boxRef="11"
+              label={(
+                <span className="flex flex-wrap items-center gap-2">
+                  <span>Line 11 total — Form 6781 long-term allocation</span>
+                  {onGoToForm6781 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1.5 px-2 text-[11px]"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onGoToForm6781()
+                      }}
+                    >
+                      View Form 6781
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                  )}
+                </span>
+              )}
+              value={form6781Line11Total}
+            />
+          )}
           {taxFacts.line12Sources.map((source) => (
             <SourceLine key={source.id} source={source} boxRef="12" {...(onOpenDoc ? { onOpenDoc } : {})} />
           ))}

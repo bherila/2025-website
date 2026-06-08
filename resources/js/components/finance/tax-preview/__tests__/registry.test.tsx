@@ -96,4 +96,45 @@ describe('formRegistry', () => {
       expect(entry.keyAmounts!(state)).toBeNull()
     })
   })
+
+  describe('form-6781', () => {
+    const entry = formRegistry['form-6781']!
+
+    it('is related to Schedule D and Schedule D links back to it', () => {
+      expect(entry.relatedForms).toEqual(['sch-d'])
+      expect(formRegistry['sch-d']!.relatedForms).toContain('form-6781')
+    })
+
+    it('has command-palette keywords for Section 1256 and straddles', () => {
+      expect(entry.keywords).toEqual(expect.arrayContaining(['6781', 'section 1256', 'straddles', 'contracts', 'mark to market']))
+    })
+
+    it('keyAmounts returns net gain only when Form 6781 has sources', () => {
+      const state = {
+        taxFacts: {
+          form6781: {
+            shortTermSources: [{ id: 'short' }],
+            longTermSources: [],
+            netGain: 32_545,
+          },
+        },
+      } as unknown as TaxPreviewState
+
+      expect(entry.keyAmounts!(state)).toEqual([{ label: 'Net gain', value: 32_545 }])
+    })
+
+    it('keyAmounts returns null when Form 6781 has no sources', () => {
+      const state = {
+        taxFacts: {
+          form6781: {
+            shortTermSources: [],
+            longTermSources: [],
+            netGain: 0,
+          },
+        },
+      } as unknown as TaxPreviewState
+
+      expect(entry.keyAmounts!(state)).toBeNull()
+    })
+  })
 })

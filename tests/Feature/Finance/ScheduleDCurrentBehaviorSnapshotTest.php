@@ -8,6 +8,7 @@ use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinLotReconciliationLink;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use App\Services\Finance\DocumentIngestionService;
+use App\Services\Finance\TaxPreviewFactsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -30,6 +31,40 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
         foreach ($snapshots as $name => $payload) {
             $this->assertMatchesScheduleDSnapshot($name, $payload);
         }
+    }
+
+    public function test_schedule_d_section_1256_values_remain_unchanged_after_form_6781_extraction(): void
+    {
+        $user = $this->createUser();
+        $this->makeK1TaxDocument((int) $user->id, $this->k1Data(
+            fields: ['B' => 'Section 1256 Fund'],
+            codes: [
+                '11' => [
+                    ['code' => 'C', 'value' => '32545', 'notes' => 'Section 1256 contracts'],
+                ],
+            ],
+        ));
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear((int) $user->id, 2025);
+
+        $this->assertSame(13018.0, $facts['form6781']['shortTermTotal']);
+        $this->assertSame(19527.0, $facts['form6781']['longTermTotal']);
+        $this->assertSame(32545.0, $facts['form6781']['netGain']);
+        $this->assertSame(13018.0, $facts['scheduleD']['line4GainLoss']);
+        $this->assertSame(19527.0, $facts['scheduleD']['line11GainLoss']);
+        $this->assertSame(13018.0, $facts['scheduleD']['line7NetShortTerm']);
+        $this->assertSame(19527.0, $facts['scheduleD']['line15NetLongTerm']);
+        $this->assertSame(32545.0, $facts['scheduleD']['line16Combined']);
+        $this->assertSame(32545.0, $facts['scheduleD']['line21LimitedLossOrGain']);
+        $this->assertSame(32545.0, $facts['form1040']['line7']);
+        $this->assertSame(
+            $facts['form6781']['shortTermSources'][0]['id'],
+            $facts['scheduleD']['line4Sources'][0]['id'],
+        );
+        $this->assertSame(
+            $facts['form6781']['longTermSources'][0]['id'],
+            $facts['scheduleD']['line11Sources'][0]['id'],
+        );
     }
 
     /**
@@ -221,6 +256,43 @@ class ScheduleDCurrentBehaviorSnapshotTest extends TestCase
             'is_reviewed' => true,
             'parsed_data' => [],
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $parsedData
+     */
+    private function makeK1TaxDocument(int $userId, array $parsedData): FileForTaxDocument
+    {
+        return app(DocumentIngestionService::class)->createTaxFormDetail([
+            'user_id' => $userId,
+            'tax_year' => 2025,
+            'form_type' => 'k1',
+            'original_filename' => 'k1.pdf',
+            'stored_filename' => 'k1.pdf',
+            's3_path' => '',
+            'mime_type' => 'application/pdf',
+            'file_size_bytes' => 0,
+            'file_hash' => hash('sha256', fake()->uuid()),
+            'uploaded_by_user_id' => $userId,
+            'is_reviewed' => true,
+            'parsed_data' => $parsedData,
+        ]);
+    }
+
+    /**
+     * @param  array<int|string, string>  $fields
+     * @param  array<int|string, array<int, array<string, string>>>  $codes
+     * @return array<string, mixed>
+     */
+    private function k1Data(array $fields = [], array $codes = []): array
+    {
+        return [
+            'schemaVersion' => '2026.1',
+            'formType' => 'K-1-1065',
+            'fields' => collect($fields)->map(fn (string $value): array => ['value' => $value])->all(),
+            'codes' => $codes,
+            'warnings' => [],
+        ];
     }
 
     /**
