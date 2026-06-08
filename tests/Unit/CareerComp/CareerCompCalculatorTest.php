@@ -171,6 +171,38 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame([2028 => 1600.0, 2029 => 1200.0, 2030 => 1200.0, 2031 => 800.0], $this->sharesByYear($result['rows']));
     }
 
+    public function test_early_exercise_preserves_service_vesting_for_economic_shares(): void
+    {
+        $job = JobSpec::nullableFromArray([
+            'id' => 'early-options-job',
+            'name' => 'Early options job',
+            'optionGrants' => [[
+                'id' => 'nso-early',
+                'kind' => 'hire',
+                'type' => 'nso',
+                'grantDate' => '2026-01-01',
+                'shareCount' => 1000,
+                'strike' => 10,
+                'cliffMonths' => 12,
+                'vestingYears' => 4,
+                'vestingFrequency' => 'monthly',
+                'earlyExercise83b' => true,
+            ]],
+        ], false);
+
+        $result = (new OptionsVestingService)->expand($job, 2026, 3);
+        $rowsByYear = [];
+        foreach ($result['rows'] as $row) {
+            $rowsByYear[$row['year']] = $row;
+        }
+
+        $this->assertSame(0.0, $rowsByYear[2026]['vestedShares']);
+        $this->assertSame(1000.0, $rowsByYear[2026]['exercisableShares']);
+        $this->assertSame(479.1667, $rowsByYear[2027]['vestedShares']);
+        $this->assertSame(0.0, $rowsByYear[2027]['exercisableShares']);
+        $this->assertSame(250.0, $rowsByYear[2028]['vestedShares']);
+    }
+
     public function test_option_vesting_supports_weighted_tranche_schedule(): void
     {
         $job = JobSpec::nullableFromArray([
@@ -835,9 +867,9 @@ class CareerCompCalculatorTest extends TestCase
 
         $point = $projection['jobs'][0]['paperEquity']['scenarios'][0]['points'][2];
 
-        $this->assertSame(0.15, $point['dilutedOwnershipPct']);
-        $this->assertSame(150000.0, $point['grossOwnershipValue']);
-        $this->assertSame(150000.0, $point['netPaperValue']);
+        $this->assertSame(0.141668, $point['dilutedOwnershipPct']);
+        $this->assertSame(141668.0, $point['grossOwnershipValue']);
+        $this->assertSame(141668.0, $point['netPaperValue']);
     }
 
     public function test_private_paper_equity_includes_pre_horizon_owned_shares(): void
@@ -1004,7 +1036,7 @@ class CareerCompCalculatorTest extends TestCase
             'Private duplicate outcome job: multiple medium private valuation scenarios; paper lifetime totals use the highest scenario for that outcome.',
             $projection['warnings'],
         );
-        $this->assertSame(200000.0, $projection['jobs'][0]['lifetime']['totalPaperEquityValue']['medium']);
+        $this->assertSame(183334.0, $projection['jobs'][0]['lifetime']['totalPaperEquityValue']['medium']);
     }
 
     public function test_private_option_paper_equity_subtracts_exercise_cost_and_exposes_common_intrinsic_value(): void
@@ -1059,6 +1091,58 @@ class CareerCompCalculatorTest extends TestCase
         $this->assertSame(15000.0, $point['commonIntrinsicValue']);
         $this->assertSame(5000.0, $point['exerciseCost']);
         $this->assertSame(95000.0, $point['netPaperValue']);
+    }
+
+    public function test_private_liquidity_event_freezes_before_delayed_early_exercise_vesting(): void
+    {
+        $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray([
+            'startYear' => 2026,
+            'horizonYears' => 4,
+            'currentJob' => null,
+            'hypotheticalJobs' => [[
+                'id' => 'private-fail-before-vesting',
+                'name' => 'Private fail before vesting',
+                'company' => [
+                    'type' => 'private',
+                    'fullyDilutedShares' => 1000000,
+                    'valuationScenarios' => [[
+                        'id' => 'fail',
+                        'label' => 'Fail',
+                        'outcome' => 'low',
+                        'stages' => [
+                            ['year' => 2026, 'stage' => 'A', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 10, 'liquidityEvent' => false],
+                            ['year' => 2027, 'stage' => 'Exit', 'preferredPostMoneyValuation' => 100000000, 'capitalDilutionPct' => 0, 'employeePoolDilutionPct' => 0, 'commonFmv' => 100, 'liquidityEvent' => true],
+                        ],
+                    ]],
+                ],
+                'comp' => ['baseSalary' => 0, 'cashBonus' => 0],
+                'rsuGrants' => [],
+                'optionGrants' => [[
+                    'id' => 'delayed-early-option',
+                    'kind' => 'hire',
+                    'type' => 'nso',
+                    'grantDate' => '2026-01-01',
+                    'vestingStartDate' => '2027-01-01',
+                    'shareCount' => 1000,
+                    'strike' => 10,
+                    'cliffMonths' => 12,
+                    'vestingYears' => 4,
+                    'vestingFrequency' => 'monthly',
+                    'earlyExercise83b' => true,
+                ]],
+                'growthBands' => ['lowPct' => 0, 'mediumPct' => 0, 'highPct' => 0],
+            ]],
+        ]))->toArray();
+
+        $job = $projection['jobs'][0];
+        $points = $job['paperEquity']['scenarios'][0]['points'];
+
+        $this->assertSame(10000.0, $job['annual'][0]['exerciseOutlay']);
+        $this->assertSame(0.0, $job['liquidity']['low'][1]['cumulativeValue']);
+        $this->assertSame(0.0, $job['liquidity']['low'][2]['cumulativeValue']);
+        $this->assertSame(0.0, $points[1]['grossOwnershipValue']);
+        $this->assertSame(0.0, $points[2]['grossOwnershipValue']);
+        $this->assertSame(0.0, $job['lifetime']['totalEquityValue']['low']);
     }
 
     public function test_iso_limit_warning_accounts_for_fractional_shares(): void
@@ -1118,9 +1202,9 @@ class CareerCompCalculatorTest extends TestCase
         $projection = (new CareerCompCalculator)->project(CareerCompInputs::fromArray($inputs))->toArray();
         $annual = $projection['jobs'][0]['annual'][0];
 
-        $this->assertSame(0.4, $annual['vestedLiquidEquity']);
+        $this->assertSame(0.37, $annual['vestedLiquidEquity']);
         $this->assertSame(0.16, $annual['exerciseOutlay']);
-        $this->assertSame(0.24, $annual['freeCashFlow']);
+        $this->assertSame(0.21, $annual['freeCashFlow']);
     }
 
     public function test_private_share_price_rounding_is_stable_at_half_cent_boundaries(): void

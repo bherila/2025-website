@@ -12,42 +12,30 @@ final class OptionsVestingService
      */
     public function expand(JobSpec $job, int $startYear, int $horizonYears): array
     {
-        $rawRows = [];
+        $exerciseEvents = [];
 
         foreach ($job->optionGrants() as $grant) {
-            foreach ($this->sharesByYear($grant) as $year => $shares) {
-                if ($year < $startYear || $year >= $startYear + $horizonYears) {
-                    continue;
-                }
-
-                $rawRows[] = [
-                    'grantId' => (string) ($grant['id'] ?? 'option'),
-                    'requestedType' => (string) ($grant['type'] ?? 'nso') === 'iso' ? 'iso' : 'nso',
-                    'year' => $year,
-                    'shares' => round($shares, 4),
-                    'strike' => is_numeric($grant['strike'] ?? null) ? (float) $grant['strike'] : 0.0,
-                    'grantDate' => (string) ($grant['grantDate'] ?? ''),
-                    'source' => is_string($grant['source'] ?? null) ? $grant['source'] : null,
-                ];
+            foreach ($this->exerciseEventsForGrant($grant) as $event) {
+                $exerciseEvents[] = $event;
             }
         }
 
-        usort($rawRows, fn (array $left, array $right): int => [$left['year'], $left['grantDate'], $left['grantId']] <=> [$right['year'], $right['grantDate'], $right['grantId']]);
+        usort($exerciseEvents, fn (array $left, array $right): int => [$left['year'], $left['grantDate'], $left['grantId']] <=> [$right['year'], $right['grantDate'], $right['grantId']]);
 
         $usedIsoValueByYear = [];
-        $rows = [];
+        $rowsByKey = [];
         $warnings = [];
 
-        foreach ($rawRows as $rawRow) {
-            if ($rawRow['requestedType'] !== 'iso') {
-                $rows[] = $this->row($rawRow, 'nso', $rawRow['shares']);
+        foreach ($exerciseEvents as $event) {
+            if ($event['requestedType'] !== 'iso') {
+                $this->appendRowsForSlice($rowsByKey, $event, 'nso', $event['shares']);
 
                 continue;
             }
 
-            $year = (int) $rawRow['year'];
-            $strike = (float) $rawRow['strike'];
-            $shares = (float) $rawRow['shares'];
+            $year = (int) $event['year'];
+            $strike = (float) $event['strike'];
+            $shares = (float) $event['shares'];
             $alreadyUsed = $usedIsoValueByYear[$year] ?? 0.0;
             $remainingIsoValue = max(0.0, MoneyMath::subtract(100000.0, $alreadyUsed));
             $requestedValue = MoneyMath::multiply($strike, $shares);
@@ -56,15 +44,24 @@ final class OptionsVestingService
             $usedIsoValueByYear[$year] = MoneyMath::add($alreadyUsed, MoneyMath::multiply($strike, $isoShares));
 
             if ($isoShares > 0.0) {
-                $rows[] = $this->row($rawRow, 'iso', $isoShares);
+                $this->appendRowsForSlice($rowsByKey, $event, 'iso', $isoShares);
             }
             if ($nsoShares > 0.0) {
-                $rows[] = $this->row($rawRow, 'nso', $nsoShares);
+                $this->appendRowsForSlice($rowsByKey, $event, 'nso', $nsoShares);
             }
             if ($requestedValue > $remainingIsoValue && ! in_array("{$job->name()}: ISO first-exercisable value exceeds $100k in {$year}; spillover treated as NSO.", $warnings, true)) {
                 $warnings[] = "{$job->name()}: ISO first-exercisable value exceeds $100k in {$year}; spillover treated as NSO.";
             }
         }
+
+        $rows = array_values(array_filter(array_map(
+            fn (array $row): array => $this->row($row),
+            $rowsByKey,
+        ), fn (array $row): bool => $row['year'] >= $startYear
+            && $row['year'] < $startYear + $horizonYears
+            && ($row['vestedShares'] > 0.0 || $row['exercisableShares'] > 0.0)
+        ));
+        usort($rows, fn (array $left, array $right): int => [$left['year'], $left['grantId'], $left['type']] <=> [$right['year'], $right['grantId'], $right['type']]);
 
         return ['rows' => $rows, 'warnings' => $warnings];
     }
@@ -73,14 +70,14 @@ final class OptionsVestingService
      * @param  array<string, mixed>  $rawRow
      * @return array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}
      */
-    private function row(array $rawRow, string $type, float $shares): array
+    private function row(array $rawRow): array
     {
         $row = [
             'grantId' => (string) $rawRow['grantId'],
-            'type' => $type,
+            'type' => (string) $rawRow['type'],
             'year' => (int) $rawRow['year'],
-            'vestedShares' => round($shares, 4),
-            'exercisableShares' => round($shares, 4),
+            'vestedShares' => round((float) $rawRow['vestedShares'], 4),
+            'exercisableShares' => round((float) $rawRow['exercisableShares'], 4),
         ];
 
         if (is_string($rawRow['source'] ?? null) && $rawRow['source'] !== '') {
@@ -92,9 +89,9 @@ final class OptionsVestingService
 
     /**
      * @param  array<string, mixed>  $grant
-     * @return array<int, float>
+     * @return list<array{grantId:string,requestedType:string,year:int,shares:float,strike:float,grantDate:string,earlyExercise:bool,vestingSharesByYear:array<int, float>,source?:string|null}>
      */
-    private function sharesByYear(array $grant): array
+    private function exerciseEventsForGrant(array $grant): array
     {
         $shareCount = is_numeric($grant['shareCount'] ?? null) ? (float) $grant['shareCount'] : 0.0;
         $grantDate = $this->date((string) ($grant['grantDate'] ?? ''));
@@ -102,15 +99,96 @@ final class OptionsVestingService
             return [];
         }
 
-        if (filter_var($grant['earlyExercise83b'] ?? false, FILTER_VALIDATE_BOOL)) {
-            return [(int) $grantDate->format('Y') => $shareCount];
-        }
-
-        return VestingSchedule::sharesByYearForGrant(
+        $vestingSharesByYear = VestingSchedule::sharesByYearForGrant(
             $shareCount,
             $this->date((string) ($grant['vestingStartDate'] ?? '')) ?? $grantDate,
             $grant,
         );
+        $grantId = (string) ($grant['id'] ?? 'option');
+        $requestedType = (string) ($grant['type'] ?? 'nso') === 'iso' ? 'iso' : 'nso';
+        $strike = is_numeric($grant['strike'] ?? null) ? (float) $grant['strike'] : 0.0;
+        $source = is_string($grant['source'] ?? null) ? $grant['source'] : null;
+        $grantDateString = (string) ($grant['grantDate'] ?? '');
+        $earlyExercise = filter_var($grant['earlyExercise83b'] ?? false, FILTER_VALIDATE_BOOL);
+
+        if ($earlyExercise) {
+            return [[
+                'grantId' => $grantId,
+                'requestedType' => $requestedType,
+                'year' => (int) $grantDate->format('Y'),
+                'shares' => round($shareCount, 4),
+                'strike' => $strike,
+                'grantDate' => $grantDateString,
+                'earlyExercise' => true,
+                'vestingSharesByYear' => $vestingSharesByYear,
+                'source' => $source,
+            ]];
+        }
+
+        $events = [];
+        foreach ($vestingSharesByYear as $year => $shares) {
+            $events[] = [
+                'grantId' => $grantId,
+                'requestedType' => $requestedType,
+                'year' => $year,
+                'shares' => round($shares, 4),
+                'strike' => $strike,
+                'grantDate' => $grantDateString,
+                'earlyExercise' => false,
+                'vestingSharesByYear' => [$year => $shares],
+                'source' => $source,
+            ];
+        }
+
+        return $events;
+    }
+
+    /**
+     * @param  array<string, array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string|null}>  $rowsByKey
+     * @param  array{grantId:string,year:int,shares:float,earlyExercise:bool,vestingSharesByYear:array<int, float>,source?:string|null}  $event
+     */
+    private function appendRowsForSlice(array &$rowsByKey, array $event, string $type, float $sliceShares): void
+    {
+        if ($sliceShares <= 0.0 || (float) $event['shares'] <= 0.0) {
+            return;
+        }
+
+        if (! $event['earlyExercise']) {
+            $this->addRow($rowsByKey, $event, $type, (int) $event['year'], $sliceShares, $sliceShares);
+
+            return;
+        }
+
+        $ratio = $sliceShares / (float) $event['shares'];
+        $this->addRow($rowsByKey, $event, $type, (int) $event['year'], 0.0, $sliceShares);
+
+        foreach ($event['vestingSharesByYear'] as $year => $vestedShares) {
+            $this->addRow($rowsByKey, $event, $type, $year, (float) $vestedShares * $ratio, 0.0);
+        }
+    }
+
+    /**
+     * @param  array<string, array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string|null}>  $rowsByKey
+     * @param  array{grantId:string,source?:string|null}  $event
+     */
+    private function addRow(array &$rowsByKey, array $event, string $type, int $year, float $vestedShares, float $exercisableShares): void
+    {
+        if ($vestedShares <= 0.0 && $exercisableShares <= 0.0) {
+            return;
+        }
+
+        $key = implode(':', [(string) $event['grantId'], $type, (string) $year]);
+        $rowsByKey[$key] ??= [
+            'grantId' => (string) $event['grantId'],
+            'type' => $type,
+            'year' => $year,
+            'vestedShares' => 0.0,
+            'exercisableShares' => 0.0,
+            'source' => $event['source'] ?? null,
+        ];
+
+        $rowsByKey[$key]['vestedShares'] += $vestedShares;
+        $rowsByKey[$key]['exercisableShares'] += $exercisableShares;
     }
 
     private function date(string $date): ?DateTimeImmutable
