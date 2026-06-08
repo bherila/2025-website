@@ -11,6 +11,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/
 import { Label } from '@/components/ui/label'
 import type { MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { formatCurrencyInput } from '@/lib/formatCurrency'
 
 import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant, DEFAULT_MODEL_ASSUMPTIONS } from './defaults'
 import { formatMoney } from './formatters'
@@ -498,7 +499,7 @@ function MoneyField({ label, value, compact = false, onChange }: MoneyFieldProps
     return (
       <InputGroup className="h-9">
         <InputGroupAddon><InputGroupText>$</InputGroupText></InputGroupAddon>
-        <InputGroupInput aria-label={label} inputMode="decimal" value={draft ?? String(value)} onBlur={handleBlur} onChange={handleChange} onFocus={handleFocus} />
+        <InputGroupInput aria-label={label} inputMode="decimal" value={draft ?? formatCurrencyInput(value)} onBlur={handleBlur} onChange={handleChange} onFocus={handleFocus} />
       </InputGroup>
     )
   }
@@ -508,7 +509,7 @@ function MoneyField({ label, value, compact = false, onChange }: MoneyFieldProps
       <Label htmlFor={inputId}>{label}</Label>
       <InputGroup>
         <InputGroupAddon><InputGroupText>$</InputGroupText></InputGroupAddon>
-        <InputGroupInput id={inputId} inputMode="decimal" value={draft ?? String(value)} onBlur={handleBlur} onChange={handleChange} onFocus={handleFocus} />
+        <InputGroupInput id={inputId} inputMode="decimal" value={draft ?? formatCurrencyInput(value)} onBlur={handleBlur} onChange={handleChange} onFocus={handleFocus} />
       </InputGroup>
     </div>
   )
