@@ -183,7 +183,7 @@ const VESTING_SCHEDULE_OPTIONS: SelectOption<VestingSchedulePresetId>[] = [
   { value: 'custom', label: 'Custom / manual fields' },
 ]
 
-const MAX_HYPOTHETICAL_JOBS = 10
+export const MAX_HYPOTHETICAL_JOBS = 10
 
 const GRANT_KIND_OPTIONS: SelectOption<'hire' | 'refresher'>[] = [
   { value: 'hire', label: 'New hire' },
@@ -566,7 +566,7 @@ function SelectField<T extends string>({ label, value, options, compact = false,
 
 function GrantTypeCheckbox({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (checked: boolean) => void }): ReactElement {
   return (
-    <label htmlFor={id} className="flex items-center gap-2 rounded-md border p-3 text-sm font-medium">
+    <label htmlFor={id} className="flex items-center gap-2 rounded-md border border-muted p-3 text-sm font-medium">
       <Checkbox id={id} checked={checked} onCheckedChange={(next) => onChange(next === true)} />
       <span>{label}</span>
     </label>
@@ -594,7 +594,7 @@ function GrantRow({ title, summary, selected, onEdit, onDuplicate, onRemove }: {
     <div
       className={selected
         ? 'flex items-center justify-between gap-2 rounded-md border border-primary/60 bg-primary/10 p-3 ring-1 ring-primary/30'
-        : 'flex items-center justify-between gap-2 rounded-md border p-3'}
+        : 'flex items-center justify-between gap-2 rounded-md border border-muted p-3'}
     >
       <button type="button" aria-current={selected ? 'true' : undefined} onClick={onEdit} className="min-w-0 flex-1 text-left focus-visible:outline-none">
         <p className="truncate text-sm font-medium">{title}</p>
@@ -820,7 +820,7 @@ function JobListButton({ job, labelPrefix, onOpen, onOpenOfferNotes }: {
   onOpenOfferNotes?: OpenOfferNotes | undefined
 }): ReactElement {
   return (
-    <div className="group rounded-md border border-border bg-card transition-colors hover:bg-muted/40">
+    <div className="group rounded-md border border-muted bg-card transition-colors hover:bg-muted/40">
       <button
         type="button"
         onClick={onOpen}
@@ -1068,7 +1068,7 @@ export function OfferNotesColumn({ inputs, jobId, onChange }: {
         height="60vh"
         ariaLabelledBy={labelId}
         placeholder={'# Notes\n\nCapture assumptions, negotiation context, and follow-up questions.'}
-        className="overflow-hidden rounded-md border border-border"
+        className="overflow-hidden rounded-md border border-muted"
       />
     </div>
   )
@@ -1129,7 +1129,7 @@ export function ValuationTimelineColumn({ inputs, jobId, onChange }: {
 
       <div className="space-y-4">
         {scenarios.map((scenario, scenarioIndex) => (
-          <div key={scenario.id} className="space-y-3 rounded-md border p-3">
+          <div key={scenario.id} className="space-y-3 rounded-md border border-muted p-3">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
               <div className="space-y-2">
                 <Label htmlFor={`${scenario.id}-label`}>Scenario</Label>
@@ -1246,7 +1246,7 @@ function ValuationTimelineLauncher({ job, onOpenValuationTimeline }: { job: JobS
     <button
       type="button"
       onClick={() => onOpenValuationTimeline(job.id)}
-      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-border px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex min-h-16 w-full items-center gap-3 rounded-md border border-muted px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
         <LineChart className="size-4" />
@@ -1333,7 +1333,7 @@ function RetainedCurrentJobsSelector({ currentJobs, selectedIds, onChange }: {
   }
 
   return (
-    <div className="space-y-3 rounded-md border p-3 sm:col-span-2">
+    <div className="space-y-3 rounded-md border border-muted p-3 sm:col-span-2">
       <div>
         <Label className="text-sm font-semibold">Retained current jobs</Label>
         <p className="text-sm text-muted-foreground">{selectedIds.length === 0 ? 'None retained; this offer quits every current job.' : `${selectedIds.length} retained alongside this offer.`}</p>
@@ -1343,7 +1343,7 @@ function RetainedCurrentJobsSelector({ currentJobs, selectedIds, onChange }: {
           const checkboxId = `${selectorId}-retain-${currentJob.id}`
 
           return (
-            <label key={currentJob.id} htmlFor={checkboxId} className="flex min-h-11 items-center gap-2 rounded-md border p-3 text-sm">
+            <label key={currentJob.id} htmlFor={checkboxId} className="flex min-h-11 items-center gap-2 rounded-md border border-muted p-3 text-sm">
               <Checkbox id={checkboxId} checked={selected.has(currentJob.id)} onCheckedChange={(checked) => toggle(currentJob.id, checked === true)} />
               <span className="min-w-0 truncate">{currentJob.name}</span>
             </label>
@@ -1376,9 +1376,27 @@ interface JobEditorProps {
   onOpenOfferNotes?: OpenOfferNotes | undefined
   onOpenModelAssumptions: () => void
   activeGrant?: ActiveGrantSelection | null | undefined
+  compact?: boolean | undefined
 }
 
-function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssumptions, showCareerTransition = false, onChange, onRemove, removeLabel, onArchive, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant }: JobEditorProps): ReactElement {
+function JobEditor({
+  job,
+  currentJobs = [],
+  startYear,
+  horizonYears,
+  modelAssumptions,
+  showCareerTransition = false,
+  onChange,
+  onRemove,
+  removeLabel,
+  onArchive,
+  onOpenGrantEditor,
+  onOpenValuationTimeline,
+  onOpenOfferNotes,
+  onOpenModelAssumptions,
+  activeGrant,
+  compact = false,
+}: JobEditorProps): ReactElement {
   const nameId = useId()
   const rsuGrantTypeId = useId()
   const optionGrantTypeId = useId()
@@ -1412,6 +1430,114 @@ function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssump
     })
   }
 
+  const jobFields = (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={nameId}>Job name</Label>
+          <Input id={nameId} value={job.name} onChange={(event) => onChange({ ...job, name: event.target.value })} />
+        </div>
+        <DateField label="Start date" value={job.startDate ?? ''} onChange={(value) => onChange({ ...job, startDate: value || null })} />
+        {showCareerTransition ? (
+          <RetainedCurrentJobsSelector
+            currentJobs={currentJobs}
+            selectedIds={job.retainedCurrentJobIds}
+            onChange={(retainedCurrentJobIds) => onChange({ ...job, retainedCurrentJobIds })}
+          />
+        ) : null}
+        {showCareerTransition ? (
+          <div className="space-y-3 rounded-md border border-muted p-3 sm:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <Label className="text-sm font-semibold">Career transition</Label>
+                <p className="text-sm text-muted-foreground">{effectiveNoticeWeeks} week notice · {effectiveTimeOffWeeks} week gap</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={onOpenModelAssumptions}>
+                  <Settings2 className="size-4" /> Go to assumptions
+                </Button>
+                <Button type="button" variant={hasTransitionOverride ? 'ghost' : 'outline'} size="sm" onClick={hasTransitionOverride ? clearTransitionOverride : enableTransitionOverride}>
+                  {hasTransitionOverride ? <Trash2 className="size-4" /> : <Pencil className="size-4" />}
+                  {hasTransitionOverride ? 'Clear override' : 'Override'}
+                </Button>
+              </div>
+            </div>
+            {hasTransitionOverride ? (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <NumberField label="Notice period" value={effectiveNoticeWeeks} suffix="weeks" min={0} max={52} onChange={(value) => onChange({ ...job, transitionOverride: { ...job.transitionOverride, currentJobNoticeWeeks: value } })} />
+                <NumberField label="Time off" value={effectiveTimeOffWeeks} suffix="weeks" min={0} max={52} onChange={(value) => onChange({ ...job, transitionOverride: { ...job.transitionOverride, timeOffBetweenJobsWeeks: value } })} />
+                <DateField label="Prior job resignation date" value={job.priorJobResignationDate ?? ''} onChange={(value) => onChange({ ...job, priorJobResignationDate: value || null })} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <SelectField label="Company type" value={job.company.type} options={COMPANY_TYPE_OPTIONS} onChange={(type) => onChange({ ...job, company: { ...job.company, type } })} />
+        <MoneyField label="Base salary" value={job.comp.baseSalary} onChange={(value) => onChange({ ...job, comp: { ...job.comp, baseSalary: value } })} />
+        <MoneyField label="Cash bonus" value={job.comp.cashBonus} onChange={(value) => onChange({ ...job, comp: { ...job.comp, cashBonus: value } })} />
+        {isPrivate ? (
+          <>
+            <MoneyField label="Estimated share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
+            <MoneyField label="409A price" value={job.company.fourNineA} onChange={(value) => onChange({ ...job, company: { ...job.company, fourNineA: value } })} />
+            <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
+            <NumberField label="Annual dilution" value={job.company.annualDilutionPct} suffix="%" min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, annualDilutionPct: value } })} />
+            <DateField label="Liquidity date" value={job.company.liquidityDate ?? ''} onChange={(value) => onChange({ ...job, company: { ...job.company, liquidityDate: value || null } })} />
+            <div className="sm:col-span-2">
+              <ValuationTimelineLauncher job={job} onOpenValuationTimeline={onOpenValuationTimeline} />
+            </div>
+          </>
+        ) : (
+          <>
+            <MoneyField label="Current share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
+            <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
+          </>
+        )}
+        <NumberField label="Low growth" value={job.growthBands.lowPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, lowPct: value } })} />
+        <NumberField label="Medium growth" value={job.growthBands.mediumPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, mediumPct: value } })} />
+        <NumberField label="High growth" value={job.growthBands.highPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, highPct: value } })} />
+      </div>
+
+      <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
+        <GrantTypeCheckbox id={rsuGrantTypeId} label="Grants RSU" checked={job.grantTypes.rsu} onChange={(rsu) => onChange({ ...job, grantTypes: { ...job.grantTypes, rsu } })} />
+        <GrantTypeCheckbox id={optionGrantTypeId} label="Grants options" checked={job.grantTypes.options} onChange={(options) => onChange({ ...job, grantTypes: { ...job.grantTypes, options } })} />
+      </div>
+
+      <div className="space-y-3 border-t pt-4">
+        <div>
+          <Label className="text-sm font-semibold">Raises &amp; refreshers</Label>
+          <p className="text-xs text-muted-foreground">Annual raise compounds base + bonus.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <NumberField label="Annual raise" value={job.comp.annualRaisePct} suffix="%" min={0} onChange={(value) => onChange({ ...job, comp: { ...job.comp, annualRaisePct: value } })} />
+          {job.grantTypes.rsu ? (
+            <NumberField label="RSU refresher" value={job.refresher.pctOfBase} suffix="% of base" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, pctOfBase: value } })} />
+          ) : null}
+          {job.grantTypes.options ? (
+            <NumberField label="Projected ISO refresher" value={job.refresher.optionPctOfFullyDilutedShares} suffix="% fully diluted" min={0} max={100} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, optionPctOfFullyDilutedShares: value, optionType: 'iso' } })} />
+          ) : null}
+          {hasProjectedRefreshers ? (
+            <>
+              <NumberField label="Refresher every" value={job.refresher.cadenceYears} suffix="years" min={1} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cadenceYears: value } })} />
+              <NumberField label="First refresher after" value={job.refresher.firstYearOffset} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, firstYearOffset: value } })} />
+              <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0.25} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
+              <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} max={job.refresher.vestingYears * 12} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
+              <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
+            </>
+          ) : null}
+        </div>
+        <ProjectedRefreshersPreview job={job} startYear={startYear} horizonYears={horizonYears} />
+      </div>
+
+      <div className="space-y-4 border-t pt-4">
+        {job.grantTypes.rsu ? <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} /> : null}
+        {job.grantTypes.options ? <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} /> : null}
+      </div>
+    </div>
+  )
+
+  if (compact) {
+    return jobFields
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -1426,111 +1552,23 @@ function JobEditor({ job, currentJobs = [], startYear, horizonYears, modelAssump
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor={nameId}>Job name</Label>
-            <Input id={nameId} value={job.name} onChange={(event) => onChange({ ...job, name: event.target.value })} />
-          </div>
-          <DateField label="Start date" value={job.startDate ?? ''} onChange={(value) => onChange({ ...job, startDate: value || null })} />
-          {showCareerTransition ? (
-            <RetainedCurrentJobsSelector
-              currentJobs={currentJobs}
-              selectedIds={job.retainedCurrentJobIds}
-              onChange={(retainedCurrentJobIds) => onChange({ ...job, retainedCurrentJobIds })}
-            />
-          ) : null}
-          {showCareerTransition ? (
-            <div className="space-y-3 rounded-md border p-3 sm:col-span-2">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <Label className="text-sm font-semibold">Career transition</Label>
-                  <p className="text-sm text-muted-foreground">{effectiveNoticeWeeks} week notice · {effectiveTimeOffWeeks} week gap</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={onOpenModelAssumptions}>
-                    <Settings2 className="size-4" /> Go to assumptions
-                  </Button>
-                  <Button type="button" variant={hasTransitionOverride ? 'ghost' : 'outline'} size="sm" onClick={hasTransitionOverride ? clearTransitionOverride : enableTransitionOverride}>
-                    {hasTransitionOverride ? <Trash2 className="size-4" /> : <Pencil className="size-4" />}
-                    {hasTransitionOverride ? 'Clear override' : 'Override'}
-                  </Button>
-                </div>
-              </div>
-              {hasTransitionOverride ? (
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <NumberField label="Notice period" value={effectiveNoticeWeeks} suffix="weeks" min={0} max={52} onChange={(value) => onChange({ ...job, transitionOverride: { ...job.transitionOverride, currentJobNoticeWeeks: value } })} />
-                  <NumberField label="Time off" value={effectiveTimeOffWeeks} suffix="weeks" min={0} max={52} onChange={(value) => onChange({ ...job, transitionOverride: { ...job.transitionOverride, timeOffBetweenJobsWeeks: value } })} />
-                  <DateField label="Prior job resignation date" value={job.priorJobResignationDate ?? ''} onChange={(value) => onChange({ ...job, priorJobResignationDate: value || null })} />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <SelectField label="Company type" value={job.company.type} options={COMPANY_TYPE_OPTIONS} onChange={(type) => onChange({ ...job, company: { ...job.company, type } })} />
-          <MoneyField label="Base salary" value={job.comp.baseSalary} onChange={(value) => onChange({ ...job, comp: { ...job.comp, baseSalary: value } })} />
-          <MoneyField label="Cash bonus" value={job.comp.cashBonus} onChange={(value) => onChange({ ...job, comp: { ...job.comp, cashBonus: value } })} />
-          {isPrivate ? (
-            <>
-              <MoneyField label="Estimated share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
-              <MoneyField label="409A price" value={job.company.fourNineA} onChange={(value) => onChange({ ...job, company: { ...job.company, fourNineA: value } })} />
-              <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
-              <NumberField label="Annual dilution" value={job.company.annualDilutionPct} suffix="%" min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, annualDilutionPct: value } })} />
-              <DateField label="Liquidity date" value={job.company.liquidityDate ?? ''} onChange={(value) => onChange({ ...job, company: { ...job.company, liquidityDate: value || null } })} />
-              <div className="sm:col-span-2">
-                <ValuationTimelineLauncher job={job} onOpenValuationTimeline={onOpenValuationTimeline} />
-              </div>
-            </>
-          ) : (
-            <>
-              <MoneyField label="Current share price" value={job.company.currentSharePrice} onChange={(value) => onChange({ ...job, company: { ...job.company, currentSharePrice: value } })} />
-              <NumberField label="Fully diluted shares" value={job.company.fullyDilutedShares} min={0} onChange={(value) => onChange({ ...job, company: { ...job.company, fullyDilutedShares: value } })} />
-            </>
-          )}
-          <NumberField label="Low growth" value={job.growthBands.lowPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, lowPct: value } })} />
-          <NumberField label="Medium growth" value={job.growthBands.mediumPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, mediumPct: value } })} />
-          <NumberField label="High growth" value={job.growthBands.highPct} suffix="%" onChange={(value) => onChange({ ...job, growthBands: { ...job.growthBands, highPct: value } })} />
-        </div>
-
-        <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
-          <GrantTypeCheckbox id={rsuGrantTypeId} label="Grants RSU" checked={job.grantTypes.rsu} onChange={(rsu) => onChange({ ...job, grantTypes: { ...job.grantTypes, rsu } })} />
-          <GrantTypeCheckbox id={optionGrantTypeId} label="Grants options" checked={job.grantTypes.options} onChange={(options) => onChange({ ...job, grantTypes: { ...job.grantTypes, options } })} />
-        </div>
-
-        <div className="space-y-3 border-t pt-4">
-          <div>
-            <Label className="text-sm font-semibold">Raises &amp; refreshers</Label>
-            <p className="text-xs text-muted-foreground">Annual raise compounds base + bonus.</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <NumberField label="Annual raise" value={job.comp.annualRaisePct} suffix="%" min={0} onChange={(value) => onChange({ ...job, comp: { ...job.comp, annualRaisePct: value } })} />
-            {job.grantTypes.rsu ? (
-              <NumberField label="RSU refresher" value={job.refresher.pctOfBase} suffix="% of base" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, pctOfBase: value } })} />
-            ) : null}
-            {job.grantTypes.options ? (
-              <NumberField label="Projected ISO refresher" value={job.refresher.optionPctOfFullyDilutedShares} suffix="% fully diluted" min={0} max={100} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, optionPctOfFullyDilutedShares: value, optionType: 'iso' } })} />
-            ) : null}
-            {hasProjectedRefreshers ? (
-              <>
-                <NumberField label="Refresher every" value={job.refresher.cadenceYears} suffix="years" min={1} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cadenceYears: value } })} />
-                <NumberField label="First refresher after" value={job.refresher.firstYearOffset} suffix="years" min={0} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, firstYearOffset: value } })} />
-                <NumberField label="Refresher vesting" value={job.refresher.vestingYears} suffix="years" min={0.25} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, vestingYears: value } })} />
-                <NumberField label="Refresher cliff" value={job.refresher.cliffMonths} suffix="months" min={0} max={job.refresher.vestingYears * 12} onChange={(value) => onChange({ ...job, refresher: { ...job.refresher, cliffMonths: value } })} />
-                <SelectField label="Refresher frequency" value={job.refresher.vestingFrequency ?? 'monthly'} options={VESTING_FREQUENCY_OPTIONS} onChange={(vestingFrequency) => onChange({ ...job, refresher: { ...job.refresher, vestingFrequency } })} />
-              </>
-            ) : null}
-          </div>
-          <ProjectedRefreshersPreview job={job} startYear={startYear} horizonYears={horizonYears} />
-        </div>
-
-        <div className="space-y-4 border-t pt-4">
-          {job.grantTypes.rsu ? <RsuGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} /> : null}
-          {job.grantTypes.options ? <OptionGrantsList job={job} onChange={onChange} onOpenGrantEditor={onOpenGrantEditor} activeGrant={activeGrant} /> : null}
-        </div>
+        {jobFields}
       </CardContent>
     </Card>
   )
 }
 
-export function JobEditorColumn({ inputs, jobId, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenOfferNotes, onOpenModelAssumptions, activeGrant }: CareerCompFormProps & { jobId: string }): ReactElement {
+export function JobEditorColumn({
+  inputs,
+  jobId,
+  onChange,
+  onOpenGrantEditor,
+  onOpenValuationTimeline,
+  onOpenOfferNotes,
+  onOpenModelAssumptions,
+  activeGrant,
+  compact,
+}: CareerCompFormProps & { jobId: string; compact?: boolean | undefined }): ReactElement {
   const job = findJob(inputs, jobId)
 
   if (!job) {
@@ -1563,6 +1601,7 @@ export function JobEditorColumn({ inputs, jobId, onChange, onOpenGrantEditor, on
       onOpenValuationTimeline={onOpenValuationTimeline}
       onOpenOfferNotes={isCurrentJob ? undefined : onOpenOfferNotes}
       onOpenModelAssumptions={onOpenModelAssumptions}
+      compact={compact}
     />
   )
 }
@@ -1591,7 +1630,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
     if (onOpenJobEditor) {
       return (
         <div className="space-y-4">
-          <div className="rounded-md border border-border bg-muted/20 p-3">
+          <div className="rounded-md border border-muted bg-muted/20 p-3">
             <Label className="text-sm font-semibold">Current job baselines</Label>
             <p className="mt-1 text-sm text-muted-foreground">Open each current job in its own Miller column so compensation, equity, and transition inputs have more room.</p>
           </div>
@@ -1674,7 +1713,7 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
   if (onOpenJobEditor) {
     return (
       <div className="space-y-4">
-        <div className="rounded-md border border-border bg-muted/20 p-3">
+        <div className="rounded-md border border-muted bg-muted/20 p-3">
           <Label className="text-sm font-semibold">Offer list</Label>
           <p className="mt-1 text-sm text-muted-foreground">Choose an offer to edit it in a dedicated Miller column with wider space for compensation, equity, transition, and notes.</p>
         </div>

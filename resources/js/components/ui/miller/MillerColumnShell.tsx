@@ -30,6 +30,7 @@ export interface MillerColumnShellColumn {
   id: string
   label: string
   shortLabel: string
+  headerActions?: ReactNode | undefined
   size?: MillerColumnSize | undefined
   /** @deprecated Use size instead. */
   wide?: boolean | undefined
@@ -161,6 +162,7 @@ export function MillerColumnShell({
                   <div className="truncate text-sm font-semibold text-foreground">{column.shortLabel}</div>
                   <div className="truncate text-xs text-muted-foreground">{column.label}</div>
                 </div>
+                {column.headerActions ? <div className="flex shrink-0 items-center gap-1">{column.headerActions}</div> : null}
                 <button
                   type="button"
                   onClick={() => onTruncate(depth)}
