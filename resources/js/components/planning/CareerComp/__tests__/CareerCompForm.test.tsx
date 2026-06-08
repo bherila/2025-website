@@ -287,6 +287,31 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     expect(screen.getByText('83(b) early exercise')).toBeInTheDocument()
   })
 
+  it('lets option shares be entered as a percent of fully diluted shares as of grant date', () => {
+    const baseInputs = makeInputs('public')
+    const inputs = {
+      ...baseInputs,
+      startYear: 2026,
+      hypotheticalJobs: [{
+        ...baseInputs.hypotheticalJobs[0],
+        company: {
+          ...baseInputs.hypotheticalJobs[0].company,
+          fullyDilutedShares: 1000,
+          annualDilutionPct: 10,
+        },
+      }],
+    }
+
+    render(<Harness initial={inputs} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
+    fireEvent.change(screen.getByLabelText('Grant date'), { target: { value: '2028-01-01' } })
+    fireEvent.click(screen.getByLabelText('Input shares by percentage of fully diluted shares'))
+    fireEvent.change(screen.getByLabelText('% of fully diluted shares as of grant date'), { target: { value: '10' } })
+
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('81 sh')
+  })
+
   it('opens and edits markdown notes in a dedicated column', () => {
     render(<Harness initial={makeInputs('public')} />)
 

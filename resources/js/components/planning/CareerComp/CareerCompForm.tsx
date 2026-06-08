@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 import { Archive, ArchiveRestore, Briefcase, Building2, ChevronRight, Copy, FileText, LineChart, type LucideIcon, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
-import { type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactElement, useId, useState } from 'react'
+import { type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactElement, useEffect, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -327,6 +327,44 @@ function parseNumber(raw: string): number {
 
 function parseMoney(raw: string): number {
   return currency(raw).value
+}
+
+type OptionGrantShareInputMode = 'count' | 'percent'
+
+function parseGrantYear(grantDate: string): number | null {
+  const year = Number.parseInt(grantDate.slice(0, 4), 10)
+  return Number.isNaN(year) ? null : year
+}
+
+function optionGrantFullyDilutedAsOfGrantDate(job: JobSpec, startYear: number, grantDate: string): number {
+  const asOfYear = parseGrantYear(grantDate)
+  if (job.company.fullyDilutedShares <= 0 || asOfYear === null) {
+    return Math.max(0, job.company.fullyDilutedShares)
+  }
+
+  const yearsSinceStart = Math.max(0, asOfYear - startYear)
+  const dilutionRate = Math.max(0, job.company.annualDilutionPct) / 100
+  const dilutedShares = currency(job.company.fullyDilutedShares)
+    .multiply((1 - dilutionRate) ** yearsSinceStart)
+    .value
+
+  return Math.max(0, Math.round(dilutedShares))
+}
+
+function optionGrantSharePercentToCount(percent: number, asOfShareCount: number): number {
+  if (asOfShareCount <= 0) {
+    return 0
+  }
+
+  return Math.max(0, Math.round(currency(asOfShareCount).multiply(percent).divide(100).value))
+}
+
+function optionGrantShareCountToPercent(shareCount: number, asOfShareCount: number): number {
+  if (asOfShareCount <= 0) {
+    return 0
+  }
+
+  return currency(shareCount).divide(asOfShareCount).multiply(100).value
 }
 
 /** Stable, collision-free id for a freshly added or duplicated grant within a job. */
@@ -950,14 +988,60 @@ function RsuGrantFields({ grant, onChange }: { grant: RsuGrant; onChange: (patch
   )
 }
 
-function OptionGrantFields({ grant, onChange }: { grant: OptionGrant; onChange: (patch: Partial<OptionGrant>) => void }): ReactElement {
+function OptionGrantFields({ grant, job, startYear, onChange }: { grant: OptionGrant; job: JobSpec; startYear: number; onChange: (patch: Partial<OptionGrant>) => void }): ReactElement {
+  const shareInputModeId = useId()
+  const asOfShareCount = optionGrantFullyDilutedAsOfGrantDate(job, startYear, grant.grantDate)
+  const [shareInputMode, setShareInputMode] = useState<OptionGrantShareInputMode>('count')
+  const [sharePercent, setSharePercent] = useState<number>(() => optionGrantShareCountToPercent(grant.shareCount, asOfShareCount))
+
+  useEffect(() => {
+    if (shareInputMode === 'percent') {
+      const nextShareCount = optionGrantSharePercentToCount(sharePercent, asOfShareCount)
+
+      if (nextShareCount !== grant.shareCount) {
+        onChange({ shareCount: nextShareCount })
+      }
+    }
+  }, [onChange, shareInputMode, sharePercent, asOfShareCount, grant.shareCount])
+
+  function setPercentMode(usePercent: boolean): void {
+    setShareInputMode(usePercent ? 'percent' : 'count')
+    if (usePercent) {
+      setSharePercent(optionGrantShareCountToPercent(grant.shareCount, asOfShareCount))
+    }
+  }
+
+  function updateSharePercent(percent: number): void {
+    setSharePercent(percent)
+    onChange({ shareCount: optionGrantSharePercentToCount(percent, asOfShareCount) })
+  }
+
+  const shareCountField = shareInputMode === 'count'
+    ? (
+      <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => onChange({ shareCount: value })} />
+    )
+    : (
+      <NumberField
+        label="% of fully diluted shares as of grant date"
+        value={sharePercent}
+        suffix="%"
+        min={0}
+        max={100}
+        onChange={updateSharePercent}
+      />
+    )
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <SelectField label="Grant kind" value={grant.kind} options={GRANT_KIND_OPTIONS} onChange={(kind) => onChange({ kind })} />
       <SelectField label="Option type" value={grant.type} options={OPTION_TYPE_OPTIONS} onChange={(type) => onChange({ type })} />
       <DateField label="Grant date" value={grant.grantDate} onChange={(value) => onChange({ grantDate: value })} />
       <DateField label="Vesting start" value={grant.vestingStartDate ?? ''} onChange={(value) => onChange({ vestingStartDate: value || null })} />
-      <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => onChange({ shareCount: value })} />
+      <label htmlFor={shareInputModeId} className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Checkbox id={shareInputModeId} checked={shareInputMode === 'percent'} onCheckedChange={(next) => setPercentMode(next === true)} />
+        <span>Input shares by percentage of fully diluted shares</span>
+      </label>
+      {shareCountField}
       <MoneyField label="Strike price" value={grant.strike} onChange={(value) => onChange({ strike: value })} />
       <SelectField label="Vesting schedule" value={vestingSchedulePresetValue(grant)} options={VESTING_SCHEDULE_OPTIONS} onChange={(presetId) => onChange(vestingSchedulePatchForPreset(presetId))} />
       <NumberField label="Cliff months" value={grant.cliffMonths} min={0} onChange={(value) => onChange({ cliffMonths: value, vestingSchedule: null })} />
@@ -1030,7 +1114,7 @@ export function GrantEditorColumn({ inputs, jobId, grantType, grantId, onChange,
       {grantType === 'rsu' ? (
         <RsuGrantFields grant={draft as RsuGrant} onChange={updateGrant} />
       ) : (
-        <OptionGrantFields grant={draft as OptionGrant} onChange={updateGrant} />
+        <OptionGrantFields grant={draft as OptionGrant} job={job} startYear={inputs.startYear} onChange={updateGrant} />
       )}
     </div>
   )
