@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-import type { CareerCompLtvBand, CareerCompLtvMetric } from './careerCompRoute'
+import type { CareerCompLiquidityMode, CareerCompLtvBand, CareerCompLtvMetric } from './careerCompRoute'
 import { AnnualFreeCashFlowChart } from './charts/AnnualFreeCashFlowChart'
 import { type LiquidityMode, LiquidityOverTimeChart } from './charts/LiquidityOverTimeChart'
 import { PaperLifetimeValueChart } from './charts/PaperLifetimeValueChart'
@@ -21,6 +21,8 @@ interface ProjectionProps {
 
 interface ProjectionLiquidityProps extends ProjectionProps {
   initialMode?: LiquidityMode | undefined
+  initialBand?: CareerCompLtvBand | undefined
+  onOpenDetail?: ((jobId: string, year: number, band: CareerCompLtvBand, mode: CareerCompLiquidityMode) => void) | undefined
 }
 
 interface ProjectionLifetimeValueProps extends ProjectionProps {
@@ -35,8 +37,8 @@ const LTV_DRILL_LABELS: Record<CareerCompLtvMetric, string> = {
   'paper-total': 'paper total',
 }
 
-export function ProjectionLiquidity({ projection, initialMode = 'preTax' }: ProjectionLiquidityProps): ReactElement {
-  return <LiquidityOverTimeChart projection={projection} initialMode={initialMode} />
+export function ProjectionLiquidity({ projection, initialMode = 'preTax', initialBand, onOpenDetail }: ProjectionLiquidityProps): ReactElement {
+  return <LiquidityOverTimeChart projection={projection} initialMode={initialMode} initialBand={initialBand} onOpenDetail={onOpenDetail} />
 }
 
 export function ProjectionAnnualFreeCashFlow({ projection }: ProjectionProps): ReactElement {

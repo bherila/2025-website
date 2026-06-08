@@ -29,6 +29,7 @@ import {
   notRenderedViaMillerShell,
   ValuationTimelineColumn,
 } from './CareerCompForm'
+import { CareerCompLiquidityDetailColumn } from './CareerCompLiquidityDetailColumn'
 import { CareerCompLtvDetailColumn, CareerCompLtvDetailYearColumn } from './CareerCompLtvDetailColumn'
 import {
   ProjectionAfterTaxFreeCashFlow,
@@ -38,6 +39,7 @@ import {
   ProjectionVestingBreakdown,
 } from './CareerCompResultViews'
 import {
+  type CareerCompLiquidityMode,
   type CareerCompLtvBand,
   type CareerCompLtvMetric,
   type CareerCompResultViewId,
@@ -47,9 +49,11 @@ import {
   grantRouteId,
   grantRouteInstance,
   grantTypeFromRouteId,
+  liquidityDetailRouteInstance,
   ltvDetailRouteInstance,
   parseCareerCompHash,
   parseGrantRouteInstance,
+  parseLiquidityDetailRouteInstance,
   parseLtvDetailRouteInstance,
   serializeCareerCompRoute,
 } from './careerCompRoute'
@@ -74,15 +78,18 @@ interface CareerCompColumnMeta {
 
 type CareerCompColumnState =
   | { kind: 'form'; id: CareerCompFormSectionId }
-  | { kind: 'result'; id: CareerCompResultViewId; initialLiquidityMode?: LiquidityMode | undefined }
+  | { kind: 'result'; id: CareerCompResultViewId; initialLiquidityMode?: LiquidityMode | undefined; initialLiquidityBand?: CareerCompLtvBand | undefined }
   | { kind: 'grant'; editorKey: string; jobId: string; grantType: GrantType; grantId?: string | undefined }
   | { kind: 'valuationTimeline'; jobId: string }
+  | { kind: 'liquidityDetail'; jobId: string; year: number; band: CareerCompLtvBand; mode: CareerCompLiquidityMode }
   | { kind: 'ltvDetail'; jobId: string; metric: CareerCompLtvMetric; band: CareerCompLtvBand }
   | { kind: 'ltvDetailYear'; jobId: string; metric: CareerCompLtvMetric; band: CareerCompLtvBand; year: number }
 
 interface ResultViewRegistryEntry extends MillerRegistryEntry<unknown, CareerCompResultViewId, CareerCompColumnMeta> {
   render: (projection: CareerCompProjection, options?: {
     initialLiquidityMode?: LiquidityMode | undefined
+    initialLiquidityBand?: CareerCompLtvBand | undefined
+    onOpenLiquidityDetail?: (jobId: string, year: number, band: CareerCompLtvBand, mode: CareerCompLiquidityMode) => void
     onOpenLtvDetail?: (jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand) => void
   }) => ReactElement
 }
@@ -96,7 +103,7 @@ export const RESULT_VIEWS: ResultViewRegistryEntry[] = [
     component: notRenderedViaMillerShell,
     meta: { description: 'Compare liquidity by tax mode, job, growth band, and scale.', icon: LineChart },
     size: 'full',
-    render: (projection, options) => <ProjectionLiquidity projection={projection} initialMode={options?.initialLiquidityMode} />,
+    render: (projection, options) => <ProjectionLiquidity projection={projection} initialMode={options?.initialLiquidityMode} initialBand={options?.initialLiquidityBand} onOpenDetail={options?.onOpenLiquidityDetail} />,
   },
   {
     id: 'annual-fcf',
@@ -192,6 +199,12 @@ function writeCareerCompRoute(route: CareerCompRoute): void {
 }
 
 function routeColumnToState(column: CareerCompRouteColumn): CareerCompColumnState | null {
+  if (column.id === 'liquidity-detail') {
+    const params = parseLiquidityDetailRouteInstance(column.instance)
+
+    return params ? { kind: 'liquidityDetail', jobId: params.jobId, year: params.year, band: params.band, mode: params.mode } : null
+  }
+
   if (column.id === 'ltv-detail') {
     const params = parseLtvDetailRouteInstance(column.instance)
 
@@ -238,10 +251,21 @@ function routeColumnToState(column: CareerCompRouteColumn): CareerCompColumnStat
 }
 
 function routeToColumnStack(route: CareerCompRoute): CareerCompColumnState[] {
-  return route.columns.flatMap((column) => {
+  const stack = route.columns.flatMap((column) => {
     const state = routeColumnToState(column)
     return state ? [state] : []
   })
+  const liquidityDetail = stack.find((column): column is Extract<CareerCompColumnState, { kind: 'liquidityDetail' }> => column.kind === 'liquidityDetail')
+
+  if (!liquidityDetail) {
+    return stack
+  }
+
+  return stack.map((column) => (
+    column.kind === 'result' && column.id === 'liquidity-over-time'
+      ? { ...column, initialLiquidityMode: liquidityDetail.mode, initialLiquidityBand: liquidityDetail.band }
+      : column
+  ))
 }
 
 function columnStateToRouteColumn(column: CareerCompColumnState): CareerCompRouteColumn {
@@ -251,6 +275,13 @@ function columnStateToRouteColumn(column: CareerCompColumnState): CareerCompRout
 
   if (column.kind === 'valuationTimeline') {
     return { id: 'valuation-timeline', instance: column.jobId }
+  }
+
+  if (column.kind === 'liquidityDetail') {
+    return {
+      id: 'liquidity-detail',
+      instance: liquidityDetailRouteInstance({ jobId: column.jobId, year: column.year, band: column.band, mode: column.mode }),
+    }
   }
 
   if (column.kind === 'ltvDetail') {
@@ -574,6 +605,16 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     setColumnStack((stack) => [...stack.slice(0, 1), { kind: 'valuationTimeline', jobId }])
   }
 
+  function openLiquidityDetail(jobId: string, year: number, band: CareerCompLtvBand, mode: CareerCompLiquidityMode): void {
+    setColumnStack((stack) => {
+      const liquidityColumn: CareerCompColumnState = stack[0]?.kind === 'result' && stack[0].id === 'liquidity-over-time'
+        ? { ...stack[0], initialLiquidityMode: mode, initialLiquidityBand: band }
+        : { kind: 'result', id: 'liquidity-over-time', initialLiquidityMode: mode, initialLiquidityBand: band }
+
+      return [liquidityColumn, { kind: 'liquidityDetail', jobId, year, band, mode }]
+    })
+  }
+
   function openLtvDetail(jobId: string, metric: CareerCompLtvMetric, band: CareerCompLtvBand): void {
     setColumnStack((stack) => {
       const ltvColumn: CareerCompColumnState = stack[0]?.kind === 'result' && stack[0].id === 'ltv-table'
@@ -635,6 +676,22 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
       }
     }
 
+    if (column.kind === 'liquidityDetail') {
+      return {
+        key: `liquidity-detail:${column.jobId}:${column.year}:${column.band}:${column.mode}`,
+        id: 'liquidity-detail',
+        label: 'Liquidity breakdown',
+        shortLabel: String(column.year),
+        size: 'wide',
+        children: projection ? (
+          <CareerCompLiquidityDetailColumn
+            projection={projection}
+            instanceKey={liquidityDetailRouteInstance({ jobId: column.jobId, year: column.year, band: column.band, mode: column.mode })}
+          />
+        ) : <ProjectionEmptyState loading={loading} />,
+      }
+    }
+
     if (column.kind === 'ltvDetail') {
       return {
         key: `ltv-detail:${column.jobId}:${column.metric}:${column.band}`,
@@ -682,14 +739,17 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
     }
 
     const view = findMeta(RESULT_VIEWS, column.id)
+    const resultKey = column.id === 'liquidity-over-time'
+      ? `result:${column.id}:${column.initialLiquidityMode ?? 'preTax'}:${column.initialLiquidityBand ?? 'medium'}`
+      : `result:${column.id}`
 
     return {
-      key: `result:${column.id}`,
+      key: resultKey,
       id: column.id,
       label: view.label,
       shortLabel: view.shortLabel,
       size: view.size,
-      children: projection ? view.render(projection, { initialLiquidityMode: column.initialLiquidityMode, onOpenLtvDetail: openLtvDetail }) : <ProjectionEmptyState loading={loading} />,
+      children: projection ? view.render(projection, { initialLiquidityMode: column.initialLiquidityMode, initialLiquidityBand: column.initialLiquidityBand, onOpenLiquidityDetail: openLiquidityDetail, onOpenLtvDetail: openLtvDetail }) : <ProjectionEmptyState loading={loading} />,
     }
   }
 
