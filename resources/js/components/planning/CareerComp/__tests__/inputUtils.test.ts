@@ -49,6 +49,7 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
         id: 'hyp-1',
         name: 'Offer 1',
         startDate: '',
+        priorJobResignationDate: '',
         company: { type: 'public', currentSharePrice: 25, fourNineA: 5, fullyDilutedShares: 100000000, annualDilutionPct: 3, liquidityDate: '' },
         comp: { baseSalary: 180000, cashBonus: 25000 },
         rsuGrants: [
@@ -67,6 +68,7 @@ describe('normalizeCareerCompInputs (backend-shaped inputs)', () => {
 
     expect(job?.company.liquidityDate).toBeNull()
     expect(job?.startDate).toBeNull()
+    expect(job?.priorJobResignationDate).toBeNull()
     expect(job?.rsuGrants).toHaveLength(1)
     expect(job?.rsuGrants[0]?.id).toBe('r-keep')
     expect(job?.optionGrants).toHaveLength(0)

@@ -47,17 +47,29 @@ final class VestingSchedule
         DateTimeImmutable $vestingStartDate,
         array $grant,
     ): array {
+        return self::sharesByYearFromEvents(self::vestingEventsForGrant($shareCount, $vestingStartDate, $grant));
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     * @return list<array{date:DateTimeImmutable,shares:float}>
+     */
+    public static function vestingEventsForGrant(
+        float $shareCount,
+        DateTimeImmutable $vestingStartDate,
+        array $grant,
+    ): array {
         $schedule = is_array($grant['vestingSchedule'] ?? null) ? $grant['vestingSchedule'] : null;
 
         if (($schedule['type'] ?? null) === 'tranches') {
-            return self::trancheSharesByYear(
+            return self::trancheVestingEvents(
                 $shareCount,
                 $vestingStartDate,
                 is_array($schedule['tranches'] ?? null) ? $schedule['tranches'] : [],
             );
         }
 
-        return self::sharesByYear(
+        return self::linearVestingEvents(
             $shareCount,
             $vestingStartDate,
             self::vestingMonths($grant, $schedule),
@@ -72,11 +84,20 @@ final class VestingSchedule
      */
     public static function trancheSharesByYear(float $shareCount, DateTimeImmutable $vestingStartDate, array $tranches): array
     {
+        return self::sharesByYearFromEvents(self::trancheVestingEvents($shareCount, $vestingStartDate, $tranches));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tranches
+     * @return list<array{date:DateTimeImmutable,shares:float}>
+     */
+    private static function trancheVestingEvents(float $shareCount, DateTimeImmutable $vestingStartDate, array $tranches): array
+    {
         if ($shareCount <= 0.0 || $tranches === []) {
             return [];
         }
 
-        $sharesByYear = [];
+        $events = [];
 
         foreach ($tranches as $tranche) {
             $month = max(0, (int) round((float) ($tranche['month'] ?? 0)));
@@ -86,13 +107,15 @@ final class VestingSchedule
                 continue;
             }
 
-            $year = (int) $vestingStartDate->modify('+'.$month.' months')->format('Y');
-            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + ($shareCount * ($percent / 100.0));
+            $events[] = [
+                'date' => $vestingStartDate->modify('+'.$month.' months'),
+                'shares' => $shareCount * ($percent / 100.0),
+            ];
         }
 
-        ksort($sharesByYear);
+        usort($events, fn (array $left, array $right): int => $left['date'] <=> $right['date']);
 
-        return $sharesByYear;
+        return $events;
     }
 
     /**
@@ -105,13 +128,26 @@ final class VestingSchedule
         int $cliffMonths,
         string $frequency,
     ): array {
+        return self::sharesByYearFromEvents(self::linearVestingEvents($shareCount, $grantDate, $vestingMonths, $cliffMonths, $frequency));
+    }
+
+    /**
+     * @return list<array{date:DateTimeImmutable,shares:float}>
+     */
+    private static function linearVestingEvents(
+        float $shareCount,
+        DateTimeImmutable $grantDate,
+        int $vestingMonths,
+        int $cliffMonths,
+        string $frequency,
+    ): array {
         if ($shareCount <= 0.0 || $vestingMonths <= 0 || $cliffMonths > $vestingMonths) {
             return [];
         }
 
         $frequencyMonths = self::frequencyMonths($frequency);
         $monthlyShares = $shareCount / $vestingMonths;
-        $sharesByYear = [];
+        $events = [];
         $monthsAccrued = 0;
 
         for ($month = 1; $month <= $vestingMonths; $month++) {
@@ -129,10 +165,30 @@ final class VestingSchedule
                 continue;
             }
 
-            $year = (int) $grantDate->modify('+'.$month.' months')->format('Y');
-            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $monthlyShares * $monthsAccrued;
+            $events[] = [
+                'date' => $grantDate->modify('+'.$month.' months'),
+                'shares' => $monthlyShares * $monthsAccrued,
+            ];
             $monthsAccrued = 0;
         }
+
+        return $events;
+    }
+
+    /**
+     * @param  list<array{date:DateTimeImmutable,shares:float}>  $events
+     * @return array<int, float> calendar year => shares vesting that year
+     */
+    private static function sharesByYearFromEvents(array $events): array
+    {
+        $sharesByYear = [];
+
+        foreach ($events as $event) {
+            $year = (int) $event['date']->format('Y');
+            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $event['shares'];
+        }
+
+        ksort($sharesByYear);
 
         return $sharesByYear;
     }

@@ -674,7 +674,7 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
         id: column.id,
         label: section.label,
         shortLabel: section.shortLabel,
-        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} onOpenValuationTimeline={openValuationTimeline} activeGrant={activeGrant} />,
+        children: <CareerCompFormSection section={column.id} inputs={inputs} onChange={setInputs} onOpenGrantEditor={openGrantEditor} onOpenValuationTimeline={openValuationTimeline} onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })} activeGrant={activeGrant} />,
       }
     }
 

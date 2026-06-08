@@ -48,6 +48,7 @@ interface CareerCompFormProps {
   onChange: (inputs: CareerCompInputs) => void
   onOpenGrantEditor: OpenGrantEditor
   onOpenValuationTimeline: OpenValuationTimeline
+  onOpenModelAssumptions: () => void
   activeGrant?: ActiveGrantSelection | null | undefined
 }
 
@@ -783,6 +784,10 @@ function ModelAssumptionsEditor({ inputs, onChange }: { inputs: CareerCompInputs
           ...assumptions.tax,
           ...(patch.tax ?? {}),
         },
+        careerTransition: {
+          ...assumptions.careerTransition,
+          ...(patch.careerTransition ?? {}),
+        },
       },
     })
   }
@@ -807,6 +812,14 @@ function ModelAssumptionsEditor({ inputs, onChange }: { inputs: CareerCompInputs
           <Label className="text-sm font-semibold">Tax</Label>
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectField label="Filing status" value={assumptions.tax.filingStatus} options={FILING_STATUS_OPTIONS} onChange={(filingStatus) => updateAssumptions({ tax: { filingStatus } })} />
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t pt-4">
+          <Label className="text-sm font-semibold">Career transition</Label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <NumberField label="Current job notice period" value={assumptions.careerTransition.currentJobNoticeWeeks} suffix="weeks" min={0} max={52} onChange={(value) => updateAssumptions({ careerTransition: { ...assumptions.careerTransition, currentJobNoticeWeeks: value } })} />
+            <NumberField label="Time off between jobs" value={assumptions.careerTransition.timeOffBetweenJobsWeeks} suffix="weeks" min={0} max={52} onChange={(value) => updateAssumptions({ careerTransition: { ...assumptions.careerTransition, timeOffBetweenJobsWeeks: value } })} />
           </div>
         </div>
 
@@ -1166,13 +1179,43 @@ function ProjectedRefreshersPreview({ job, startYear, horizonYears }: { job: Job
   )
 }
 
-function JobEditor({ job, startYear, horizonYears, onChange, onRemove, removeLabel, onOpenGrantEditor, onOpenValuationTimeline, activeGrant }: { job: JobSpec; startYear: number; horizonYears: number; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; onOpenValuationTimeline: OpenValuationTimeline; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
+function transitionOverrideActive(job: JobSpec): boolean {
+  return job.priorJobResignationDate !== null
+    || job.transitionOverride.currentJobNoticeWeeks !== null
+    || job.transitionOverride.timeOffBetweenJobsWeeks !== null
+}
+
+function JobEditor({ job, startYear, horizonYears, modelAssumptions, showCareerTransition = false, onChange, onRemove, removeLabel, onOpenGrantEditor, onOpenValuationTimeline, onOpenModelAssumptions, activeGrant }: { job: JobSpec; startYear: number; horizonYears: number; modelAssumptions: ModelAssumptions; showCareerTransition?: boolean; onChange: (job: JobSpec) => void; onRemove?: (() => void) | undefined; removeLabel?: string | undefined; onOpenGrantEditor: OpenGrantEditor; onOpenValuationTimeline: OpenValuationTimeline; onOpenModelAssumptions: () => void; activeGrant?: ActiveGrantSelection | null | undefined }): ReactElement {
   const nameId = useId()
   const rsuGrantTypeId = useId()
   const optionGrantTypeId = useId()
   const isPrivate = job.company.type === 'private'
   const removeText = removeLabel ?? `Remove ${job.name}`
   const hasProjectedRefreshers = job.grantTypes.rsu || job.grantTypes.options
+  const hasTransitionOverride = transitionOverrideActive(job)
+  const effectiveNoticeWeeks = job.transitionOverride.currentJobNoticeWeeks ?? modelAssumptions.careerTransition.currentJobNoticeWeeks
+  const effectiveTimeOffWeeks = job.transitionOverride.timeOffBetweenJobsWeeks ?? modelAssumptions.careerTransition.timeOffBetweenJobsWeeks
+
+  function enableTransitionOverride(): void {
+    onChange({
+      ...job,
+      transitionOverride: {
+        currentJobNoticeWeeks: effectiveNoticeWeeks,
+        timeOffBetweenJobsWeeks: effectiveTimeOffWeeks,
+      },
+    })
+  }
+
+  function clearTransitionOverride(): void {
+    onChange({
+      ...job,
+      priorJobResignationDate: null,
+      transitionOverride: {
+        currentJobNoticeWeeks: null,
+        timeOffBetweenJobsWeeks: null,
+      },
+    })
+  }
 
   return (
     <Card>
@@ -1190,6 +1233,32 @@ function JobEditor({ job, startYear, horizonYears, onChange, onRemove, removeLab
             <Input id={nameId} value={job.name} onChange={(event) => onChange({ ...job, name: event.target.value })} />
           </div>
           <DateField label="Start date" value={job.startDate ?? ''} onChange={(value) => onChange({ ...job, startDate: value || null })} />
+          {showCareerTransition ? (
+            <div className="space-y-3 rounded-md border p-3 sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <Label className="text-sm font-semibold">Career transition</Label>
+                  <p className="text-sm text-muted-foreground">{effectiveNoticeWeeks} week notice · {effectiveTimeOffWeeks} week gap</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={onOpenModelAssumptions}>
+                    <Settings2 className="size-4" /> Go to assumptions
+                  </Button>
+                  <Button type="button" variant={hasTransitionOverride ? 'ghost' : 'outline'} size="sm" onClick={hasTransitionOverride ? clearTransitionOverride : enableTransitionOverride}>
+                    {hasTransitionOverride ? <Trash2 className="size-4" /> : <Pencil className="size-4" />}
+                    {hasTransitionOverride ? 'Clear override' : 'Override'}
+                  </Button>
+                </div>
+              </div>
+              {hasTransitionOverride ? (
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <NumberField label="Notice period" value={effectiveNoticeWeeks} suffix="weeks" min={0} max={52} onChange={(value) => onChange({ ...job, transitionOverride: { ...job.transitionOverride, currentJobNoticeWeeks: value } })} />
+                  <NumberField label="Time off" value={effectiveTimeOffWeeks} suffix="weeks" min={0} max={52} onChange={(value) => onChange({ ...job, transitionOverride: { ...job.transitionOverride, timeOffBetweenJobsWeeks: value } })} />
+                  <DateField label="Prior job resignation date" value={job.priorJobResignationDate ?? ''} onChange={(value) => onChange({ ...job, priorJobResignationDate: value || null })} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <SelectField label="Company type" value={job.company.type} options={COMPANY_TYPE_OPTIONS} onChange={(type) => onChange({ ...job, company: { ...job.company, type } })} />
           <MoneyField label="Base salary" value={job.comp.baseSalary} onChange={(value) => onChange({ ...job, comp: { ...job.comp, baseSalary: value } })} />
           <MoneyField label="Cash bonus" value={job.comp.cashBonus} onChange={(value) => onChange({ ...job, comp: { ...job.comp, cashBonus: value } })} />
@@ -1255,7 +1324,7 @@ function JobEditor({ job, startYear, horizonYears, onChange, onRemove, removeLab
   )
 }
 
-export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, onOpenValuationTimeline, activeGrant }: CareerCompFormSectionProps): ReactElement {
+export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEditor, onOpenValuationTimeline, onOpenModelAssumptions, activeGrant }: CareerCompFormSectionProps): ReactElement {
   if (section === 'basics') {
     return (
       <Card>
@@ -1284,11 +1353,13 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
             job={inputs.currentJob}
             startYear={inputs.startYear}
             horizonYears={inputs.horizonYears}
+            modelAssumptions={inputs.modelAssumptions}
             onChange={(job) => onChange(updateJob(inputs, inputs.currentJob?.id ?? 'current', () => job))}
             onRemove={() => onChange({ ...inputs, currentJob: null })}
             removeLabel="Remove current job — compare against no job"
             onOpenGrantEditor={onOpenGrantEditor}
             onOpenValuationTimeline={onOpenValuationTimeline}
+            onOpenModelAssumptions={onOpenModelAssumptions}
           />
         ) : (
           <Card className="border-dashed">
@@ -1314,10 +1385,13 @@ export function CareerCompFormSection({ inputs, section, onChange, onOpenGrantEd
           job={job}
           startYear={inputs.startYear}
           horizonYears={inputs.horizonYears}
+          modelAssumptions={inputs.modelAssumptions}
+          showCareerTransition
           onChange={(nextJob) => onChange(updateJob(inputs, job.id, () => nextJob))}
           onRemove={inputs.hypotheticalJobs.length > 1 ? () => onChange({ ...inputs, hypotheticalJobs: inputs.hypotheticalJobs.filter((entry) => entry.id !== job.id) }) : undefined}
           onOpenGrantEditor={onOpenGrantEditor}
           onOpenValuationTimeline={onOpenValuationTimeline}
+          onOpenModelAssumptions={onOpenModelAssumptions}
         />
       ))}
       <Button

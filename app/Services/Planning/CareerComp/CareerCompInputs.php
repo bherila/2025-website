@@ -45,6 +45,11 @@ final class CareerCompInputs
                 'id' => 'current',
                 'name' => 'Current role',
                 'startDate' => null,
+                'priorJobResignationDate' => null,
+                'transitionOverride' => [
+                    'currentJobNoticeWeeks' => null,
+                    'timeOffBetweenJobsWeeks' => null,
+                ],
                 'company' => [
                     'type' => 'public',
                     'currentSharePrice' => 80.0,
@@ -96,6 +101,11 @@ final class CareerCompInputs
                 'id' => 'hyp-1',
                 'name' => 'Private offer',
                 'startDate' => null,
+                'priorJobResignationDate' => null,
+                'transitionOverride' => [
+                    'currentJobNoticeWeeks' => null,
+                    'timeOffBetweenJobsWeeks' => null,
+                ],
                 'company' => [
                     'type' => 'private',
                     'currentSharePrice' => 0.0,

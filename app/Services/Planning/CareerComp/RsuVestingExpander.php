@@ -10,12 +10,12 @@ final class RsuVestingExpander
     /**
      * @return list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float}>
      */
-    public function expand(JobSpec $job, int $startYear, int $horizonYears): array
+    public function expand(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $vestingThrough = null): array
     {
         $rows = [];
 
         foreach ($job->rsuGrants() as $grant) {
-            foreach ($this->sharesByYear($grant) as $year => $shares) {
+            foreach ($this->sharesByYear($grant, $vestingThrough) as $year => $shares) {
                 if (! $this->inHorizon($year, $startYear, $horizonYears)) {
                     continue;
                 }
@@ -37,18 +37,30 @@ final class RsuVestingExpander
      * @param  array<string, mixed>  $grant
      * @return array<int, float>
      */
-    private function sharesByYear(array $grant): array
+    private function sharesByYear(array $grant, ?DateTimeImmutable $vestingThrough): array
     {
         $grantDate = $this->date((string) ($grant['grantDate'] ?? ''));
         if (! $grantDate instanceof DateTimeImmutable) {
             return [];
         }
 
-        return VestingSchedule::sharesByYearForGrant(
+        $sharesByYear = [];
+        foreach (VestingSchedule::vestingEventsForGrant(
             $this->grantShareCount($grant),
             $this->date((string) ($grant['vestingStartDate'] ?? '')) ?? $grantDate,
             $grant,
-        );
+        ) as $event) {
+            if ($vestingThrough instanceof DateTimeImmutable && $event['date'] > $vestingThrough) {
+                continue;
+            }
+
+            $year = (int) $event['date']->format('Y');
+            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $event['shares'];
+        }
+
+        ksort($sharesByYear);
+
+        return $sharesByYear;
     }
 
     /** @param array<string, mixed> $grant */

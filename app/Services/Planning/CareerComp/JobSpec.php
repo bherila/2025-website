@@ -30,6 +30,11 @@ final readonly class JobSpec
             'id' => $isCurrent ? 'current' : 'job',
             'name' => $isCurrent ? 'Current role' : 'Opportunity',
             'startDate' => null,
+            'priorJobResignationDate' => null,
+            'transitionOverride' => [
+                'currentJobNoticeWeeks' => null,
+                'timeOffBetweenJobsWeeks' => null,
+            ],
             'company' => [
                 'type' => 'public',
                 'currentSharePrice' => 0.0,

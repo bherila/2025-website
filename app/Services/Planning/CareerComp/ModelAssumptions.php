@@ -37,6 +37,10 @@ final readonly class ModelAssumptions
             'tax' => [
                 'filingStatus' => 'single',
             ],
+            'careerTransition' => [
+                'currentJobNoticeWeeks' => 2.0,
+                'timeOffBetweenJobsWeeks' => 0.0,
+            ],
         ];
     }
 
@@ -58,6 +62,16 @@ final readonly class ModelAssumptions
         $value = $this->value('tax.filingStatus');
 
         return $value === 'mfj' ? 'mfj' : 'single';
+    }
+
+    public function currentJobNoticeWeeks(): float
+    {
+        return $this->boundedNumber('careerTransition.currentJobNoticeWeeks', 52.0);
+    }
+
+    public function timeOffBetweenJobsWeeks(): float
+    {
+        return $this->boundedNumber('careerTransition.timeOffBetweenJobsWeeks', 52.0);
     }
 
     public function commonFmvPctForStage(?string $stage, bool $liquidityEvent): float
@@ -97,9 +111,14 @@ final readonly class ModelAssumptions
 
     private function number(string $path): float
     {
+        return $this->boundedNumber($path, 100.0);
+    }
+
+    private function boundedNumber(string $path, float $max): float
+    {
         $value = $this->value($path);
 
-        return is_numeric($value) ? max(0.0, min(100.0, (float) $value)) : 0.0;
+        return is_numeric($value) ? max(0.0, min($max, (float) $value)) : 0.0;
     }
 
     private function value(string $path): mixed

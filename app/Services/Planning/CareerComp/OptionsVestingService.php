@@ -10,12 +10,12 @@ final class OptionsVestingService
     /**
      * @return array{rows:list<array{grantId:string,type:string,year:int,vestedShares:float,exercisableShares:float,source?:string}>,warnings:list<string>}
      */
-    public function expand(JobSpec $job, int $startYear, int $horizonYears): array
+    public function expand(JobSpec $job, int $startYear, int $horizonYears, ?DateTimeImmutable $vestingThrough = null): array
     {
         $exerciseEvents = [];
 
         foreach ($job->optionGrants() as $grant) {
-            foreach ($this->exerciseEventsForGrant($grant) as $event) {
+            foreach ($this->exerciseEventsForGrant($grant, $vestingThrough) as $event) {
                 $exerciseEvents[] = $event;
             }
         }
@@ -91,7 +91,7 @@ final class OptionsVestingService
      * @param  array<string, mixed>  $grant
      * @return list<array{grantId:string,requestedType:string,year:int,shares:float,strike:float,grantDate:string,earlyExercise:bool,vestingSharesByYear:array<int, float>,source?:string|null}>
      */
-    private function exerciseEventsForGrant(array $grant): array
+    private function exerciseEventsForGrant(array $grant, ?DateTimeImmutable $vestingThrough): array
     {
         $shareCount = is_numeric($grant['shareCount'] ?? null) ? (float) $grant['shareCount'] : 0.0;
         $grantDate = $this->date((string) ($grant['grantDate'] ?? ''));
@@ -99,10 +99,11 @@ final class OptionsVestingService
             return [];
         }
 
-        $vestingSharesByYear = VestingSchedule::sharesByYearForGrant(
+        $vestingSharesByYear = $this->vestingSharesByYear(
             $shareCount,
             $this->date((string) ($grant['vestingStartDate'] ?? '')) ?? $grantDate,
             $grant,
+            $vestingThrough,
         );
         $grantId = (string) ($grant['id'] ?? 'option');
         $requestedType = (string) ($grant['type'] ?? 'nso') === 'iso' ? 'iso' : 'nso';
@@ -112,6 +113,10 @@ final class OptionsVestingService
         $earlyExercise = filter_var($grant['earlyExercise83b'] ?? false, FILTER_VALIDATE_BOOL);
 
         if ($earlyExercise) {
+            if ($vestingThrough instanceof DateTimeImmutable && $grantDate > $vestingThrough) {
+                return [];
+            }
+
             return [[
                 'grantId' => $grantId,
                 'requestedType' => $requestedType,
@@ -141,6 +146,27 @@ final class OptionsVestingService
         }
 
         return $events;
+    }
+
+    /**
+     * @param  array<string, mixed>  $grant
+     * @return array<int, float>
+     */
+    private function vestingSharesByYear(float $shareCount, DateTimeImmutable $vestingStartDate, array $grant, ?DateTimeImmutable $vestingThrough): array
+    {
+        $sharesByYear = [];
+        foreach (VestingSchedule::vestingEventsForGrant($shareCount, $vestingStartDate, $grant) as $event) {
+            if ($vestingThrough instanceof DateTimeImmutable && $event['date'] > $vestingThrough) {
+                continue;
+            }
+
+            $year = (int) $event['date']->format('Y');
+            $sharesByYear[$year] = ($sharesByYear[$year] ?? 0.0) + $event['shares'];
+        }
+
+        ksort($sharesByYear);
+
+        return $sharesByYear;
     }
 
     /**

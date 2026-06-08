@@ -36,6 +36,11 @@ export function buildDefaultJob(id: string, name: string): JobSpec {
     id,
     name,
     startDate: null,
+    priorJobResignationDate: null,
+    transitionOverride: {
+      currentJobNoticeWeeks: null,
+      timeOffBetweenJobsWeeks: null,
+    },
     company: {
       type: 'public',
       currentSharePrice: 25,
@@ -101,6 +106,10 @@ export const DEFAULT_MODEL_ASSUMPTIONS: ModelAssumptions = {
   },
   tax: {
     filingStatus: 'single',
+  },
+  careerTransition: {
+    currentJobNoticeWeeks: 2,
+    timeOffBetweenJobsWeeks: 0,
   },
 }
 

@@ -62,6 +62,11 @@ function normalizeJob(job: JobSpec, fallbackId: string): JobSpec {
     id: jobId,
     name: job.name.trim() || fallbackId,
     startDate: job.startDate && job.startDate.trim() !== '' ? job.startDate : null,
+    priorJobResignationDate: job.priorJobResignationDate && job.priorJobResignationDate.trim() !== '' ? job.priorJobResignationDate : null,
+    transitionOverride: {
+      currentJobNoticeWeeks: job.transitionOverride.currentJobNoticeWeeks,
+      timeOffBetweenJobsWeeks: job.transitionOverride.timeOffBetweenJobsWeeks,
+    },
     grantTypes,
     company: {
       ...job.company,
