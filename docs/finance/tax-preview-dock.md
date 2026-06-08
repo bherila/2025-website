@@ -8,11 +8,11 @@ The Tax Preview page uses the horizontal Miller-columns drill-down shell as its 
 
 ```
 TaxPreviewPage
-├── DockActionsProvider                        // ⌘K palette + worksheet dialog dispatch
-│   ├── DockHeaderBar                          // title + year selector + review/export actions + "Jump to form…" button
+├── DockActionsProvider                        // worksheet/document dialog dispatch
+│   ├── DockHeaderBar                          // title + year selector + review/export actions + shared "Jump…" button
 │   ├── TaxEstimateHeader                      // persistent 3-tier (slim / expanded / full modal)
 │   └── MillerShell                            // Tax adapter around shared Miller primitives
-│       ├── CommandPalette                     // Tax row builder + shared MillerCommandPalette
+│       ├── useRegisterTaxPreviewCommands      // contributes tax rows to FinanceNavbar palette
 │       ├── MillerRegistryShell                // shared registry-to-column renderer
 │       │   └── MillerColumnShell              // shared responsive Miller columns
 │       │       └── FormRegistryEntry.component
@@ -32,7 +32,7 @@ TaxPreviewPage
 | `resources/js/components/finance/tax-preview/TaxEstimateHeader.tsx` | 3-tier estimate (slim one-liner / expanded KPI cards / full modal with brackets + safe-harbor). Exports `summarizeTaxEstimate` + `TaxEstimateFullDetail`. |
 | `resources/js/components/finance/tax-preview/formRegistry.ts` | Registry *type* — `FormRegistry`, `FormId` union, `FormCategory`, `Presentation`, `FormRenderProps`, `DrillTarget`. |
 | `resources/js/components/finance/tax-preview/registry.tsx` | Registry *instance* — every form's adapter + entry (category, presentation, instances, xlsx contributor). |
-| `resources/js/components/finance/tax-preview/DockActions.tsx` | Tax context for the ⌘K palette open state and worksheet dialog dispatch. |
+| `resources/js/components/finance/tax-preview/DockActions.tsx` | Tax context for worksheet/document dialog dispatch. |
 | `resources/js/components/finance/tax-preview/CommandPalette.tsx` | Tax command-palette row builder. Shared rendering and shortcut behavior live in `resources/js/components/ui/miller/MillerCommandPalette.tsx`. |
 
 ### Shared Miller scope
@@ -183,7 +183,7 @@ K-1 and K-3 source detail fields are read-only by default. Users must explicitly
 
 ## Keyboard + interaction rules
 
-- **⌘K / Ctrl+K** — open command palette (registered in `useMillerCommandPaletteShortcut` through the Tax adapter).
+- **⌘K / Ctrl+K** — opens the single Finance command palette owned by `FinanceNavbar`. Tax Preview registers its form, schedule, app, and worksheet rows into that shared palette while mounted; it no longer renders a separate Tax-only command dialog.
 - **Escape** — truncate rightmost column. Ignored when an editable field (input/textarea/select/contenteditable) has focus, or when any Dialog with `data-open` is present (so worksheets handle their own Escape).
 - **Back/forward** — navigates the column stack (browser history).
 

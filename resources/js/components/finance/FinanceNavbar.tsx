@@ -1,7 +1,7 @@
 'use client'
 
 import { ArrowLeft, Settings } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -19,51 +19,35 @@ import {
   navigationMenuTriggerStyle,
 } from '@/components/ui/navigation-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { FINANCE_ACCOUNT_TOOLS, FINANCE_TOP_TOOLS, type FinanceTopToolId } from '@/lib/financeNavigation'
 import { accountTabUrl, allAccountsUrl, type YearSelection } from '@/lib/financeRouteBuilder'
 import { cn } from '@/lib/utils'
 
-interface FinAccount {
-  acct_id: number
-  acct_name: string
-}
+import { FinanceCommandPalette, FinanceCommandPaletteTrigger } from './FinanceCommandPalette'
+import { type FinAccount, useFinanceAccounts } from './useFinanceAccounts'
+
 
 const ALL_ACCOUNTS_SENTINEL: FinAccount = { acct_id: 0, acct_name: 'All Accounts' }
 
-export type FinanceSection =
-  | 'accounts'
-  | 'rsu'
-  | 'payslips'
-  | 'all-transactions'
-  | 'documents'
-  | 'tax-preview'
-  | 'tags'
-  | 'calculators'
-  | 'config'
+export type FinanceSection = FinanceTopToolId | 'all-transactions'
 
-/** Right-side nav items */
-const RIGHT_SECTIONS: { value: FinanceSection; label: string; href: string }[] = [
-  { value: 'tax-preview', label: 'Tax Preview', href: '/finance/tax-preview' },
-  { value: 'documents', label: 'Documents', href: '/finance/documents' },
-  { value: 'rsu', label: 'RSU', href: '/finance/rsu' },
-  { value: 'payslips', label: 'Payslips', href: '/finance/payslips' },
-  { value: 'tags', label: 'Tags', href: '/finance/tags' },
-  { value: 'calculators', label: 'Calculators', href: '/financial-planning' },
-  { value: 'accounts', label: 'Accounts', href: '/finance/accounts' },
-]
+const RIGHT_SECTIONS = FINANCE_TOP_TOOLS.filter((tool) => tool.id !== 'config').map((tool) => ({
+  value: tool.id,
+  label: tool.label,
+  href: tool.href,
+}))
 
 /** Exported for backwards compat with tests */
 export const FINANCE_SECTIONS = RIGHT_SECTIONS
 
 /** Left-side account tabs */
-const ACCOUNT_TABS: { value: string; label: string; disabledForAll: boolean }[] = [
-  { value: 'transactions', label: 'Transactions', disabledForAll: false },
-  { value: 'duplicates', label: 'Duplicates', disabledForAll: true },
-  { value: 'linker', label: 'Linker', disabledForAll: true },
-  { value: 'statements', label: 'Statements', disabledForAll: true },
-  { value: 'lots', label: 'Lots', disabledForAll: false },
-  { value: 'summary', label: 'Summary', disabledForAll: true },
-  { value: 'fees', label: 'Fees', disabledForAll: false },
-]
+const ACCOUNT_TABS = FINANCE_ACCOUNT_TOOLS
+  .filter((tool) => tool.visibleInNavbarTabs)
+  .map((tool) => ({
+    value: tool.id,
+    label: tool.label,
+    disabledForAll: !tool.supportsAllAccounts,
+  }))
 
 export interface FinanceNavbarProps {
   /** Account ID: number for specific account, 'all' for all accounts, undefined for non-account pages */
@@ -84,32 +68,9 @@ export default function FinanceNavbar({
   activeSection,
   children,
 }: FinanceNavbarProps) {
-  const [accounts, setAccounts] = useState<FinAccount[]>([])
+  const { accounts } = useFinanceAccounts({ enabled: accountId !== undefined })
   const [searchValue, setSearchValue] = useState('')
   const [isComboboxOpen, setIsComboboxOpen] = useState(false)
-
-  const fetchAccounts = useCallback(async () => {
-    try {
-      const response = await fetch('/api/finance/accounts')
-      if (response.ok) {
-        const data = await response.json()
-        const all: FinAccount[] = [
-          ...(data.assetAccounts || []),
-          ...(data.liabilityAccounts || []),
-          ...(data.retirementAccounts || []),
-        ]
-        setAccounts(all)
-      }
-    } catch (error) {
-      console.error('Failed to fetch finance accounts:', error)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (accountId !== undefined) {
-      fetchAccounts()
-    }
-  }, [accountId, fetchAccounts])
 
   const currentAccount = useMemo<FinAccount>(() => {
     if (accountId === 'all') return ALL_ACCOUNTS_SENTINEL
@@ -171,6 +132,8 @@ export default function FinanceNavbar({
           >
             Finance
           </span>
+
+          <FinanceCommandPaletteTrigger />
 
           {/* Account combobox (only when accountId is defined) */}
           {accountId !== undefined && (
@@ -297,6 +260,8 @@ export default function FinanceNavbar({
           </NavigationMenu>
         </div>
       </div>
+
+      <FinanceCommandPalette currentAccountId={accountId} activeSection={activeSection} />
 
       {children}
     </div>

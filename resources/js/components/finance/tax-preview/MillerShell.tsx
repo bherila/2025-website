@@ -3,7 +3,7 @@ import { type ReactElement, type ReactNode, useEffect } from 'react'
 import { MillerRegistryShell } from '@/components/ui/miller'
 
 import { useTaxPreview } from '../TaxPreviewContext'
-import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
+import { useRegisterTaxPreviewCommands } from './CommandPalette'
 import { useDockActions } from './DockActions'
 import { type FormRegistry, getTaxFormMeta, isDrillOnly } from './formRegistry'
 import { useTaxPreviewPrefs } from './useTaxPreviewPrefs'
@@ -17,9 +17,9 @@ interface MillerShellProps {
 export function MillerShell({ registry, homeView }: MillerShellProps): ReactElement {
   const { route, pushColumn, replaceFrom, truncateTo, navigate } = useTaxRoute()
   const state = useTaxPreview()
-  const { openWorksheet, paletteOpen, setPaletteOpen } = useDockActions()
+  const { openWorksheet } = useDockActions()
   const { addRecent } = useTaxPreviewPrefs(state.year)
-  useCommandPaletteShortcut(paletteOpen, setPaletteOpen)
+  useRegisterTaxPreviewCommands(registry)
 
   const rightmostForm = route.columns.length > 0 ? route.columns[route.columns.length - 1]!.form : null
 
@@ -39,7 +39,6 @@ export function MillerShell({ registry, homeView }: MillerShellProps): ReactElem
 
   return (
     <>
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} registry={registry} />
       <MillerRegistryShell
         registry={registry}
         state={state}
