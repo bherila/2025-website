@@ -28,6 +28,8 @@ class PartnershipBasisService
      */
     private const K1_INCOME_BOXES = ['1', '2', '3', '5', '6a', '7', '8', '9a', '10'];
 
+    private const SUSPENDED_LOSS_RELEASE_SOURCE_PATH = 'carryforward.suspended_loss_release';
+
     /**
      * @param  iterable<FileForTaxDocument>|null  $documents
      * @return Collection<int, FinPartnershipBasisYear>
@@ -171,10 +173,15 @@ class PartnershipBasisService
 
         $endingTaxCapital = $this->endingCapitalCents($events, $beginningTaxCapital, 'tax_basis');
         $endingBookCapital = $this->endingCapitalCents($events, $beginningBookCapital, 'book');
+        $releasedSuspendedLoss = 0;
         if ($suspendedLoss > 0 && $availableOutsideBasis > 0) {
             $releasedSuspendedLoss = min($availableOutsideBasis, $suspendedLoss);
             $availableOutsideBasis -= $releasedSuspendedLoss;
             $suspendedLoss -= $releasedSuspendedLoss;
+            $totals['deductions_losses_decrease_cents'] += $releasedSuspendedLoss;
+            $this->upsertSuspendedLossReleaseEvent($interest, $year, $releasedSuspendedLoss, $prior);
+        } else {
+            $this->deleteSuspendedLossReleaseEvent($interest, $year);
         }
 
         $endingInside = $endingTaxCapital;
@@ -403,8 +410,14 @@ class PartnershipBasisService
     private function syncK1Document(FileForTaxDocument $document, int $userId, int $year): ?FinPartnershipInterest
     {
         $data = is_array($document->parsed_data) ? $document->parsed_data : [];
+        if (K1LegacyTransformer::isLegacy($data)) {
+            $data = K1LegacyTransformer::transform($data);
+        }
+
         $formType = $this->mapFormType((string) ($data['formType'] ?? 'K-1-1065'));
         if ($formType !== 'k1_1065') {
+            $this->pruneDocumentK1Events($userId, $document, $year);
+
             return null;
         }
 
@@ -554,8 +567,9 @@ class PartnershipBasisService
         // ── Coded boxes ──
         $this->collectK1CodedEvents($data, $reviewStatus, $push);
 
-        // ── Distributions: choose ONE source to avoid double counting. Priority:
+        // ── Distributions: choose ONE usable source to avoid double counting. Priority:
         //    normalized basis.distributions → Box 19 codes → capital-account withdrawals. ──
+        $recordedDistribution = false;
         if ($normalizedDistributions !== []) {
             foreach ($normalizedDistributions as $index => $distribution) {
                 if (! is_array($distribution)) {
@@ -567,8 +581,11 @@ class PartnershipBasisService
                 }
                 [$type, $label] = $this->distributionTypeForCode((string) ($distribution['code'] ?? 'A'));
                 $push($type, 'k1_code', "basis.distributions.{$index}", $label, $cents, '19', (string) ($distribution['code'] ?? ''), $reviewStatus);
+                $recordedDistribution = true;
             }
-        } elseif (is_array($data['codes']['19'] ?? null) && $data['codes']['19'] !== []) {
+        }
+
+        if (! $recordedDistribution && is_array($data['codes']['19'] ?? null) && $data['codes']['19'] !== []) {
             foreach ($data['codes']['19'] as $index => $item) {
                 if (! is_array($item)) {
                     continue;
@@ -579,8 +596,11 @@ class PartnershipBasisService
                 }
                 [$type, $label] = $this->distributionTypeForCode((string) ($item['code'] ?? 'A'));
                 $push($type, 'k1_code', "codes.19.{$index}.value", $label, $cents, '19', (string) ($item['code'] ?? ''), $reviewStatus);
+                $recordedDistribution = true;
             }
-        } else {
+        }
+
+        if (! $recordedDistribution) {
             $withdrawals = $this->moneyToCents($capital['withdrawalsAndDistributions'] ?? null);
             if ($withdrawals !== null && $withdrawals !== 0) {
                 $push(PartnershipBasisEventType::CashDistribution, 'k1_field', 'basis.capitalAccount.withdrawalsAndDistributions', 'K-1 capital account withdrawals & distributions', $withdrawals, '19', null, $reviewStatus);
@@ -588,9 +608,32 @@ class PartnershipBasisService
         }
 
         // ── Capital-account analysis (inside / book capital seeds + reconciliation only) ──
+        $capitalMethod = $this->normalizedCapitalAccountMethod($capital);
+        $isTaxBasisCapital = $this->isTaxBasisCapitalMethod($capitalMethod);
         $beginningCapital = $this->moneyToCents($capital['beginningCapital'] ?? null);
         if ($beginningCapital !== null && $beginningCapital !== 0) {
-            $push(PartnershipBasisEventType::InitialTaxBasisCapital, 'k1_field', 'basis.capitalAccount.beginningCapital', 'K-1 beginning capital account', $beginningCapital, null, null, $reviewStatus);
+            $push(
+                $isTaxBasisCapital ? PartnershipBasisEventType::InitialTaxBasisCapital : PartnershipBasisEventType::InitialCapitalAccountValue,
+                'k1_field',
+                'basis.capitalAccount.beginningCapital',
+                $isTaxBasisCapital ? 'K-1 beginning tax-basis capital account' : 'K-1 beginning book/704(b) capital account',
+                $beginningCapital,
+                null,
+                null,
+                $reviewStatus,
+                ['capital_account_method' => $capitalMethod],
+            );
+        }
+        $endingCapital = $this->moneyToCents($capital['endingCapital'] ?? null);
+        if ($endingCapital !== null) {
+            $metadata = [
+                'capital_account_method' => $capitalMethod,
+                'ending_book_capital_cents' => $endingCapital,
+            ];
+            if ($isTaxBasisCapital) {
+                $metadata['ending_tax_basis_capital_cents'] = $endingCapital;
+            }
+            $push(PartnershipBasisEventType::ReconciliationAdjustment, 'k1_field', 'basis.capitalAccount.endingCapital', 'K-1 ending capital account', $endingCapital, null, null, $reviewStatus, $metadata);
         }
         $contributed = $this->moneyToCents($capital['capitalContributedDuringYear'] ?? null);
         if ($contributed !== null && $contributed !== 0) {
@@ -697,7 +740,29 @@ class PartnershipBasisService
         $beginningNonrecourse = $this->moneyToCents($liabilities['beginningNonrecourse'] ?? null) ?? 0;
         $endingNonrecourse = $this->moneyToCents($liabilities['endingNonrecourse'] ?? null) ?? 0;
         $netLiabilityChange = ($endingRecourse + $endingQualified + $endingNonrecourse) - ($beginningRecourse + $beginningQualified + $beginningNonrecourse);
+        $metadata = [
+            'beginning_recourse_liability_cents' => $beginningRecourse,
+            'ending_recourse_liability_cents' => $endingRecourse,
+            'beginning_qualified_nonrecourse_liability_cents' => $beginningQualified,
+            'ending_qualified_nonrecourse_liability_cents' => $endingQualified,
+            'beginning_nonrecourse_liability_cents' => $beginningNonrecourse,
+            'ending_nonrecourse_liability_cents' => $endingNonrecourse,
+        ];
         if ($netLiabilityChange === 0) {
+            if (array_sum(array_map('abs', $metadata)) > 0) {
+                $push(
+                    PartnershipBasisEventType::Memorandum,
+                    'k1_field',
+                    'basis.liabilities',
+                    'K-1 liability share balances',
+                    0,
+                    null,
+                    null,
+                    $reviewStatus,
+                    $metadata,
+                );
+            }
+
             return;
         }
 
@@ -710,14 +775,7 @@ class PartnershipBasisService
             null,
             null,
             $reviewStatus,
-            [
-                'beginning_recourse_liability_cents' => $beginningRecourse,
-                'ending_recourse_liability_cents' => $endingRecourse,
-                'beginning_qualified_nonrecourse_liability_cents' => $beginningQualified,
-                'ending_qualified_nonrecourse_liability_cents' => $endingQualified,
-                'beginning_nonrecourse_liability_cents' => $beginningNonrecourse,
-                'ending_nonrecourse_liability_cents' => $endingNonrecourse,
-            ],
+            $metadata,
         );
     }
 
@@ -742,14 +800,20 @@ class PartnershipBasisService
             $keptIds[] = $event->id;
         }
 
+        $this->pruneDocumentK1Events($interest->user_id, $document, $year, $keptIds);
+    }
+
+    /**
+     * @param  int[]  $keptIds
+     */
+    private function pruneDocumentK1Events(int $userId, FileForTaxDocument $document, int $year, array $keptIds = []): void
+    {
         FinPartnershipBasisEvent::query()
-            ->where('user_id', $interest->user_id)
-            ->where('partnership_interest_id', $interest->id)
+            ->where('user_id', $userId)
             ->where('tax_year', $year)
             ->where('tax_document_id', $document->id)
-            ->when($link instanceof TaxDocumentAccount, fn ($query) => $query->where('tax_document_account_id', $link->id), fn ($query) => $query->whereNull('tax_document_account_id'))
             ->whereIn('source_type', ['k1_field', 'k1_code'])
-            ->whereNotIn('id', $keptIds !== [] ? $keptIds : [0])
+            ->when($keptIds !== [], fn ($query) => $query->whereNotIn('id', $keptIds))
             ->delete();
     }
 
@@ -872,7 +936,7 @@ class PartnershipBasisService
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
     private function beginningOutsideBasisCents(Collection $events, ?FinPartnershipBasisYear $prior): int
     {
-        $manual = $events->first(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::BeginningBasis->value);
+        $manual = $events->filter(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::BeginningBasis->value)->last();
         if ($manual instanceof FinPartnershipBasisEvent) {
             return max(0, (int) $manual->amount_cents);
         }
@@ -888,7 +952,7 @@ class PartnershipBasisService
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
     private function capitalBeginningCents(Collection $events, string $eventType, int $fallback = 0): int
     {
-        $event = $events->first(fn (FinPartnershipBasisEvent $basisEvent): bool => $basisEvent->event_type === $eventType);
+        $event = $events->filter(fn (FinPartnershipBasisEvent $basisEvent): bool => $basisEvent->event_type === $eventType)->last();
 
         return $event instanceof FinPartnershipBasisEvent ? (int) $event->amount_cents : $fallback;
     }
@@ -896,7 +960,7 @@ class PartnershipBasisService
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
     private function capitalBeginningNullableCents(Collection $events, string $eventType, ?int $fallback = null): ?int
     {
-        $event = $events->first(fn (FinPartnershipBasisEvent $basisEvent): bool => $basisEvent->event_type === $eventType);
+        $event = $events->filter(fn (FinPartnershipBasisEvent $basisEvent): bool => $basisEvent->event_type === $eventType)->last();
 
         return $event instanceof FinPartnershipBasisEvent ? (int) $event->amount_cents : $fallback;
     }
@@ -904,6 +968,18 @@ class PartnershipBasisService
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
     private function endingCapitalCents(Collection $events, int $beginning, string $kind): int
     {
+        $metadataKey = $kind === 'book' ? 'ending_book_capital_cents' : 'ending_tax_basis_capital_cents';
+        $explicitEnding = $events->filter(function (FinPartnershipBasisEvent $event) use ($metadataKey): bool {
+            $metadata = $event->getAttribute('metadata');
+
+            return is_array($metadata) && isset($metadata[$metadataKey]) && is_numeric($metadata[$metadataKey]);
+        })->last();
+        if ($explicitEnding instanceof FinPartnershipBasisEvent) {
+            $metadata = $explicitEnding->getAttribute('metadata');
+
+            return (int) $metadata[$metadataKey];
+        }
+
         if ($kind === 'book') {
             return $beginning;
         }
@@ -1020,6 +1096,7 @@ class PartnershipBasisService
             'cash_distribution', 'property_distribution_basis', 'marketable_securities_distribution' => 40,
             'liability_decrease', 'deemed_distribution_liability_decrease' => 50,
             'deductible_loss', 'section179', 'depletion', 'nondeductible_expense', 'foreign_tax' => 60,
+            'suspended_loss_released' => 80,
             'sale_exchange', 'liquidation_distribution_cash', 'liquidation_distribution_property' => 70,
             'manual_increase_to_outside_basis' => 25,
             'manual_decrease_to_outside_basis' => 65,
@@ -1036,7 +1113,57 @@ class PartnershipBasisService
             PartnershipBasisEventType::ReconciliationAdjustment,
             PartnershipBasisEventType::ManualReconciliationNote,
             PartnershipBasisEventType::Memorandum,
+            PartnershipBasisEventType::SuspendedLossReleased,
         ], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $capital
+     */
+    private function normalizedCapitalAccountMethod(array $capital): ?string
+    {
+        $method = $capital['method'] ?? null;
+        if (! is_string($method) || trim($method) === '') {
+            return null;
+        }
+
+        return strtolower(str_replace(['-', ' '], '_', trim($method)));
+    }
+
+    private function isTaxBasisCapitalMethod(?string $method): bool
+    {
+        return $method === null || in_array($method, ['tax', 'tax_basis', 'tax_basis_capital'], true);
+    }
+
+    private function upsertSuspendedLossReleaseEvent(FinPartnershipInterest $interest, int $year, int $amountCents, ?FinPartnershipBasisYear $prior): void
+    {
+        $this->upsertEvent($interest, [
+            'tax_year' => $year,
+            'source_type' => 'carryforward',
+            'source_path' => self::SUSPENDED_LOSS_RELEASE_SOURCE_PATH,
+        ], [
+            'event_order' => $this->eventOrder(PartnershipBasisEventType::SuspendedLossReleased->value),
+            'basis_side' => 'outside',
+            'event_type' => PartnershipBasisEventType::SuspendedLossReleased->value,
+            'amount_cents' => $amountCents,
+            'source_label' => sprintf('%d released suspended loss from prior-year carryforward', $year),
+            'review_status' => $prior instanceof FinPartnershipBasisYear && $prior->review_status === 'reviewed' ? 'reviewed' : 'needs_review',
+            'metadata' => [
+                'prior_basis_year_id' => $prior?->id,
+                'released_suspended_loss_cents' => $amountCents,
+            ],
+        ]);
+    }
+
+    private function deleteSuspendedLossReleaseEvent(FinPartnershipInterest $interest, int $year): void
+    {
+        FinPartnershipBasisEvent::query()
+            ->where('user_id', $interest->user_id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->where('source_type', 'carryforward')
+            ->where('source_path', self::SUSPENDED_LOSS_RELEASE_SOURCE_PATH)
+            ->delete();
     }
 
     /** @param array<string, mixed> $data */

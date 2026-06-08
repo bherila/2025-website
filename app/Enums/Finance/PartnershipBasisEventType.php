@@ -50,6 +50,7 @@ enum PartnershipBasisEventType: string
     case ForeignTax = 'foreign_tax';
     case Section179 = 'section179';
     case Depletion = 'depletion';
+    case SuspendedLossReleased = 'suspended_loss_released';
     case SaleExchange = 'sale_exchange';
     case LiquidationDistributionCash = 'liquidation_distribution_cash';
     case LiquidationDistributionProperty = 'liquidation_distribution_property';

@@ -347,6 +347,14 @@ class PartnershipBasisServiceTest extends TestCase
 
         $this->assertSame(0, $basisYear->ending_outside_basis_cents);
         $this->assertSame(50_00, $basisYear->suspended_loss_carryforward_cents);
+        $this->assertSame(100_00, $basisYear->deductions_losses_decrease_cents);
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2024,
+            'event_type' => 'suspended_loss_released',
+            'amount_cents' => 100_00,
+            'source_type' => 'carryforward',
+        ]);
     }
 
     public function test_prior_tax_and_book_capital_roll_forward_without_current_capital_seed(): void
@@ -454,6 +462,172 @@ class PartnershipBasisServiceTest extends TestCase
 
         $this->assertCount(0, $years);
         $this->assertDatabaseCount('fin_partnership_interests', 0);
+    }
+
+    public function test_relinked_k1_prunes_events_from_old_interest(): void
+    {
+        $document = $this->k1Document(2024, 'Relink LP', '33-3333333', [
+            'A' => ['value' => '33-3333333'],
+            'B' => ['value' => 'Relink LP'],
+            'D' => ['value' => 'false'],
+            '5' => ['value' => '100'],
+        ], []);
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+        $oldInterest = FinPartnershipInterest::query()
+            ->where('account_id', $this->account->acct_id)
+            ->where('partnership_name', 'Relink LP')
+            ->firstOrFail();
+
+        $newAccount = FinAccounts::create(['acct_name' => 'Relinked Account']);
+        $document->forceFill(['account_id' => $newAccount->acct_id])->save();
+
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+
+        $newInterest = FinPartnershipInterest::query()
+            ->where('account_id', $newAccount->acct_id)
+            ->where('partnership_name', 'Relink LP')
+            ->firstOrFail();
+        $oldBasisYear = FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $oldInterest->id)
+            ->where('tax_year', 2024)
+            ->firstOrFail();
+        $newBasisYear = FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $newInterest->id)
+            ->where('tax_year', 2024)
+            ->firstOrFail();
+
+        $this->assertDatabaseMissing('fin_partnership_basis_events', [
+            'tax_document_id' => $document->id,
+            'partnership_interest_id' => $oldInterest->id,
+        ]);
+        $this->assertSame(0, $oldBasisYear->ending_outside_basis_cents);
+        $this->assertSame(100_00, $newBasisYear->ending_outside_basis_cents);
+    }
+
+    public function test_non_1065_correction_prunes_existing_k1_events(): void
+    {
+        $document = $this->k1Document(2024, 'Corrected Form LP', '44-4444444', [
+            'A' => ['value' => '44-4444444'],
+            'B' => ['value' => 'Corrected Form LP'],
+            'D' => ['value' => 'false'],
+            '5' => ['value' => '100'],
+        ], []);
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+        $interest = FinPartnershipInterest::query()->where('partnership_name', 'Corrected Form LP')->firstOrFail();
+
+        $parsed = $document->parsed_data;
+        $parsed['formType'] = 'K-1-1120S';
+        $document->forceFill(['parsed_data' => $parsed])->save();
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+
+        $basisYear = FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->firstOrFail();
+
+        $this->assertDatabaseMissing('fin_partnership_basis_events', ['tax_document_id' => $document->id]);
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_legacy_k1_data_is_transformed_before_basis_sync(): void
+    {
+        FileForTaxDocument::create([
+            'user_id' => $this->user->id,
+            'tax_year' => 2024,
+            'form_type' => 'k1',
+            'account_id' => $this->account->acct_id,
+            'original_filename' => 'legacy-k1.pdf',
+            'stored_filename' => 'legacy-k1.pdf',
+            'file_size_bytes' => 1,
+            'file_hash' => sha1('legacy-k1'),
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'form_source' => 1065,
+                'entity_ein' => '66-6666666',
+                'entity_name' => 'Legacy LP',
+                'box1_ordinary_income' => 100,
+                'other_coded_items' => [['code' => '19A', 'amount' => 40, 'description' => 'Cash distribution']],
+            ],
+        ]);
+
+        $basisYear = $this->service->recomputeForUserYear($this->user->id, 2024)->first();
+
+        $this->assertSame('Legacy LP', $basisYear->partnershipInterest->partnership_name);
+        $this->assertSame('666666666', $basisYear->partnershipInterest->partnership_ein);
+        $this->assertSame(100_00, $basisYear->taxable_income_increase_cents);
+        $this->assertSame(40_00, $basisYear->cash_distributions_cents);
+        $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_liability_balances_are_preserved_when_net_change_is_zero(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Flat Liability LP', [], [], [
+            'liabilities' => [
+                'beginningRecourse' => 50,
+                'endingRecourse' => 50,
+                'beginningNonrecourse' => 25,
+                'endingNonrecourse' => 25,
+            ],
+        ]);
+
+        $this->assertSame(50_00, $basisYear->beginning_recourse_liability_cents);
+        $this->assertSame(50_00, $basisYear->ending_recourse_liability_cents);
+        $this->assertSame(25_00, $basisYear->beginning_nonrecourse_liability_cents);
+        $this->assertSame(25_00, $basisYear->ending_nonrecourse_liability_cents);
+    }
+
+    public function test_empty_normalized_distribution_falls_back_to_box19_codes(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Distribution Fallback LP', ['5' => '100'], [
+            '19' => [['code' => 'A', 'value' => '40']],
+        ], [
+            'distributions' => [['code' => 'A', 'amount' => null, 'partnershipAdjustedBasis' => null]],
+        ]);
+
+        $this->assertSame(40_00, $basisYear->cash_distributions_cents);
+        $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_non_tax_capital_method_seeds_book_capital_only(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Book Capital LP', [], [], [
+            'capitalAccount' => [
+                'method' => 'section_704b',
+                'beginningCapital' => 100,
+                'endingCapital' => 130,
+            ],
+        ]);
+
+        $this->assertSame(0, $basisYear->beginning_tax_basis_capital_cents);
+        $this->assertSame(0, $basisYear->ending_tax_basis_capital_cents);
+        $this->assertSame(100_00, $basisYear->beginning_book_capital_cents);
+        $this->assertSame(130_00, $basisYear->ending_book_capital_cents);
+    }
+
+    public function test_latest_beginning_basis_override_wins(): void
+    {
+        $interest = $this->interest('Beginning Correction LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->manualEvent($interest, 2024, 'beginning_basis', 200_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(200_00, $basisYear->beginning_outside_basis_cents);
+        $this->assertSame(200_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_book_capital_ending_balance_uses_k1_ending_capital(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Ending Book LP', [], [], [
+            'capitalAccount' => [
+                'method' => 'gaap',
+                'beginningCapital' => 100,
+                'endingCapital' => 80,
+            ],
+        ]);
+
+        $this->assertSame(100_00, $basisYear->beginning_book_capital_cents);
+        $this->assertSame(80_00, $basisYear->ending_book_capital_cents);
     }
 
     /**
