@@ -119,10 +119,12 @@ final class PrivateValuationScenarioService
 
         for ($offset = 0; $offset < $horizonYears; $offset++) {
             $year = $startYear + $offset;
-            $snapshot = $this->snapshotForYear($stages, $year);
+            $liquidityEventYear = $this->firstLiquidityEventYear($stages, $year);
+            $projectionYear = $liquidityEventYear ?? $year;
+            $snapshot = $this->snapshotForYear($stages, $projectionYear);
             $commonFmv = $this->commonFmvForSnapshot($job, $snapshot, $baseFullyDilutedShares, $modelAssumptions);
-            $shareTotals = $this->cumulativeShareTotals($job, $vestingRows, $year);
-            $dilutedShares = $this->dilutedSharesByType($shareTotals['ownershipLots'], $stages, $year);
+            $shareTotals = $this->cumulativeShareTotals($job, $vestingRows, $projectionYear);
+            $dilutedShares = $this->dilutedSharesByType($shareTotals['ownershipLots'], $stages, $projectionYear);
             $dilutedOwnershipPct = round(($dilutedShares['total'] / $baseFullyDilutedShares) * 100.0, 6);
 
             $preferredPostMoneyValuation = $this->number($snapshot['preferredPostMoneyValuation'] ?? null);
@@ -153,7 +155,7 @@ final class PrivateValuationScenarioService
                 'commonIntrinsicValue' => $commonIntrinsicValue,
                 'exerciseCost' => $shareTotals['exerciseCost'],
                 'netPaperValue' => $netPaperValue,
-                'liquidityEvent' => $this->hasLiquidityEvent($stages, $year),
+                'liquidityEvent' => $liquidityEventYear !== null,
             ];
         }
 
@@ -204,15 +206,15 @@ final class PrivateValuationScenarioService
     /**
      * @param  list<array<string, mixed>>  $stages
      */
-    private function hasLiquidityEvent(array $stages, int $year): bool
+    private function firstLiquidityEventYear(array $stages, int $year): ?int
     {
         foreach ($stages as $stage) {
             if ((int) ($stage['year'] ?? 0) <= $year && filter_var($stage['liquidityEvent'] ?? false, FILTER_VALIDATE_BOOL)) {
-                return true;
+                return (int) ($stage['year'] ?? 0);
             }
         }
 
-        return false;
+        return null;
     }
 
     /**
@@ -295,12 +297,12 @@ final class PrivateValuationScenarioService
             }
 
             $grantId = (string) $row['grantId'];
-            $exercisableShares = (float) $row['exercisableShares'];
-            $optionSharesByGrant[$grantId] = ($optionSharesByGrant[$grantId] ?? 0.0) + $exercisableShares;
-            if ($exercisableShares > 0.0) {
+            $vestedShares = (float) $row['vestedShares'];
+            $optionSharesByGrant[$grantId] = ($optionSharesByGrant[$grantId] ?? 0.0) + $vestedShares;
+            if ($vestedShares > 0.0) {
                 $ownershipLots[] = [
                     'grantYear' => $this->grantYearForRow($job, $row),
-                    'shares' => $exercisableShares,
+                    'shares' => $vestedShares,
                     'type' => 'option',
                 ];
             }
