@@ -101,6 +101,14 @@ final class RsuVestingExpander
 
         ksort($sharesByYear);
 
+        // Only treat explicit events as authoritative when at least one valid event
+        // contributed shares. An empty result here means every event was filtered out
+        // (zero shareCount, unparseable vestDate, or past the cutoff), so return null
+        // to let sharesByYear() fall back to the synthetic schedule.
+        if ($sharesByYear === []) {
+            return null;
+        }
+
         return $sharesByYear;
     }
 
