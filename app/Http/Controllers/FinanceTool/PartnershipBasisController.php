@@ -132,9 +132,9 @@ class PartnershipBasisController extends Controller
         $year = $this->year($request);
         $financeAccount = $this->account($account);
         $payload = $request->validate([
-            'reason' => ['required', 'string', 'max:2000'],
+            'reason' => ['required', 'string', 'max:2000', 'not_regex:/^\\s*$/'],
             'amendment_reason' => ['nullable', 'string', 'max:2000'],
-            'amended_source_document_id' => ['nullable', 'integer', 'exists:fin_tax_documents,id'],
+            'amended_source_document_id' => ['nullable', 'integer', Rule::exists('fin_tax_documents', 'id')->where('user_id', Auth::id())],
         ]);
         $basisYears = $this->partnershipBasisService->unlockAccountYear(
             $financeAccount,
