@@ -739,6 +739,97 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertContains('Basis Source Lines', $names);
     }
 
+    /**
+     * Holding-period policy guard (issue #954).
+     *
+     * Indeterminate holding period (no acquisition date, no prior-year rollforward) ⇒
+     * gain is NEVER automatically summed into Schedule D or Form 8949.  This is the
+     * confirmed, intentional default — not a gap to be "fixed" by falling back to short-term.
+     *
+     * The three sub-cases documented below must all remain true:
+     *   1. No acquisition date + no rollforward → indeterminate → review-only.
+     *   2. Prior-year rollforward present → long-term proxy → Schedule D line 10.
+     *   3. Explicit acquisition date → exact computation → line 3 or line 10.
+     */
+    public function test_holding_period_policy_indeterminate_stays_review_only_confirmed_issue_954(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Policy 954 Account']);
+
+        // ── Case 1: first-year interest, no acquisition date, no rollforward ──
+        // Gain must be review-only (routing = NeedsReview) and must NOT flow to Schedule D.
+        $firstYear = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Policy 954 First Year LP',
+            'normalized_partnership_name' => 'policy 954 first year lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $firstYear->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->event($user->id, $firstYear->id, 2024, 'cash_distribution', 150_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $gainSource = collect($facts['partnershipBasis']['distributionGainSources'])
+            ->firstWhere('sourceType', 'partnership_excess_distribution_gain');
+        $this->assertNotNull($gainSource, 'indeterminate-hold excess distribution gain must appear in partnershipBasis sources for review');
+        $this->assertSame('needs_review_schedule_d_line_5_or_12', $gainSource['routing'],
+            'indeterminate holding period must route to NeedsReview, not to Schedule D line 3 or 10');
+        $this->assertSame(0.0, $facts['scheduleD']['line3GainLoss'],
+            'indeterminate gain must NOT appear on Schedule D line 3');
+        $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss'],
+            'indeterminate gain must NOT appear on Schedule D line 10');
+        $this->assertEmpty(
+            collect($facts['form8949']['rows'])->where('accountName', 'Policy 954 First Year LP'),
+            'indeterminate gain must NOT produce a Form 8949 row'
+        );
+
+        // ── Case 2: prior-year rollforward resolves to long-term proxy → Schedule D line 10 ──
+        $crossYear = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Policy 954 Cross Year LP',
+            'normalized_partnership_name' => 'policy 954 cross year lp',
+            'form_type' => 'k1_1065',
+        ]);
+        // Seed a prior year so the rollforward event is created when 2024 is computed.
+        $this->event($user->id, $crossYear->id, 2023, 'beginning_basis', 100_00, 'reviewed');
+        $this->event($user->id, $crossYear->id, 2024, 'cash_distribution', 180_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2023);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts2 = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $crossYearGain = collect($facts2['partnershipBasis']['distributionGainSources'])
+            ->firstWhere(fn (array $s): bool => str_contains($s['label'] ?? '', 'Policy 954 Cross Year LP'));
+        $this->assertNotNull($crossYearGain, 'cross-year interest gain must appear in sources');
+        $this->assertSame('schedule_d_line_10', $crossYearGain['routing'],
+            'prior-year rollforward proxy must resolve to long-term (Schedule D line 10)');
+
+        // ── Case 3: explicit acquisition date → exact short-term/long-term result ──
+        $exactDate = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Policy 954 Exact Date LP',
+            'normalized_partnership_name' => 'policy 954 exact date lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2024-01-01',
+        ]);
+        $this->event($user->id, $exactDate->id, 2024, 'beginning_basis', 50_00, 'reviewed');
+        $this->event($user->id, $exactDate->id, 2024, 'cash_distribution', 80_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts3 = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $exactGain = collect($facts3['partnershipBasis']['distributionGainSources'])
+            ->firstWhere(fn (array $s): bool => str_contains($s['label'] ?? '', 'Policy 954 Exact Date LP'));
+        $this->assertNotNull($exactGain);
+        $this->assertSame('schedule_d_line_3', $exactGain['routing'],
+            'interest acquired 2024-01-01, distributed 2024-12-31 (≤1 year) must be short-term');
+    }
+
     private function event(int $userId, int $interestId, int $year, string $eventType, int $amountCents, string $reviewStatus): void
     {
         FinPartnershipBasisEvent::create([

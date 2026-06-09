@@ -225,6 +225,12 @@ class PartnershipBasisFactsBuilder
      * not reported on a 1099-B → Schedule D line 10. An indeterminate period yields no box (the gain
      * is left for review and excluded from Schedule D totals).
      *
+     * POLICY (confirmed, issue #954): indeterminate → NeedsReview with box = null so the gain is
+     * NEVER automatically included in Schedule D. §731 gain on the deemed sale of a partnership
+     * interest requires knowing whether it is short-term or long-term; omitting the gain from the
+     * return totals until the acquisition date is confirmed is the conservative, correct behaviour.
+     * Do not change the default arm to a short-term assumption.
+     *
      * @return array{0: TaxFactRouting, 1: ?string, 2: bool}
      */
     private function dispositionRouting(string $holdingPeriod): array

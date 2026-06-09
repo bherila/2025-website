@@ -266,6 +266,12 @@ class PartnershipBasisService
      * (a prior-year rollforward proves the interest crossed a year boundary) and is indeterminate
      * in the interest's first tracked year so first-year gains stay review-only until confirmed.
      *
+     * POLICY (confirmed, issue #954): indeterminate holding period means the gain is review-only
+     * and is NEVER automatically summed into Schedule D or Form 8949. The taxpayer must set
+     * `interest_start_date` (or the system must detect a prior-year rollforward) before the gain
+     * is reported. Do not change this to a conservative short-term default — a silent automatic
+     * classification is worse than an explicit review flag when the acquisition date is unknown.
+     *
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      */
     public function holdingPeriod(FinPartnershipInterest $interest, int $year, Collection $events, ?CarbonImmutable $dispositionDate = null): string
@@ -279,6 +285,10 @@ class PartnershipBasisService
                 : self::HOLDING_PERIOD_SHORT;
         }
 
+        // Without an acquisition date, a prior-year rollforward event proves the interest crossed
+        // a December 31 boundary, which is sufficient to conclude long-term. If neither signal is
+        // present (first tracked year, no rollforward) the holding period is genuinely unknown and
+        // callers must treat the result as indeterminate and exclude it from Schedule D totals.
         $crossedYearBoundary = $events->contains(
             fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::PriorYearRollforward->value,
         );
