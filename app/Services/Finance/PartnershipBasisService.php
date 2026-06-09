@@ -921,12 +921,19 @@ class PartnershipBasisService
             $push(PartnershipBasisEventType::Section179, 'k1_field', 'fields.12.value', 'K-1 Box 12 Section 179 deduction', $box12, '12', null, $reviewStatus);
         }
 
-        // ── Foreign taxes paid or accrued (Box 21, the flat field the rest of the app parses for
-        //    foreign tax) — a §705(a)(2)(B) expenditure that reduces outside basis. The K-3 carries
-        //    the country detail, but Box 21 reports the partner's total, which is the basis effect. ──
+        // ── Foreign taxes paid or accrued — §705(a)(2)(B)/§901 expenditure that reduces outside
+        //    basis. Priority: Box 21 (K-1 face total) → K-3 Part III Section 4 grandTotalUSD
+        //    (country detail; used when Box 21 is absent, e.g. because the partnership omitted the
+        //    summary and moved all detail to the K-3). When neither source is parseable the item
+        //    stays memorandum / needs_review via the Box 16 coded-event path. ──
         $box21 = $this->k1FieldCents($data, '21');
         if ($box21 !== null && $box21 !== 0) {
             $push(PartnershipBasisEventType::ForeignTax, 'k1_field', 'fields.21.value', 'K-1 Box 21 foreign taxes paid or accrued', $box21, '21', null, $reviewStatus);
+        } else {
+            $k3ForeignTaxCents = $this->k3ForeignTaxCents($data);
+            if ($k3ForeignTaxCents !== null && $k3ForeignTaxCents !== 0) {
+                $push(PartnershipBasisEventType::ForeignTax, 'k1_field', 'k3.part3_section4.grandTotalUSD', 'K-3 Part III Section 4 foreign taxes paid or accrued', $k3ForeignTaxCents, 'K-3', null, $reviewStatus);
+            }
         }
 
         // ── Coded boxes ──
@@ -1812,6 +1819,58 @@ class PartnershipBasisService
     private function k1FieldCents(array $data, string $box): ?int
     {
         return $this->sourceOverrideCents($data, "field:{$box}") ?? $this->moneyToCents($data['fields'][$box]['value'] ?? null);
+    }
+
+    /**
+     * Extract the total foreign-taxes-paid/accrued amount from K-3 Part III Section 4
+     * (sectionId = 'part3_section4') and return it in cents, or null when the K-3 section
+     * is absent or the amount cannot be parsed. Returns null (not zero) so callers can
+     * distinguish "not present" from "explicitly zero".
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function k3ForeignTaxCents(array $data): ?int
+    {
+        $sections = $data['k3']['sections'] ?? null;
+        if (! is_array($sections)) {
+            return null;
+        }
+
+        $sectionData = null;
+        foreach ($sections as $section) {
+            if (is_array($section) && ($section['sectionId'] ?? null) === 'part3_section4' && is_array($section['data'] ?? null)) {
+                $sectionData = $section['data'];
+                break;
+            }
+        }
+
+        if ($sectionData === null) {
+            return null;
+        }
+
+        // grandTotalUSD is pre-computed by K3SectionAssembler; prefer it over summing countries.
+        $grandTotal = $sectionData['grandTotalUSD'] ?? null;
+        if (is_numeric($grandTotal) && (float) $grandTotal !== 0.0) {
+            return $this->moneyToCents($grandTotal);
+        }
+
+        // Fall back to summing per-country amounts when grandTotalUSD is absent or zero.
+        if (is_array($sectionData['countries'] ?? null)) {
+            $total = 0.0;
+            foreach ($sectionData['countries'] as $country) {
+                if (! is_array($country)) {
+                    continue;
+                }
+                $amount = $country['amount_usd'] ?? $country['total'] ?? $country['passiveForeign'] ?? null;
+                if (is_numeric($amount)) {
+                    $total += (float) $amount;
+                }
+            }
+
+            return $total !== 0.0 ? $this->moneyToCents($total) : null;
+        }
+
+        return null;
     }
 
     private function moneyToCents(mixed $value): ?int
