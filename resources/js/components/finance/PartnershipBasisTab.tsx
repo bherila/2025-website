@@ -134,10 +134,25 @@ const MANUAL_EVENT_TYPES: { value: string; label: string }[] = [
   { value: 'nondeductible_expense', label: 'Nondeductible expense' },
   { value: 'foreign_tax', label: 'Foreign tax' },
   { value: 'beginning_basis', label: 'Beginning basis override' },
-  { value: 'manual_increase_to_outside_basis', label: 'Manual basis increase' },
-  { value: 'manual_decrease_to_outside_basis', label: 'Manual basis decrease' },
+  { value: 'manual_increase_to_outside_basis', label: 'Manual outside-basis increase' },
+  { value: 'manual_decrease_to_outside_basis', label: 'Manual outside-basis decrease' },
+  { value: 'manual_increase_to_tax_capital', label: 'Manual tax-capital increase' },
+  { value: 'manual_decrease_to_tax_capital', label: 'Manual tax-capital decrease' },
+  { value: 'manual_increase_to_book_capital', label: 'Manual book-capital increase' },
+  { value: 'manual_decrease_to_book_capital', label: 'Manual book-capital decrease' },
   { value: 'manual_reconciliation_note', label: 'Memorandum note (no basis effect)' },
 ]
+
+/** Which figure each manual adjustment moves — surfaced in the dialog before saving. */
+const MANUAL_EVENT_EFFECT: Record<string, string> = {
+  manual_increase_to_outside_basis: 'Increases outside basis only — not tax-basis or book capital.',
+  manual_decrease_to_outside_basis: 'Decreases outside basis only — not tax-basis or book capital.',
+  manual_increase_to_tax_capital: 'Increases tax-basis capital (and the inside-basis proxy) only — not outside basis.',
+  manual_decrease_to_tax_capital: 'Decreases tax-basis capital (and the inside-basis proxy) only — not outside basis.',
+  manual_increase_to_book_capital: 'Increases book/FMV capital only — not outside basis or tax-basis capital.',
+  manual_decrease_to_book_capital: 'Decreases book/FMV capital only — not outside basis or tax-basis capital.',
+  manual_reconciliation_note: 'Memorandum only — no effect on any basis or capital figure.',
+}
 
 function selectedYearForAccount(accountId: number): number {
   const year = getEffectiveYear(accountId)
@@ -660,6 +675,9 @@ function AddEventDialog({ accountId, year, interestId, disabled, onSaved, setErr
                 {MANUAL_EVENT_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
               </SelectContent>
             </Select>
+            {MANUAL_EVENT_EFFECT[form.eventType] ? (
+              <p className="text-xs text-muted-foreground">{MANUAL_EVENT_EFFECT[form.eventType]}</p>
+            ) : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <CurrencyField id="ae-amount" label="Amount" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} info="Enter the gross amount; the rollforward applies the correct sign for the chosen type." />

@@ -630,6 +630,50 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(25_00, $basisYear->deductions_losses_decrease_cents);
     }
 
+    public function test_manual_tax_capital_event_moves_tax_capital_and_inside_basis_only(): void
+    {
+        $interest = $this->interest('Tax Capital LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 200_00);
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 100_00);
+        $this->manualEvent($interest, 2024, 'manual_increase_to_tax_capital', 30_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(130_00, $basisYear->ending_tax_basis_capital_cents);
+        $this->assertSame(130_00, $basisYear->ending_inside_basis_cents);
+        $this->assertSame(200_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_manual_book_capital_event_moves_book_capital_only(): void
+    {
+        $interest = $this->interest('Book Capital LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 50_00);
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 80_00);
+        $this->manualEvent($interest, 2024, 'initial_capital_account_value', 120_00);
+        $this->manualEvent($interest, 2024, 'manual_decrease_to_book_capital', 20_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(100_00, $basisYear->ending_book_capital_cents);
+        $this->assertSame(80_00, $basisYear->ending_tax_basis_capital_cents);
+        $this->assertSame(50_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_manual_outside_basis_adjustment_does_not_change_tax_basis_capital(): void
+    {
+        // Regression for #945: a manual outside-basis adjustment moves outside basis only and must
+        // NOT leak into the tax-basis capital fallback.
+        $interest = $this->interest('Outside Only LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 100_00);
+        $this->manualEvent($interest, 2024, 'manual_increase_to_outside_basis', 50_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(150_00, $basisYear->ending_outside_basis_cents);
+        $this->assertSame(100_00, $basisYear->ending_tax_basis_capital_cents);
+    }
+
     public function test_non_1065_k1_documents_are_skipped(): void
     {
         $document = $this->k1Document(2024, 'S Corp K1 Inc', '11-1111111', [
