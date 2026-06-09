@@ -34,10 +34,6 @@ interface DockActionsValue {
   openWorksheet: (id: FormId) => void
   /** Close the active worksheet modal. */
   closeWorksheet: () => void
-  /** Whether the ⌘K command palette is currently open. */
-  paletteOpen: boolean
-  /** Imperatively open/close the palette (button trigger or programmatic). */
-  setPaletteOpen: (next: boolean | ((prev: boolean) => boolean)) => void
 }
 
 const DockActionsContext = createContext<DockActionsValue | null>(null)
@@ -66,13 +62,11 @@ export function DockActionsProvider({
   openTaxReturnPdfExport,
   isExportingPdf,
 }: DockActionsProviderProps): React.ReactElement {
-  const { accountDocuments, w2Documents, refreshAll, year: selectedYear, isLoading } = useTaxPreview()
+  const { accountDocuments, allK1Documents, w2Documents, refreshAll, year: selectedYear, isLoading } = useTaxPreview()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<TaxDocument | undefined>(undefined)
   const [reviewFocusFieldId, setReviewFocusFieldId] = useState<string | undefined>(undefined)
   const [worksheetId, setWorksheetId] = useState<FormId | null>(null)
-  const [paletteOpen, setPaletteOpen] = useState(false)
-
   const openWorksheet = useCallback((id: FormId) => setWorksheetId(id), [])
   const closeWorksheet = useCallback(() => setWorksheetId(null), [])
 
@@ -88,7 +82,7 @@ export function DockActionsProvider({
 
   const openReviewDoc = useCallback(
     (docId: number, focusFieldId?: string) => {
-      const target = [...accountDocuments, ...w2Documents].find((doc) => doc.id === docId)
+      const target = [...accountDocuments, ...allK1Documents, ...w2Documents].find((doc) => doc.id === docId)
       if (!target) {
         return false
       }
@@ -97,7 +91,7 @@ export function DockActionsProvider({
       setReviewOpen(true)
       return true
     },
-    [accountDocuments, w2Documents],
+    [accountDocuments, allK1Documents, w2Documents],
   )
 
   const reviewK1Doc = useCallback((docId: number, focusFieldId?: string) => {
@@ -180,10 +174,8 @@ export function DockActionsProvider({
       bulkSetSbpElection,
       openWorksheet,
       closeWorksheet,
-      paletteOpen,
-      setPaletteOpen,
     }),
-    [exportXlsx, isExportingXlsx, openTaxReturnPdfExport, isExportingPdf, reviewK1Doc, openTaxDocumentDetail, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet, paletteOpen],
+    [exportXlsx, isExportingXlsx, openTaxReturnPdfExport, isExportingPdf, reviewK1Doc, openTaxDocumentDetail, openReviewQueue, bulkSetSbpElection, openWorksheet, closeWorksheet],
   )
 
   return (
@@ -191,7 +183,7 @@ export function DockActionsProvider({
       {children}
       <TaxDocumentReviewModal
         open={reviewOpen}
-        taxYear={selectedYear}
+        taxYear={reviewDoc?.tax_year ?? selectedYear}
         {...(reviewDoc ? { document: reviewDoc } : {})}
         focusFieldId={reviewFocusFieldId}
         onClose={() => {

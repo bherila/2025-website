@@ -76,6 +76,54 @@ describe('MillerCommandPalette', () => {
     expect(onSelect).toHaveBeenCalledWith(rows[1])
   })
 
+
+
+  it('searches row labels even when labels are absent from explicit keywords', () => {
+    render(
+      <MillerCommandPalette<TestCategory, TestRow>
+        open
+        onOpenChange={jest.fn()}
+        title="Jump"
+        description="Search destinations"
+        placeholder="Jump somewhere..."
+        emptyMessage="No matches."
+        groupOrder={['Clinical', 'Admin']}
+        groupHeadings={{ Clinical: 'Clinical', Admin: 'Admin' }}
+        rows={rows}
+        onSelect={jest.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Jump somewhere...'), { target: { value: 'labs' } })
+
+    expect(screen.getByText('Labs')).toBeInTheDocument()
+  })
+
+  it('passes a custom filter to cmdk', () => {
+    const filter = jest.fn((value: string) => (value === 'access' ? 1 : 0))
+    render(
+      <MillerCommandPalette<TestCategory, TestRow>
+        open
+        onOpenChange={jest.fn()}
+        title="Jump"
+        description="Search destinations"
+        placeholder="Jump somewhere..."
+        emptyMessage="No matches."
+        groupOrder={['Clinical', 'Admin']}
+        groupHeadings={{ Clinical: 'Clinical', Admin: 'Admin' }}
+        rows={rows}
+        onSelect={jest.fn()}
+        filter={filter}
+      />,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Jump somewhere...'), { target: { value: 'only access' } })
+
+    expect(filter).toHaveBeenCalled()
+    expect(screen.getByText('Access')).toBeInTheDocument()
+    expect(screen.queryByText('Labs')).not.toBeInTheDocument()
+  })
+
   it('toggles from the Cmd/Ctrl-K shortcut', () => {
     render(<ShortcutHarness />)
 

@@ -38,14 +38,14 @@ The legacy name `FinanceSubNav` (`resources/js/components/finance/FinanceSubNav.
 | Region | Content |
 |--------|---------|
 | Far Left | "←" back button (links to `/`, tooltip "Back to BWH") |
-| Left | "FINANCE" branding in all-caps (tracked text) |
+| Left | "FINANCE" branding in all-caps (tracked text) plus the unified Search / ⌘K command-palette trigger |
 | Left (account pages) | Account combobox (with "All Accounts" option) |
-| Left (account pages) | Account tabs: Transactions, Duplicates, Linker, Statements, Lots, Summary |
-| Right (`ml-auto`) | Section links: Tax Preview, RSU, Payslips, Tags, Accounts |
+| Left (account pages) | Account tabs: Transactions, Duplicates, Linker, Statements, Lots, Summary, Fees |
+| Right (`ml-auto`) | Section links: Tax Preview, Documents, RSU, Payslips, Tags, Calculators, Accounts, Config |
 
 Account combobox and tabs appear only when `accountId` prop is provided.
 When `accountId === undefined` (non-account pages such as Tags, RSU), a standalone **Transactions** link is shown instead of the account combobox and tabs; it defaults to the All Accounts transactions view (`/finance/account/all/transactions`).
-Duplicates, Linker, Statements, and Summary tabs are disabled when `accountId === 'all'`; Transactions and Lots are always enabled.
+Duplicates, Linker, Statements, and Summary tabs are disabled when `accountId === 'all'`; Transactions, Lots, and Fees are enabled for all-account navigation. The command palette also exposes supported route-level tools such as Import and Maintenance without doing transaction-level search.
 
 #### Props
 
@@ -58,14 +58,21 @@ interface FinanceNavbarProps {
 }
 ```
 
+
+#### Unified Finance Command Palette
+
+`FinanceNavbar` owns the single rendered Finance command palette and global ⌘K / Ctrl+K listener for finance pages. Page-local surfaces can register extra rows through the shared client-side registry; Tax Preview uses this to contribute form, schedule, app, and worksheet rows while it is mounted, even though `#FinanceNavbar` and `#TaxPreviewPage` are separate React roots. The palette includes finance top tools, supported all-account tools, supported per-account tools, and any registered page-local rows. It intentionally does not perform transaction-level search.
+
 #### Right-Side Section Links
 
 | Link | Route |
 |------|-------|
 | Tax Preview | `/finance/tax-preview` |
+| Documents | `/finance/documents` |
 | RSU | `/finance/rsu` |
 | Payslips | `/finance/payslips` |
 | Tags | `/finance/tags` |
+| Calculators | `/financial-planning` |
 | Accounts | `/finance/accounts` |
 | Config (gear icon) | `/finance/config` |
 

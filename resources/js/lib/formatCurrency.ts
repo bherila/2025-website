@@ -57,6 +57,30 @@ function formatCompactCurrencyAmount(amount: number): string {
   return `${isNegative ? '-' : ''}$${compactCurrencyDisplayAmount(compactAmount)}${unit.suffix}`
 }
 
+function decimalPrecisionForDisplay(amount: number): number {
+  if (Number.isInteger(amount)) {
+    return 0
+  }
+
+  const normalized = amount.toString().includes('e')
+    ? amount.toFixed(8).replace(/0+$/, '')
+    : amount.toString()
+
+  return Math.min(normalized.split('.')[1]?.length ?? 0, 8)
+}
+
+export function formatCurrencyInput(value: string | number | null | undefined): string {
+  const amount = parseMoney(value)
+  if (amount === null) {
+    return ''
+  }
+
+  return currency(amount, {
+    symbol: '',
+    precision: decimalPrecisionForDisplay(amount),
+  }).format()
+}
+
 export function formatFriendlyCurrencyAmount(value: string | number | null | undefined): string {
   const amount = parseMoney(value)
   return amount === null ? '-' : formatCompactCurrencyAmount(amount)

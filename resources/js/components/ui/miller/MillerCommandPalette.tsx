@@ -13,6 +13,7 @@ export interface MillerCommandPaletteRow<Category extends string> {
   rowKey: string
   label: string
   keywords: string[]
+  description?: string
   category: Category
 }
 
@@ -27,6 +28,7 @@ export interface MillerCommandPaletteProps<Category extends string, Row extends 
   groupHeadings: Record<Category, string>
   rows: Row[]
   onSelect: (row: Row) => void
+  filter?: (value: string, search: string, keywords?: string[]) => number
 }
 
 export function MillerCommandPalette<Category extends string, Row extends MillerCommandPaletteRow<Category>>({
@@ -40,6 +42,7 @@ export function MillerCommandPalette<Category extends string, Row extends Miller
   groupHeadings,
   rows,
   onSelect,
+  filter,
 }: MillerCommandPaletteProps<Category, Row>): ReactElement {
   const grouped = useMemo(() => groupByCategory(rows), [rows])
 
@@ -49,7 +52,13 @@ export function MillerCommandPalette<Category extends string, Row extends Miller
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title={title} description={description}>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      {...(filter ? { commandProps: { filter } } : {})}
+    >
       <CommandInput placeholder={placeholder} />
       <CommandList>
         <CommandEmpty>{emptyMessage}</CommandEmpty>
@@ -61,11 +70,25 @@ export function MillerCommandPalette<Category extends string, Row extends Miller
 
           return (
             <CommandGroup key={category} heading={groupHeadings[category]}>
-              {items.map((row) => (
-                <CommandItem key={row.rowKey} value={row.rowKey} keywords={row.keywords} onSelect={() => handleSelect(row)}>
-                  {row.label}
-                </CommandItem>
-              ))}
+              {items.map((row) => {
+                const searchableKeywords = unique([
+                  row.label,
+                  row.description ?? '',
+                  row.rowKey,
+                  ...row.keywords,
+                ])
+
+                return (
+                  <CommandItem
+                    key={row.rowKey}
+                    value={row.rowKey}
+                    keywords={searchableKeywords}
+                    onSelect={() => handleSelect(row)}
+                  >
+                    {row.label}
+                  </CommandItem>
+                )
+              })}
             </CommandGroup>
           )
         })}
@@ -134,4 +157,8 @@ function isEditableTarget(event: KeyboardEvent): boolean {
   }
 
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)))
 }

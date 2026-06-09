@@ -3,6 +3,7 @@ import { ClipboardList, FileSpreadsheet, FileText, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
+import { setFinanceCommandPaletteOpen } from '../FinanceCommandRegistry'
 import { YearSelectorWithNav } from '../YearSelectorWithNav'
 import { useDockActions } from './DockActions'
 
@@ -31,7 +32,7 @@ export function DockHeaderBar({
   pendingReviewCount,
   onYearChange,
 }: DockHeaderBarProps): React.ReactElement {
-  const { exportXlsx, isExportingXlsx, openTaxReturnPdfExport, isExportingPdf, openReviewQueue, setPaletteOpen } = useDockActions()
+  const { exportXlsx, isExportingXlsx, openTaxReturnPdfExport, isExportingPdf, openReviewQueue } = useDockActions()
   const meta = navigatorMeta()
 
   return (
@@ -39,12 +40,12 @@ export function DockHeaderBar({
       <h1 className="text-base font-semibold tracking-tight">Tax Preview</h1>
       <button
         type="button"
-        onClick={() => setPaletteOpen(true)}
+        onClick={() => setFinanceCommandPaletteOpen(true)}
         className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Open command palette"
       >
         <Search className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>Jump to form…</span>
+        <span>Jump…</span>
         <kbd className="ml-1 hidden rounded border border-border bg-muted px-1 font-mono text-[10px] sm:inline">
           {meta}K
         </kbd>

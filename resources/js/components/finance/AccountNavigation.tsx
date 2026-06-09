@@ -1,9 +1,10 @@
 'use client'
 import { Settings, Upload } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { FINANCE_ACCOUNT_TOOLS } from '@/lib/financeNavigation'
 import {
   getEffectiveYear,
   getTabUrl,
@@ -14,56 +15,15 @@ import {
 
 import AccountYearSelector from './AccountYearSelector'
 
-interface FinAccount {
-  acct_id: number
-  acct_name: string
-  acct_number?: string | null
-}
+export { useFinanceAccounts } from './useFinanceAccounts'
 
-/**
- * Fetches all finance accounts (asset, liability, retirement) and returns them as a flat list.
- */
-export function useFinanceAccounts(): { accounts: FinAccount[]; isLoading: boolean } {
-  const [accounts, setAccounts] = useState<FinAccount[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  const fetchAccounts = useCallback(async () => {
-    try {
-      const response = await fetch('/api/finance/accounts')
-      if (response.ok) {
-        const data = await response.json()
-        const all: FinAccount[] = [
-          ...(data.assetAccounts || []),
-          ...(data.liabilityAccounts || []),
-          ...(data.retirementAccounts || []),
-        ]
-        setAccounts(all)
-      }
-    } catch (error) {
-      console.error('Failed to fetch finance accounts:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchAccounts()
-  }, [fetchAccounts])
-
-  return { accounts, isLoading }
-}
-
-// Tabs that show year selector
-const TAB_ITEMS = [
-  { value: 'transactions', title: 'Transactions', showYearSelector: true },
-  { value: 'duplicates', title: 'Duplicates', showYearSelector: true },
-  { value: 'linker', title: 'Linker', showYearSelector: true },
-  { value: 'statements', title: 'Statements', showYearSelector: true },
-  { value: 'lots', title: 'Lots', showYearSelector: false },
-  { value: 'summary', title: 'Summary', showYearSelector: true },
-  { value: 'fees', title: 'Fees', showYearSelector: true },
-  { value: 'basis', title: 'Basis', showYearSelector: true },
-]
+const TAB_ITEMS = FINANCE_ACCOUNT_TOOLS
+  .filter((tool) => tool.visibleInNavbarTabs)
+  .map((tool) => ({
+    value: tool.id,
+    title: tool.label,
+    showYearSelector: tool.preserveYear && tool.id !== 'lots',
+  }))
 
 export default function AccountNavigation({
   accountId,
