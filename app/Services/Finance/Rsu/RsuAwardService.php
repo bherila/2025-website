@@ -3,6 +3,7 @@
 namespace App\Services\Finance\Rsu;
 
 use App\Models\FinanceTool\FinEquityAwards;
+use App\Models\FinanceTool\FinRsuVestSettlement;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -17,6 +18,10 @@ class RsuAwardService
     public const string PRICE_SOURCE_QUOTE_CLOSE = 'quote_close';
 
     public const string PRICE_SOURCE_UNKNOWN = 'unknown';
+
+    public function __construct(
+        private readonly RsuSettlementService $settlementService,
+    ) {}
 
     /**
      * @param  array<int, array<string, mixed>>  $grants
@@ -60,10 +65,31 @@ class RsuAwardService
 
     public function deleteForUser(int $userId, int $awardId): bool
     {
-        return FinEquityAwards::query()
-            ->where('uid', $userId)
-            ->where('id', $awardId)
-            ->delete() > 0;
+        return DB::transaction(function () use ($userId, $awardId): bool {
+            $award = FinEquityAwards::query()
+                ->where('uid', $userId)
+                ->where('id', $awardId)
+                ->first();
+
+            if ($award === null) {
+                return false;
+            }
+
+            $settlementIds = FinRsuVestSettlement::query()
+                ->where('uid', $userId)
+                ->whereDate('vest_date', $award->vest_date)
+                ->where('symbol', $award->symbol)
+                ->pluck('id')
+                ->all();
+
+            $deleted = $award->delete();
+
+            foreach (array_unique($settlementIds) as $settlementId) {
+                $this->settlementService->reconcileAfterAwardDeletion($userId, (int) $settlementId);
+            }
+
+            return $deleted;
+        });
     }
 
     /**

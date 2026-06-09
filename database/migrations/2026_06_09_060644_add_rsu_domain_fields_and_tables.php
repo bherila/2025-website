@@ -11,6 +11,7 @@ return new class extends Migration
     {
         $this->makeShareCountDecimal();
         $this->widenSymbolColumn();
+        $this->widenPriceColumns();
 
         Schema::table('fin_equity_awards', function (Blueprint $table): void {
             if (! Schema::hasColumn('fin_equity_awards', 'vest_price_source')) {
@@ -124,6 +125,8 @@ return new class extends Migration
                 }
             }
         });
+
+        $this->narrowPriceColumns();
     }
 
     private function widenSymbolColumn(): void
@@ -142,5 +145,25 @@ return new class extends Migration
         }
 
         DB::statement('ALTER TABLE fin_equity_awards MODIFY share_count DECIMAL(18,6) NOT NULL');
+    }
+
+    private function widenPriceColumns(): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
+        DB::statement('ALTER TABLE fin_equity_awards MODIFY vest_price DECIMAL(18,6) NULL');
+        DB::statement('ALTER TABLE fin_equity_awards MODIFY grant_price DECIMAL(18,6) NULL');
+    }
+
+    private function narrowPriceColumns(): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
+        DB::statement('ALTER TABLE fin_equity_awards MODIFY vest_price DECIMAL(10,2) NULL');
+        DB::statement('ALTER TABLE fin_equity_awards MODIFY grant_price DECIMAL(10,2) NULL');
     }
 };

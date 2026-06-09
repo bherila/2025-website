@@ -98,6 +98,45 @@ class RsuSettlementService
         return $settlement;
     }
 
+    public function reconcileAfterAwardDeletion(int $userId, int $settlementId): void
+    {
+        $settlement = FinRsuVestSettlement::query()
+            ->where('uid', $userId)
+            ->with('allocations')
+            ->find($settlementId);
+
+        if ($settlement === null || $settlement->status === 'ignored') {
+            return;
+        }
+
+        if ($settlement->allocations->isNotEmpty()) {
+            $this->reconcileAllocatedSettlement($settlement);
+
+            return;
+        }
+
+        $awards = FinEquityAwards::query()
+            ->where('uid', $userId)
+            ->whereDate('vest_date', $settlement->vest_date)
+            ->where('symbol', $settlement->symbol)
+            ->whereNotNull('vest_price')
+            ->get();
+
+        if ($awards->isEmpty()) {
+            $settlement->delete();
+
+            return;
+        }
+
+        $summary = $this->summary($awards);
+        $settlement->fill([
+            'vest_price' => $summary['vestPrice'],
+            'gross_shares' => $summary['grossShares'],
+            'gross_income' => $summary['grossIncome'],
+        ]);
+        $settlement->save();
+    }
+
     /** @param array<string, mixed> $data */
     public function assertLinkTargetsBelongToSettlement(int $userId, FinRsuVestSettlement $settlement, array $data): void
     {
@@ -208,6 +247,51 @@ class RsuSettlementService
                 'equity_award_id' => $award->id,
                 'vested_shares' => $award->share_count,
                 'gross_income' => round((float) $award->share_count * (float) $award->vest_price, 4),
+                'allocation_ratio' => round($ratio, 10),
+                'allocated_withheld_shares' => $withheldShares === null ? null : round($withheldShares * $ratio, 6),
+                'allocated_withheld_value' => $withheldValue === null ? null : round($withheldValue * $ratio, 4),
+                'allocated_tax_remitted' => $actualTaxRemitted === null ? null : round($actualTaxRemitted * $ratio, 4),
+                'allocated_excess_refund' => $excessRefund === null ? null : round($excessRefund * $ratio, 4),
+            ]);
+        }
+    }
+
+    private function reconcileAllocatedSettlement(FinRsuVestSettlement $settlement): void
+    {
+        $grossShares = (float) $settlement->allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->vested_shares);
+
+        if ($grossShares === 0.0) {
+            $settlement->delete();
+
+            return;
+        }
+
+        $grossIncome = (float) $settlement->allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->gross_income);
+        $vestPrice = $grossShares === 0.0 ? null : round($grossIncome / $grossShares, 6);
+
+        $settlement->fill([
+            'vest_price' => $vestPrice,
+            'gross_shares' => round($grossShares, 6),
+            'gross_income' => round($grossIncome, 4),
+        ]);
+        $settlement->save();
+
+        $withheldShares = $settlement->withheld_shares_whole !== null
+            ? (float) $settlement->withheld_shares_whole
+            : null;
+        $withheldValue = $settlement->withheld_value !== null
+            ? (float) $settlement->withheld_value
+            : null;
+        $actualTaxRemitted = $settlement->actual_tax_remitted !== null
+            ? (float) $settlement->actual_tax_remitted
+            : null;
+        $excessRefund = $settlement->excess_refund !== null
+            ? (float) $settlement->excess_refund
+            : null;
+
+        foreach ($settlement->allocations as $allocation) {
+            $ratio = $grossShares === 0.0 ? 0.0 : (float) $allocation->vested_shares / $grossShares;
+            $allocation->update([
                 'allocation_ratio' => round($ratio, 10),
                 'allocated_withheld_shares' => $withheldShares === null ? null : round($withheldShares * $ratio, 6),
                 'allocated_withheld_value' => $withheldValue === null ? null : round($withheldValue * $ratio, 4),

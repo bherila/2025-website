@@ -343,4 +343,76 @@ class RsuDomainIntegrationTest extends TestCase
             'equity_award_id' => $secondAward->id,
         ])->assertUnprocessable();
     }
+
+    public function test_deleting_settled_award_reconciles_settlement_totals(): void
+    {
+        $user = User::factory()->create();
+
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-9',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 6,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+        $deletedAward = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-10',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 4,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm")->assertOk();
+
+        $this->actingAs($user)->deleteJson("/api/rsu/{$deletedAward->id}")->assertOk();
+
+        $settlement = FinRsuVestSettlement::query()
+            ->where('uid', $user->id)
+            ->whereDate('vest_date', '2026-06-01')
+            ->where('symbol', 'META')
+            ->with('allocations')
+            ->firstOrFail();
+        $this->assertSame('6.000000', $settlement->gross_shares);
+        $this->assertSame('600.0000', $settlement->gross_income);
+        $this->assertCount(1, $settlement->allocations);
+
+        $this->actingAs($user)->getJson('/api/rsu/tax-projection?year=2026')
+            ->assertOk()
+            ->assertJsonPath('ordinaryIncomeAtVest', 600)
+            ->assertJsonPath('withholdingValue', 0);
+    }
+
+    public function test_deleting_all_settlement_awards_removes_settlement_row(): void
+    {
+        $user = User::factory()->create();
+
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-11',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm")->assertOk();
+
+        $this->actingAs($user)->deleteJson("/api/rsu/{$award->id}")->assertOk();
+
+        $this->assertSame(0, FinRsuVestSettlement::query()->count());
+        $this->actingAs($user)->getJson('/api/rsu/tax-projection?year=2026')
+            ->assertOk()
+            ->assertJsonPath('ordinaryIncomeAtVest', 0);
+    }
 }
