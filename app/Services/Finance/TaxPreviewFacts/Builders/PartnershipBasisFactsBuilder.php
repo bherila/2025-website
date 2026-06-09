@@ -45,6 +45,7 @@ class PartnershipBasisFactsBuilder
         $liquidationGainLossSources = [];
         $propertyDistributionSources = [];
         $form7217RequiredSources = [];
+        $section754StepUpSources = [];
         $form8949Rows = [];
         /** @var array<int, Collection<int, FinPartnershipBasisYear>> $basisYearsByAccount */
         $basisYearsByAccount = [];
@@ -68,6 +69,10 @@ class PartnershipBasisFactsBuilder
                 if ((int) $basisYear->tax_year >= 2024) {
                     $form7217RequiredSources[] = $this->propertyDistributionSource($basisYear, $interest, $event, TaxFactSourceType::PartnershipForm7217Required);
                 }
+            }
+
+            foreach ($this->section754StepUpEvents($events) as $event) {
+                $section754StepUpSources[] = $this->section754StepUpSource($basisYear, $interest, $event);
             }
 
             foreach ($this->distributionGainAllocations($basisYear, $events) as $allocation) {
@@ -208,6 +213,7 @@ class PartnershipBasisFactsBuilder
             liquidationGainLossSources: $liquidationGainLossSources,
             propertyDistributionSources: $propertyDistributionSources,
             form7217RequiredSources: $form7217RequiredSources,
+            section754StepUpSources: $section754StepUpSources,
             form8949Rows: $form8949Rows,
             reconciliations: $reconciliations,
         );
@@ -453,6 +459,43 @@ class PartnershipBasisFactsBuilder
             isReviewed: false,
             reviewStatus: (string) ($event->review_status ?: $basisYear->review_status),
             reviewAction: $isForm7217 ? 'Review Form 7217 filing support' : 'Review property distribution basis allocation',
+        );
+    }
+
+    /**
+     * §754/§743(b) step-up amortization events (Box 13 code W), surfaced separately from the
+     * other Box 13 code-L portfolio deductions.
+     *
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     * @return Collection<int, FinPartnershipBasisEvent>
+     */
+    private function section754StepUpEvents(Collection $events): Collection
+    {
+        return $events->filter(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::Section754StepUpAmortization->value)->values();
+    }
+
+    private function section754StepUpSource(
+        FinPartnershipBasisYear $basisYear,
+        FinPartnershipInterest $interest,
+        FinPartnershipBasisEvent $event,
+    ): TaxFactSource {
+        $codeLabel = $event->k1_code === null ? '' : " code {$event->k1_code}";
+
+        return new TaxFactSource(
+            id: "partnership-basis-event-{$event->id}-section-754-step-up",
+            label: "{$interest->partnership_name} - §754 step-up amortization (Box {$event->k1_box}{$codeLabel})",
+            amount: MoneyMath::fromCents(abs((int) $event->amount_cents)),
+            sourceType: TaxFactSourceType::PartnershipSection754StepUp,
+            taxDocumentId: $event->tax_document_id,
+            taxDocumentAccountId: $event->tax_document_account_id,
+            accountId: $interest->account_id,
+            formType: 'k1',
+            box: $event->k1_box ?? '13',
+            code: $event->k1_code,
+            routingReason: '§754/§743(b) step-up amortization is tracked as its own memorandum detail row, separate from the other Box 13 code-L deductions; confirm the schedule of detail before applying any partner-level basis effect.',
+            isReviewed: false,
+            reviewStatus: (string) ($event->review_status ?: $basisYear->review_status),
+            reviewAction: 'Review §754 step-up amortization detail',
         );
     }
 

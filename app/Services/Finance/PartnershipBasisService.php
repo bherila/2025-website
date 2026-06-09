@@ -1118,7 +1118,7 @@ class PartnershipBasisService
     /**
      * Routing table for coded K-1 boxes → basis event type. Items whose basis treatment
      * cannot be determined from the parsed data (foreign taxes now reported on Schedule K-3,
-     * §754/§704(c) detail, AMT/credit codes) are recorded as memorandum and forced to
+     * §704(c) detail, AMT/credit codes) are recorded as memorandum and forced to
      * needs_review rather than silently adjusting basis.
      *
      * @return array{0: PartnershipBasisEventType, 1: string}
@@ -1128,10 +1128,12 @@ class PartnershipBasisService
         return match ($box) {
             // Box 11 — other income (loss): distributive share, by sign.
             '11' => [$cents > 0 ? PartnershipBasisEventType::TaxableIncome : PartnershipBasisEventType::DeductibleLoss, $reviewStatus],
-            // Box 13 — other deductions: reduce basis. Code W is commonly §754 amortization,
-            // for which we have no schedule of detail → memorandum / needs_review.
+            // Box 13 — other deductions: reduce basis. Code W is commonly §754/§743(b) step-up
+            // amortization, which is tracked as its own memorandum detail row (separate from the
+            // other code-L portfolio deductions) so each §754 item carries its own amount and
+            // source document for review. Every other code-L item is a basis deduction.
             '13' => $code === 'W'
-                ? [PartnershipBasisEventType::Memorandum, 'needs_review']
+                ? [PartnershipBasisEventType::Section754StepUpAmortization, 'needs_review']
                 : [PartnershipBasisEventType::DeductibleLoss, $reviewStatus],
             // Box 18 — A tax-exempt income (↑), B nondeductible expenses (↓), C preproductive (review).
             '18' => match ($code) {

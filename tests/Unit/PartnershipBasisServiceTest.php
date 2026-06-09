@@ -1090,6 +1090,44 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
     }
 
+    public function test_box13_code_w_is_tracked_as_section754_step_up_not_lumped_memorandum(): void
+    {
+        // Box 13 mixes a §754 step-up amortization (code W) with an ordinary code-L portfolio
+        // deduction (code A). The §754 item gets its own detail row (with amount + source document)
+        // and never touches outside basis; the non-§754 code-L deduction still reduces basis.
+        $basisYear = $this->basisFromK1(2024, 'Section754 LP', ['5' => '100'], [
+            '13' => [
+                ['code' => 'W', 'value' => '15'],
+                ['code' => 'A', 'value' => '10'],
+            ],
+        ]);
+
+        // Non-§754 code-L (code A) basis treatment is unchanged: still a basis deduction.
+        $this->assertSame(10_00, $basisYear->deductions_losses_decrease_cents);
+        // The §754 step-up amortization does NOT reduce outside basis (memorandum-only): 100 − 10 = 90.
+        $this->assertSame(90_00, $basisYear->ending_outside_basis_cents);
+
+        // §754 step-up is its own detail row, tracked separately from a generic memorandum row.
+        $stepUp = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', 'section754_stepup_amortization')
+            ->firstOrFail();
+        $this->assertSame('13', $stepUp->k1_box);
+        $this->assertSame('W', $stepUp->k1_code);
+        $this->assertSame(15_00, $stepUp->amount_cents);
+        $this->assertSame('needs_review', $stepUp->review_status);
+        $this->assertNotNull($stepUp->tax_document_id);
+
+        // The code-A deductible loss remains a separate (non-§754) basis-deduction event.
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $basisYear->partnership_interest_id,
+            'k1_box' => '13',
+            'k1_code' => 'A',
+            'event_type' => 'deductible_loss',
+            'amount_cents' => 10_00,
+        ]);
+    }
+
     public function test_box19_override_is_applied_to_normalized_distribution(): void
     {
         $basisYear = $this->basisFromK1(2024, 'Override Distribution LP', ['5' => '100'], [], [
