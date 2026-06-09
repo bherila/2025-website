@@ -674,6 +674,30 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(100_00, $basisYear->ending_tax_basis_capital_cents);
     }
 
+    public function test_manual_tax_capital_adjustment_applies_on_top_of_reported_k1_ending(): void
+    {
+        // A reported K-1 ending must not swallow a manual capital correction — the manual delta
+        // layers on top of the reported ending so the saved event has its advertised effect.
+        $interest = $this->interest('Reported Ending LP');
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 100_00);
+        FinPartnershipBasisEvent::create([
+            'user_id' => $this->user->id,
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2024,
+            'event_type' => 'memorandum',
+            'amount_cents' => 0,
+            'source_type' => 'k1_field',
+            'review_status' => 'reviewed',
+            'metadata' => ['ending_tax_basis_capital_cents' => 90_00],
+        ]);
+        $this->manualEvent($interest, 2024, 'manual_increase_to_tax_capital', 15_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        // 90_00 reported ending + 15_00 manual increase = 105_00 (not 90_00, and not the 115_00 fallback).
+        $this->assertSame(105_00, $basisYear->ending_tax_basis_capital_cents);
+    }
+
     public function test_non_1065_k1_documents_are_skipped(): void
     {
         $document = $this->k1Document(2024, 'S Corp K1 Inc', '11-1111111', [

@@ -1477,6 +1477,21 @@ class PartnershipBasisService
     private function endingCapitalCents(Collection $events, int $beginning, string $kind): int
     {
         $metadataKey = $kind === 'book' ? 'ending_book_capital_cents' : 'ending_tax_basis_capital_cents';
+
+        // Magnitudes (like the outside-basis rollforward) so a signed manual amount cannot flip a
+        // decrease into an increase.
+        $absSum = fn (array $eventTypes): int => (int) $events
+            ->whereIn('event_type', $eventTypes)
+            ->sum(fn (FinPartnershipBasisEvent $event): int => abs((int) $event->amount_cents));
+
+        // Manual capital corrections always apply — even on top of a reported K-1 ending — so the
+        // saved adjustment has the effect the UI advertises.
+        $manualDelta = $kind === 'book'
+            ? $absSum(['manual_increase_to_book_capital']) - $absSum(['manual_decrease_to_book_capital'])
+            : $absSum(['manual_increase_to_tax_capital']) - $absSum(['manual_decrease_to_tax_capital']);
+
+        // An explicit reported ending (from a K-1 / reconciliation event) wins for the non-manual
+        // base; the manual correction layers on top.
         $explicitEnding = $events->filter(function (FinPartnershipBasisEvent $event) use ($metadataKey): bool {
             $metadata = $event->getAttribute('metadata');
 
@@ -1485,21 +1500,13 @@ class PartnershipBasisService
         if ($explicitEnding instanceof FinPartnershipBasisEvent) {
             $metadata = $explicitEnding->getAttribute('metadata');
 
-            return (int) $metadata[$metadataKey];
+            return (int) $metadata[$metadataKey] + $manualDelta;
         }
-
-        // Magnitudes (like the outside-basis rollforward) so a signed manual amount cannot flip a
-        // decrease into an increase.
-        $absSum = fn (array $eventTypes): int => (int) $events
-            ->whereIn('event_type', $eventTypes)
-            ->sum(fn (FinPartnershipBasisEvent $event): int => abs((int) $event->amount_cents));
 
         if ($kind === 'book') {
             // Book / §704(b) capital moves only on an explicit K-1 ending (handled above) or a
             // manual book-capital adjustment; nothing in the outside-basis rollforward touches it.
-            return $beginning
-                + $absSum(['manual_increase_to_book_capital'])
-                - $absSum(['manual_decrease_to_book_capital']);
+            return $beginning + $manualDelta;
         }
 
         // Tax-basis capital uses the same increase/decrease set as outside basis EXCEPT liability
