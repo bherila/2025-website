@@ -159,7 +159,7 @@ class PartnershipBasisServiceTest extends TestCase
             'partnership_interest_id' => $basisYear->partnership_interest_id,
             'source_path' => 'basis.liabilities',
             'event_type' => 'liability_decrease',
-            'amount_cents' => -40_00,
+            'amount_cents' => 40_00,
         ]);
         $this->assertDatabaseMissing('fin_partnership_basis_events', [
             'partnership_interest_id' => $basisYear->partnership_interest_id,

@@ -264,7 +264,7 @@ describe('Form8949Preview', () => {
 
     expect(mockGet).not.toHaveBeenCalled()
     expect(await screen.findByText('Partnership 731 gain')).toBeInTheDocument()
-    expect(screen.getByText(/Part II totals/)).toBeInTheDocument()
+    expect(screen.getByText(/^Part II totals/)).toBeInTheDocument()
   })
 })
 
