@@ -78,7 +78,18 @@ class PartnershipBasisService
             ->with(['basisEvents' => fn ($events) => $events->where('tax_year', $year)->orderBy('event_order')->orderBy('id')])
             ->get();
 
-        return $interests->map(fn (FinPartnershipInterest $interest): FinPartnershipBasisYear => $this->recomputeInterestYear($interest, $year));
+        return $interests->map(function (FinPartnershipInterest $interest) use ($year): FinPartnershipBasisYear {
+            $this->recomputeInterestYearRange($interest, $year, $year);
+
+            /** @var FinPartnershipBasisYear $basisYear */
+            $basisYear = FinPartnershipBasisYear::query()
+                ->where('user_id', $interest->user_id)
+                ->where('partnership_interest_id', $interest->id)
+                ->where('tax_year', $year)
+                ->firstOrFail();
+
+            return $basisYear;
+        });
     }
 
     /**
@@ -1199,20 +1210,39 @@ class PartnershipBasisService
     /** @param array<string, mixed> $data */
     private function hasExplicitBox19LiabilityDistribution(array $data): bool
     {
-        if ($this->sourceOverrideCents($data, 'code:19:D') !== null || $this->sourceOverrideCents($data, 'code:19:E') !== null) {
-            return true;
-        }
-
-        foreach (array_keys($this->groupCodeItems($data, '19')) as $code) {
-            if (in_array($code, ['D', 'E'], true)) {
+        foreach (['D', 'E'] as $code) {
+            if ($this->hasNonZeroBox19LiabilityDistributionCode($data, $code)) {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function hasNonZeroBox19LiabilityDistributionCode(array $data, string $code): bool
+    {
+        $override = $this->sourceOverrideCents($data, "code:19:{$code}");
+        if ($override !== null) {
+            return $override !== 0;
         }
 
         $basis = is_array($data['basis'] ?? null) ? $data['basis'] : [];
         $distributions = is_array($basis['distributions'] ?? null) ? $basis['distributions'] : [];
         foreach ($distributions as $distribution) {
-            if (is_array($distribution) && in_array(strtoupper(trim((string) ($distribution['code'] ?? ''))), ['D', 'E'], true)) {
+            if (! is_array($distribution) || strtoupper(trim((string) ($distribution['code'] ?? ''))) !== $code) {
+                continue;
+            }
+
+            $cents = $this->moneyToCents($distribution['partnershipAdjustedBasis'] ?? null) ?? $this->moneyToCents($distribution['amount'] ?? null);
+            if ($cents !== null && $cents !== 0) {
+                return true;
+            }
+        }
+
+        foreach ($this->groupCodeItems($data, '19')[$code] ?? [] as $entry) {
+            $cents = $this->moneyToCents($entry['item']['value'] ?? null);
+            if ($cents !== null && $cents !== 0) {
                 return true;
             }
         }

@@ -114,6 +114,13 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(40.0, $row['proceeds']);
         $this->assertSame(0.0, $row['costBasis']);
         $this->assertFalse($row['isShortTerm']);
+
+        $rollup = collect($facts['form8949']['scheduleDRollups'])
+            ->firstWhere('form8949Box', 'F');
+        $this->assertNotNull($rollup, 'Form 8949 rollups should include the partnership box F row');
+        $this->assertSame('10', $rollup['scheduleDLine']);
+        $this->assertSame(40.0, $rollup['netGainOrLoss']);
+        $this->assertSame(1, $rollup['rowCount']);
     }
 
     public function test_excess_distribution_gain_routes_to_schedule_d_line_3_when_short_term(): void
@@ -148,6 +155,13 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertNotNull($row, 'a Form 8949 box C disposition row should be generated');
         $this->assertTrue($row['isShortTerm']);
         $this->assertSame(40.0, $row['gainOrLoss']);
+
+        $rollup = collect($facts['form8949']['scheduleDRollups'])
+            ->firstWhere('form8949Box', 'C');
+        $this->assertNotNull($rollup, 'Form 8949 rollups should include the partnership box C row');
+        $this->assertSame('3', $rollup['scheduleDLine']);
+        $this->assertSame(40.0, $rollup['netGainOrLoss']);
+        $this->assertSame(1, $rollup['rowCount']);
     }
 
     public function test_first_year_excess_distribution_gain_stays_review_only(): void

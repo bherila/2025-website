@@ -10,6 +10,7 @@ import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGa
 import { mergeForm8949Lots } from '@/lib/finance/form8949Extraction'
 import type { LotWorkspaceResponse, NormalizedLot } from '@/types/finance/normalized-lot'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { Form8949Facts, Form8949RowFact } from '@/types/generated/tax-preview-facts'
 
 /** One closed lot row, shaped to match the `fin_account_lots` closed-status API response. */
 export interface Form8949Lot {
@@ -40,6 +41,8 @@ export interface Form8949Lot {
 }
 
 export type Form8949Box = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
+
+const FORM_8949_BOXES = ['A', 'B', 'C', 'D', 'E', 'F'] as const
 
 export interface Form8949Row {
   description: string
@@ -137,7 +140,7 @@ function rowDescription(lot: Form8949Lot): string {
  */
 export function classifyBox(lot: Form8949Lot): Form8949Box {
   const shortTerm = toBool(lot.is_short_term)
-  if (lot.form_8949_box && ['A', 'B', 'C', 'D', 'E', 'F'].includes(lot.form_8949_box)) {
+  if (lot.form_8949_box && FORM_8949_BOXES.includes(lot.form_8949_box)) {
     return lot.form_8949_box
   }
 
@@ -280,6 +283,7 @@ interface Form8949PreviewProps {
   selectedYear: number
   reviewed1099Docs?: TaxDocument[]
   accountId?: number
+  form8949Facts?: Form8949Facts | null
 }
 
 const ROW_CAP = 50
@@ -325,6 +329,34 @@ function accountLast4(accountNumber: string | null): string | null {
   return digits.length >= 4 ? digits.slice(-4) : null
 }
 
+function form8949BoxFromFact(value: string | null): Form8949Box | null {
+  return FORM_8949_BOXES.find((box) => box === value) ?? null
+}
+
+function form8949LotFromFactRow(row: Form8949RowFact): Form8949Lot {
+  return {
+    symbol: null,
+    description: row.description,
+    quantity: 0,
+    purchase_date: row.dateAcquired,
+    cost_basis: row.costBasis,
+    sale_date: row.dateSold,
+    proceeds: row.proceeds,
+    realized_gain_loss: row.gainOrLoss,
+    is_short_term: row.isShortTerm,
+    source: 'manual',
+    tax_document_id: row.taxDocumentId,
+    form_8949_box: form8949BoxFromFact(row.form8949Box),
+    is_covered: row.isCovered,
+    account_name: row.accountName,
+    adjustment_code: row.adjustmentCode,
+  }
+}
+
+function form8949LotsFromFacts(facts: Form8949Facts): Form8949Lot[] {
+  return facts.rows.map(form8949LotFromFactRow)
+}
+
 async function loadForm8949WorkspaceLots(selectedYear: number, accountId?: number): Promise<Form8949Lot[]> {
   const lots: Form8949Lot[] = []
   let page = 1
@@ -352,12 +384,18 @@ async function loadForm8949WorkspaceLots(selectedYear: number, accountId?: numbe
   return lots
 }
 
-export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], accountId }: Form8949PreviewProps) {
+export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], accountId, form8949Facts = null }: Form8949PreviewProps) {
   const [lots, setLots] = useState<Form8949Lot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
+  const factLots = useMemo(() => (form8949Facts ? form8949LotsFromFacts(form8949Facts) : null), [form8949Facts])
 
   useEffect(() => {
+    if (factLots !== null) {
+      setError(null)
+      return
+    }
+
     let cancelled = false
     void (async () => {
       try {
@@ -373,16 +411,19 @@ export default function Form8949Preview({ selectedYear, reviewed1099Docs = [], a
     return () => {
       cancelled = true
     }
-  }, [selectedYear, accountId])
+  }, [selectedYear, accountId, factLots])
 
   const importedLots = useMemo(
-    () => buildCapitalGainsReportFromTaxDocuments(reviewed1099Docs, accountId).form8949Lots,
-    [reviewed1099Docs, accountId],
+    () => factLots !== null ? [] : buildCapitalGainsReportFromTaxDocuments(reviewed1099Docs, accountId).form8949Lots,
+    [reviewed1099Docs, accountId, factLots],
   )
-  const mergedLots = useMemo(() => mergeForm8949Lots(lots ?? [], importedLots), [lots, importedLots])
+  const mergedLots = useMemo(
+    () => factLots ?? mergeForm8949Lots(lots ?? [], importedLots),
+    [factLots, lots, importedLots],
+  )
   const data = useMemo(() => computeForm8949(mergedLots), [mergedLots])
 
-  if (lots === null) {
+  if (factLots === null && lots === null) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">Loading Form 8949 transactions…</div>
     )

@@ -140,6 +140,35 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
     }
 
+    public function test_zero_box19_liability_override_keeps_item_k_liability_decrease_effective(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Zero Box19D Override LP', [], [
+            '19' => [
+                ['code' => 'D', 'value' => '40'],
+            ],
+        ], [
+            'outsideBasisWorksheet' => ['beginningBasis' => 100],
+            'liabilities' => ['beginningRecourse' => 100, 'endingRecourse' => 60],
+        ], null, [
+            'code:19:D' => ['value' => '0'],
+        ]);
+
+        $this->assertSame(40_00, $basisYear->liability_decrease_cents);
+        $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $basisYear->partnership_interest_id,
+            'source_path' => 'basis.liabilities',
+            'event_type' => 'liability_decrease',
+            'amount_cents' => -40_00,
+        ]);
+        $this->assertDatabaseMissing('fin_partnership_basis_events', [
+            'partnership_interest_id' => $basisYear->partnership_interest_id,
+            'k1_box' => '19',
+            'k1_code' => 'D',
+            'event_type' => 'deemed_distribution_liability_decrease',
+        ]);
+    }
+
     public function test_guaranteed_payments_do_not_increase_basis_and_are_not_double_counted(): void
     {
         // Box 5 income increases basis; guaranteed payments (4a/4b/4c) are income to the partner
@@ -900,6 +929,33 @@ class PartnershipBasisServiceTest extends TestCase
             'initial_cash_contribution_cents' => 150_00,
             'initialization_review_status' => 'reviewed',
         ]);
+
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->beginning_outside_basis_cents);
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->ending_outside_basis_cents);
+        $this->assertFalse($this->basisYearForInterest($interest, 2025)->is_stale);
+    }
+
+    public function test_k1_recompute_refreshes_existing_downstream_basis_years(): void
+    {
+        $document = $this->k1Document(2024, 'K-1 Range LP', '12-3456789', [
+            'A' => ['value' => '12-3456789'],
+            'B' => ['value' => 'K-1 Range LP'],
+            'D' => ['value' => 'false'],
+            '5' => ['value' => '100'],
+        ], []);
+        $this->service->recomputeForUserYear($this->user->id, 2024);
+        $interest = FinPartnershipInterest::query()->where('partnership_name', 'K-1 Range LP')->firstOrFail();
+        $this->service->recomputeInterestYear($interest, 2025);
+        $this->assertSame(100_00, $this->basisYearForInterest($interest, 2025)->beginning_outside_basis_cents);
+
+        $parsedData = $document->parsed_data;
+        $this->assertIsArray($parsedData);
+        $this->assertIsArray($parsedData['fields'] ?? null);
+        $this->assertIsArray($parsedData['fields']['5'] ?? null);
+        $parsedData['fields']['5']['value'] = '150';
+        $document->update(['parsed_data' => $parsedData]);
+
+        $this->service->recomputeForUserYear($this->user->id, 2024);
 
         $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->beginning_outside_basis_cents);
         $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->ending_outside_basis_cents);

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 
 import { fetchWrapper } from '@/fetchWrapper'
 import type { TaxDocument } from '@/types/finance/tax-document'
+import type { Form8949Facts } from '@/types/generated/tax-preview-facts'
 
 import {
   classifyBox,
@@ -230,6 +231,40 @@ describe('Form8949Preview', () => {
 
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/api/finance/lot-workspace?status=closed&year=2025&per_page=200&page=1&account_ids=7'))
     expect(await screen.findByText('AAPL • 1234')).toBeInTheDocument()
+  })
+
+  it('renders server tax facts without loading workspace lots', async () => {
+    const facts: Form8949Facts = {
+      reportingMode: 'form_8949_transactions',
+      rows: [{
+        form8949Box: 'F',
+        description: 'Partnership 731 gain',
+        dateAcquired: '2023-01-01',
+        dateSold: '2025-12-31',
+        proceeds: 40,
+        costBasis: 0,
+        adjustmentCode: null,
+        adjustmentAmount: 0,
+        gainOrLoss: 40,
+        isShortTerm: false,
+        isCovered: null,
+        isSummaryRow: false,
+        accountName: 'Partnership',
+        taxDocumentId: null,
+        sourceTransactionId: 'partnership_basis_year:1',
+      }],
+      scheduleDRollups: [],
+      washSaleAdjustments: [],
+      rowCount: 1,
+      washSaleAdjustmentCount: 0,
+      washSaleAdjustmentTotal: 0,
+    }
+
+    render(<Form8949Preview selectedYear={2025} form8949Facts={facts} />)
+
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(await screen.findByText('Partnership 731 gain')).toBeInTheDocument()
+    expect(screen.getByText(/Part II totals/)).toBeInTheDocument()
   })
 })
 
