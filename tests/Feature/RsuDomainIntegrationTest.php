@@ -457,6 +457,19 @@ class RsuDomainIntegrationTest extends TestCase
             'settlement_allocation_id' => $allocation->id,
             'equity_award_id' => $secondAward->id,
         ])->assertUnprocessable();
+
+        // A same-date/symbol award that is NOT one of the confirmed settlement's
+        // allocated awards must be rejected even without an allocation id.
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlement->id}/links", [
+            'link_type' => 'tax_lot',
+            'equity_award_id' => $secondAward->id,
+        ])->assertUnprocessable();
+
+        // The settlement's own allocated award links successfully by award id alone.
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlement->id}/links", [
+            'link_type' => 'tax_lot',
+            'equity_award_id' => $award->id,
+        ])->assertCreated();
     }
 
     public function test_get_rsu_data_serializes_share_count_as_number(): void
