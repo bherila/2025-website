@@ -1616,10 +1616,10 @@ class PartnershipBasisService
 
     /**
      * Liquidation / sale gain/loss is a review-only estimate. A sale or exchange realizes proceeds
-     * against the remaining outside basis (gain = proceeds − basis), plus any recognized
-     * excess-distribution gain. With no sale proceeds it is recognized excess-distribution gain, or
-     * otherwise the remaining outside basis as a candidate capital loss. The true result depends on
-     * the character of property received, so the year is always flagged needs_review.
+     * plus liability relief less selling expenses against the outside basis immediately before sale.
+     * With no sale proceeds it is recognized excess-distribution gain, or otherwise the remaining
+     * outside basis as a candidate capital loss. The true result depends on the character of
+     * property received, so the year is always flagged needs_review.
      *
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      */
@@ -1629,14 +1629,38 @@ class PartnershipBasisService
             return null;
         }
 
-        $saleProceeds = abs((int) $events->where('event_type', PartnershipBasisEventType::SaleExchange->value)->sum('amount_cents'));
-        if ($saleProceeds > 0) {
-            // Proceeds less the basis remaining after distributions, plus any cash-distribution
-            // excess-of-basis gain already recognized this year.
-            return $saleProceeds - $endingOutside + $distributionGain;
+        $saleAmountRealized = $this->saleExchangeAmountRealizedTotalCents($events);
+        if ($saleAmountRealized > 0) {
+            return $saleAmountRealized - $endingOutside;
         }
 
         return $distributionGain > 0 ? $distributionGain : -$endingOutside;
+    }
+
+    /** @param Collection<int, FinPartnershipBasisEvent> $events */
+    private function saleExchangeAmountRealizedTotalCents(Collection $events): int
+    {
+        return (int) $events
+            ->where('event_type', PartnershipBasisEventType::SaleExchange->value)
+            ->sum(fn (FinPartnershipBasisEvent $event): int => $this->saleExchangeAmountRealizedCents($event));
+    }
+
+    private function saleExchangeAmountRealizedCents(FinPartnershipBasisEvent $event): int
+    {
+        $metadata = $event->getAttribute('metadata');
+        if (! is_array($metadata) || ! isset($metadata['proceeds_cents']) || ! is_numeric($metadata['proceeds_cents'])) {
+            return abs((int) $event->amount_cents);
+        }
+
+        return (int) $metadata['proceeds_cents']
+            + $this->metadataCents($metadata, 'liability_relief_cents')
+            - $this->metadataCents($metadata, 'selling_expenses_cents');
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function metadataCents(array $metadata, string $key): int
+    {
+        return isset($metadata[$key]) && is_numeric($metadata[$key]) ? (int) $metadata[$key] : 0;
     }
 
     public function eventOrder(string $eventType): int

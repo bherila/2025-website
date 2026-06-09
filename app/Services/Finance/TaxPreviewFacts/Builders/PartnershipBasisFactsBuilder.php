@@ -115,19 +115,80 @@ class PartnershipBasisFactsBuilder
                 }
             }
 
-            if ($basisYear->liquidation_gain_loss_cents !== null) {
-                $liquidationGainLossSources[] = new TaxFactSource(
-                    id: "partnership-basis-{$basisYear->id}-liquidation-gain-loss",
-                    label: "{$partnerName} — liquidation gain/loss (estimate)",
-                    amount: MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents),
+            $saleExchangeSources = [];
+            foreach ($this->saleExchangeAllocations($basisYear, $events) as $allocation) {
+                $sourceId = "partnership-basis-event-{$allocation['event']->id}-sale-exchange";
+                $gainDollars = MoneyMath::fromCents($allocation['gain_loss_cents']);
+                $reviewStatus = (string) ($allocation['event']->review_status ?: $basisYear->review_status);
+
+                if ($allocation['is_complete']) {
+                    [$routing, $box, $isShortTerm] = $this->dispositionRouting($allocation['holding_period']);
+
+                    $saleExchangeSources[] = new TaxFactSource(
+                        id: $sourceId,
+                        label: "{$partnerName} - sale/exchange of partnership interest ({$allocation['date_sold']})",
+                        amount: $gainDollars,
+                        sourceType: TaxFactSourceType::PartnershipLiquidationGainLoss,
+                        accountId: $interest->account_id,
+                        formType: 'k1',
+                        routing: $routing,
+                        routingReason: $this->saleExchangeRoutingReason($allocation['holding_period']),
+                        isReviewed: $reviewStatus === 'reviewed',
+                        reviewStatus: $reviewStatus,
+                    );
+
+                    $form8949Rows[] = new Form8949RowFact(
+                        form8949Box: $box,
+                        description: $allocation['description'] ?? "{$partnerName} - sale/exchange of partnership interest",
+                        dateAcquired: $allocation['date_acquired'],
+                        dateSold: $allocation['date_sold'],
+                        proceeds: MoneyMath::fromCents($allocation['amount_realized_cents']),
+                        costBasis: MoneyMath::fromCents($allocation['cost_basis_cents']),
+                        adjustmentCode: null,
+                        adjustmentAmount: 0.0,
+                        gainOrLoss: $gainDollars,
+                        isShortTerm: $isShortTerm,
+                        isCovered: false,
+                        isSummaryRow: false,
+                        accountName: $partnerName,
+                        taxDocumentId: $allocation['event']->tax_document_id,
+                        sourceTransactionId: $sourceId,
+                    );
+
+                    continue;
+                }
+
+                $saleExchangeSources[] = new TaxFactSource(
+                    id: $sourceId,
+                    label: "{$partnerName} - sale/exchange gain/loss (review)",
+                    amount: $gainDollars,
                     sourceType: TaxFactSourceType::PartnershipLiquidationGainLoss,
                     accountId: $interest->account_id,
                     formType: 'k1',
                     routing: TaxFactRouting::NeedsReviewScheduleDLine5Or12,
-                    routingReason: 'Liquidation gain/loss is an estimate from remaining outside basis; confirm the character of property received before reporting on Schedule D.',
+                    routingReason: 'Sale/exchange metadata is incomplete; set acquisition and sale dates to confirm Form 8949 and Schedule D routing.',
                     isReviewed: false,
-                    reviewStatus: 'needs_review',
+                    reviewStatus: $reviewStatus,
                 );
+            }
+            $liquidationGainLossSources = [...$liquidationGainLossSources, ...$saleExchangeSources];
+
+            if ($basisYear->liquidation_gain_loss_cents !== null) {
+                $hasSaleExchange = $events->contains(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::SaleExchange->value);
+                if (! $hasSaleExchange) {
+                    $liquidationGainLossSources[] = new TaxFactSource(
+                        id: "partnership-basis-{$basisYear->id}-liquidation-gain-loss",
+                        label: "{$partnerName} — liquidation gain/loss (estimate)",
+                        amount: MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents),
+                        sourceType: TaxFactSourceType::PartnershipLiquidationGainLoss,
+                        accountId: $interest->account_id,
+                        formType: 'k1',
+                        routing: TaxFactRouting::NeedsReviewScheduleDLine5Or12,
+                        routingReason: 'Liquidation gain/loss is an estimate from remaining outside basis; confirm the character of property received before reporting on Schedule D.',
+                        isReviewed: false,
+                        reviewStatus: 'needs_review',
+                    );
+                }
             }
         }
 
@@ -174,6 +235,15 @@ class PartnershipBasisFactsBuilder
             PartnershipBasisService::HOLDING_PERIOD_LONG => 'Cash distribution in excess of outside basis is long-term gain from the deemed sale of the partnership interest (held more than one year); reported on Form 8949 Part II (box F) and Schedule D line 10.',
             PartnershipBasisService::HOLDING_PERIOD_SHORT => 'Cash distribution in excess of outside basis is short-term gain from the deemed sale of the partnership interest (held one year or less); reported on Form 8949 Part I (box C) and Schedule D line 3.',
             default => 'Cash distribution in excess of outside basis is gain from the sale of the partnership interest; set the interest acquisition date to confirm the holding period before Schedule D routing.',
+        };
+    }
+
+    private function saleExchangeRoutingReason(string $holdingPeriod): string
+    {
+        return match ($holdingPeriod) {
+            PartnershipBasisService::HOLDING_PERIOD_LONG => 'Sale/exchange of the partnership interest is long-term based on sale metadata; reported on Form 8949 Part II (box F) and Schedule D line 10.',
+            PartnershipBasisService::HOLDING_PERIOD_SHORT => 'Sale/exchange of the partnership interest is short-term based on sale metadata; reported on Form 8949 Part I (box C) and Schedule D line 3.',
+            default => 'Sale/exchange metadata does not establish a holding period; review before Schedule D routing.',
         };
     }
 
@@ -224,6 +294,121 @@ class PartnershipBasisFactsBuilder
         }
 
         return $allocations;
+    }
+
+    /**
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     * @return array<int, array{event: FinPartnershipBasisEvent, amount_realized_cents: int, cost_basis_cents: int, gain_loss_cents: int, date_acquired: ?string, date_sold: ?string, description: ?string, holding_period: string, is_complete: bool}>
+     */
+    private function saleExchangeAllocations(FinPartnershipBasisYear $basisYear, Collection $events): array
+    {
+        $availableOutsideBasis = (int) $basisYear->beginning_outside_basis_cents;
+        $allocations = [];
+
+        foreach ($events as $event) {
+            $type = PartnershipBasisEventType::tryFrom((string) $event->event_type);
+            if ($type === null || in_array($type, [PartnershipBasisEventType::BeginningBasis, PartnershipBasisEventType::PriorYearRollforward], true)) {
+                continue;
+            }
+
+            if ($type === PartnershipBasisEventType::SaleExchange) {
+                $metadata = $event->getAttribute('metadata');
+                $metadata = is_array($metadata) ? $metadata : [];
+                $amountRealized = $this->saleExchangeAmountRealizedCents($event, $metadata);
+                $hasProceedsMetadata = isset($metadata['proceeds_cents']) && is_numeric($metadata['proceeds_cents']);
+                $dateAcquired = $this->metadataDate($metadata, 'date_acquired');
+                $dateSold = $this->metadataDate($metadata, 'date_sold')
+                    ?? ($event->event_date === null ? null : CarbonImmutable::parse($event->event_date)->toDateString());
+                $holdingPeriod = $this->saleExchangeHoldingPeriod($dateAcquired, $dateSold);
+
+                $allocations[] = [
+                    'event' => $event,
+                    'amount_realized_cents' => $amountRealized,
+                    'cost_basis_cents' => $availableOutsideBasis,
+                    'gain_loss_cents' => $amountRealized - $availableOutsideBasis,
+                    'date_acquired' => $dateAcquired,
+                    'date_sold' => $dateSold,
+                    'description' => $this->metadataString($metadata, 'description'),
+                    'holding_period' => $holdingPeriod,
+                    'is_complete' => $hasProceedsMetadata
+                        && $dateAcquired !== null
+                        && $dateSold !== null
+                        && $holdingPeriod !== PartnershipBasisService::HOLDING_PERIOD_INDETERMINATE,
+                ];
+                $availableOutsideBasis = 0;
+
+                continue;
+            }
+
+            $amount = abs((int) $event->amount_cents);
+            if ($amount === 0) {
+                continue;
+            }
+
+            switch ($type->basisEffect()) {
+                case PartnershipBasisEventType::BASIS_EFFECT_INCREASE:
+                    $availableOutsideBasis += $amount;
+                    break;
+                case PartnershipBasisEventType::BASIS_EFFECT_DECREASE_GAIN:
+                case PartnershipBasisEventType::BASIS_EFFECT_DECREASE_REALLOCATE:
+                case PartnershipBasisEventType::BASIS_EFFECT_DECREASE_SUSPEND:
+                    $availableOutsideBasis -= min($availableOutsideBasis, $amount);
+                    break;
+            }
+        }
+
+        return $allocations;
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function saleExchangeAmountRealizedCents(FinPartnershipBasisEvent $event, array $metadata): int
+    {
+        if (! isset($metadata['proceeds_cents']) || ! is_numeric($metadata['proceeds_cents'])) {
+            return abs((int) $event->amount_cents);
+        }
+
+        return (int) $metadata['proceeds_cents']
+            + $this->metadataCents($metadata, 'liability_relief_cents')
+            - $this->metadataCents($metadata, 'selling_expenses_cents');
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function metadataCents(array $metadata, string $key): int
+    {
+        return isset($metadata[$key]) && is_numeric($metadata[$key]) ? (int) $metadata[$key] : 0;
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function metadataDate(array $metadata, string $key): ?string
+    {
+        $value = $metadata[$key] ?? null;
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        return CarbonImmutable::parse($value)->toDateString();
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function metadataString(array $metadata, string $key): ?string
+    {
+        $value = $metadata[$key] ?? null;
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        return trim($value);
+    }
+
+    private function saleExchangeHoldingPeriod(?string $dateAcquired, ?string $dateSold): string
+    {
+        if ($dateAcquired === null || $dateSold === null) {
+            return PartnershipBasisService::HOLDING_PERIOD_INDETERMINATE;
+        }
+
+        return CarbonImmutable::parse($dateAcquired)->addYear()->lessThan(CarbonImmutable::parse($dateSold))
+            ? PartnershipBasisService::HOLDING_PERIOD_LONG
+            : PartnershipBasisService::HOLDING_PERIOD_SHORT;
     }
 
     /**

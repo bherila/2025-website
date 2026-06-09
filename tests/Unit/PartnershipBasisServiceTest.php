@@ -1084,6 +1084,23 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(0, $nextYear->ending_outside_basis_cents);
     }
 
+    public function test_sale_exchange_metadata_amount_realized_includes_liability_relief_less_selling_expenses(): void
+    {
+        $interest = $this->interest('Sale Metadata LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->manualEvent($interest, 2024, 'sale_exchange', 999_00, [
+            'proceeds_cents' => 150_00,
+            'liability_relief_cents' => 20_00,
+            'selling_expenses_cents' => 5_00,
+        ]);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        // Amount realized 150 + liability relief 20 - selling expenses 5 = 165.
+        $this->assertSame(65_00, $basisYear->liquidation_gain_loss_cents);
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents);
+    }
+
     public function test_sale_exchange_below_basis_produces_loss(): void
     {
         $interest = $this->interest('Sale Loss LP');
@@ -1228,7 +1245,10 @@ class PartnershipBasisServiceTest extends TestCase
         ]);
     }
 
-    private function manualEvent(FinPartnershipInterest $interest, int $year, string $eventType, int $amountCents): void
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    private function manualEvent(FinPartnershipInterest $interest, int $year, string $eventType, int $amountCents, array $metadata = []): void
     {
         FinPartnershipBasisEvent::create([
             'user_id' => $this->user->id,
@@ -1238,6 +1258,7 @@ class PartnershipBasisServiceTest extends TestCase
             'amount_cents' => $amountCents,
             'source_type' => 'manual',
             'review_status' => 'reviewed',
+            'metadata' => $metadata,
         ]);
     }
 }
