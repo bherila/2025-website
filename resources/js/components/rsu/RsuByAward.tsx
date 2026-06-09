@@ -66,9 +66,8 @@ export function RsuByAward(props: { rsu: IAward[]; hideFullyVested?: boolean }) 
               }
             }
           }
-          const avgPrice = weightedShares > 0 ? currency(weightedSum.value / weightedShares).format() : ''
-          const avgGrantPrice =
-            weightedGrantShares > 0 ? currency(weightedGrantSum.value / weightedGrantShares).format() : ''
+          const avgPrice = weightedShares > 0 ? weightedSum.divide(weightedShares).format() : ''
+          const avgGrantPrice = weightedGrantShares > 0 ? weightedGrantSum.divide(weightedGrantShares).format() : ''
           return (
             <TableRow key={i}>
               <TableCell>

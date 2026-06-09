@@ -29,8 +29,8 @@ describe('rsu/helpers', () => {
       expect(isVested({ vest_date: '2020-01-01' }, '2025-06-01')).toBe(true)
     })
 
-    it('treats vest_date equal to today as not vested (future/current vest)', () => {
-      expect(isVested({ vest_date: '2025-06-01' }, '2025-06-01')).toBe(false)
+    it('treats vest_date equal to today as vested', () => {
+      expect(isVested({ vest_date: '2025-06-01' }, '2025-06-01')).toBe(true)
     })
 
     it('treats vest_date after today as not vested', () => {

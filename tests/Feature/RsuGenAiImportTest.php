@@ -76,7 +76,7 @@ class RsuGenAiImportTest extends TestCase
 
         $this->actingAs($user)->getJson('/api/rsu')
             ->assertOk()
-            ->assertJsonPath('0.vest_price', '505.25');
+            ->assertJsonPath('0.vest_price', '505.250000');
 
         Http::assertNothingSent();
     }
@@ -149,7 +149,7 @@ class RsuGenAiImportTest extends TestCase
                 'award_id' => '',
                 'grant_date' => '01/15/2026',
                 'share_count' => -1,
-                'symbol' => 'BRK.B',
+                'symbol' => 'BAD$SYMBOL',
             ]),
         );
 

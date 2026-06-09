@@ -7,6 +7,11 @@ export interface IAward {
   vest_date?: string
   share_count?: currency | number
   symbol?: string
-  vest_price?: number // price per share at vest date
-  grant_price?: number // price per share at grant date
+  vest_price?: number | null // price per share at vest date
+  vest_price_source?: 'manual' | 'imported' | 'quote_close' | 'unknown' | null
+  grant_price?: number | null // price per share at grant date
+  grant_price_source?: 'manual' | 'imported' | 'quote_close' | 'unknown' | null
+  settlement_allocations?: unknown[]
+  rsu_links?: unknown[]
+  isVirtual?: boolean
 }

@@ -9,6 +9,7 @@ export function buildDefaultRsuGrant(jobId: string, ordinal: number): RsuGrant {
     grantDate: `${currentYear}-01-01`,
     vestingStartDate: null,
     shareCount: 1000,
+    sourceAwardRowIds: [],
     cliffMonths: 12,
     vestingYears: 4,
     vestingFrequency: 'monthly',

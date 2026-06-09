@@ -23,12 +23,12 @@ const RsuAwardDraftSchema = z.object({
   share_count: z.string().trim().refine((value) => {
     if (value === '') return false
     const numeric = Number(value)
-    return Number.isInteger(numeric) && numeric >= 1
-  }, 'Shares must be a whole number of at least 1'),
+    return Number.isFinite(numeric) && numeric > 0
+  }, 'Shares must be greater than 0'),
   symbol: z.string()
     .trim()
     .transform((value) => value.toUpperCase())
-    .pipe(z.string().min(1, 'Symbol is required').max(4, 'Symbol must be 4 characters or fewer').regex(/^[A-Z0-9.]+$/, 'Symbol can only contain letters, numbers, and periods')),
+    .pipe(z.string().min(1, 'Symbol is required').max(16, 'Symbol must be 16 characters or fewer').regex(/^[A-Z0-9.]+$/, 'Symbol can only contain letters, numbers, and periods')),
   grant_price: optionalPriceSchema,
   vest_price: optionalPriceSchema,
 })

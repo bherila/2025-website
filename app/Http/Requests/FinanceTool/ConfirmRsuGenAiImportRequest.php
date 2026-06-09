@@ -26,10 +26,10 @@ class ConfirmRsuGenAiImportRequest extends FormRequest
             'award_id' => ['required', 'string', 'max:20'],
             'grant_date' => ['required', 'date_format:Y-m-d'],
             'vest_date' => ['required', 'date_format:Y-m-d'],
-            'share_count' => ['required', 'integer', 'min:1'],
-            'symbol' => ['required', 'string', 'max:4', 'regex:/^[A-Z0-9.]+$/'],
-            'grant_price' => ['nullable', 'numeric', 'min:0'],
-            'vest_price' => ['nullable', 'numeric', 'min:0'],
+            'share_count' => ['required', 'numeric', 'gt:0'],
+            'symbol' => ['required', 'string', 'max:16', 'regex:/^[A-Z0-9.]+$/'],
+            'grant_price' => ['nullable', 'numeric', 'gte:0'],
+            'vest_price' => ['nullable', 'numeric', 'gte:0'],
         ];
     }
 
