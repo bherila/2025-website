@@ -26,7 +26,10 @@ export function getShares(award: Pick<IAward, 'share_count'>): number | undefine
   if (s == null) {
     return undefined
   }
-  return typeof s === 'object' ? s.value : s
+  // The /api/rsu payload serializes share_count via Laravel's decimal cast, which
+  // can surface as a numeric string (e.g. "10.125000"); normalize to a number so
+  // callers never accidentally do string concatenation. currency.js objects expose .value.
+  return typeof s === 'object' ? s.value : Number(s)
 }
 
 export function shareValue(shares: number | undefined, pricePerShare: number | null | undefined): currency | null {

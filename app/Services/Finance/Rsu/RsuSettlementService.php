@@ -157,6 +157,16 @@ class RsuSettlementService
                 ->where('symbol', $settlement->symbol)
                 ->firstOrFail();
 
+            // Once a settlement is confirmed it owns a concrete set of allocated awards;
+            // require the linked award to be one of them. Suggested settlements have no
+            // allocations yet, so they fall back to the vest_date+symbol scope above.
+            $allocatedAwardIds = $settlement->allocations()->pluck('equity_award_id');
+            if ($allocatedAwardIds->isNotEmpty() && ! $allocatedAwardIds->contains((int) $award->id)) {
+                throw ValidationException::withMessages([
+                    'equity_award_id' => 'The equity award must belong to this settlement.',
+                ]);
+            }
+
             if ($allocation instanceof FinRsuVestSettlementAllocation && (int) $allocation->equity_award_id !== (int) $award->id) {
                 throw ValidationException::withMessages([
                     'equity_award_id' => 'The equity award must match the settlement allocation award.',
