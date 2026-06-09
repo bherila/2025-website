@@ -426,6 +426,101 @@ class PartnershipBasisService
         return $event;
     }
 
+    /**
+     * Accept a reconciliation candidate (a contribution or distribution surfaced from the account's
+     * transaction feed) and create a reviewed manual basis event carrying the candidate's source
+     * provenance. Idempotent: if an event already exists for the same source reference (line_item_id,
+     * statement_id, or statement_investment_id) the existing event is returned without creating a
+     * duplicate. The reconciliation service itself remains read-only — this is the single write path.
+     *
+     * @param  array<string, mixed>  $payload  Validated accept payload from the controller.
+     */
+    public function acceptReconciliationCandidate(FinAccounts $account, int $userId, array $payload): FinPartnershipBasisEvent
+    {
+        $year = (int) $payload['tax_year'];
+        $interest = $this->resolveManualInterest($account, $userId, isset($payload['partnership_interest_id']) ? (int) $payload['partnership_interest_id'] : null);
+        $this->assertYearEditable($interest, $year);
+
+        // Idempotency guard: return any existing event that was already created from the same
+        // source reference so that re-accepting a candidate is a no-op rather than a duplicate.
+        $existing = $this->findExistingCandidateEvent($interest, $year, $payload);
+        if ($existing instanceof FinPartnershipBasisEvent) {
+            return $existing;
+        }
+
+        $eventType = PartnershipBasisEventType::from((string) $payload['event_type']);
+
+        /** @var FinPartnershipBasisEvent $event */
+        $event = $this->appendEvent($interest, [
+            'tax_year' => $year,
+            'event_type' => $eventType->value,
+            'event_order' => $payload['event_order'] ?? $this->eventOrder($eventType->value),
+            'basis_side' => $payload['basis_side'] ?? $this->basisSideFor($eventType),
+            'amount_cents' => (int) $payload['amount_cents'],
+            'source_type' => 'account_transaction',
+            'account_id' => $account->acct_id,
+            'line_item_id' => $payload['line_item_id'] ?? null,
+            'statement_id' => $payload['statement_id'] ?? null,
+            'statement_investment_id' => $payload['statement_investment_id'] ?? null,
+            'event_date' => $payload['event_date'] ?? null,
+            'source_label' => $payload['source_label'] ?? null,
+            'notes' => $payload['notes'] ?? null,
+            // Accepted candidates are immediately marked reviewed so the rollforward reflects
+            // the partner's explicit acceptance rather than requiring a second review step.
+            'review_status' => 'reviewed',
+            'metadata' => array_merge(
+                ['accepted_from_reconciliation_candidate' => true],
+                isset($payload['metadata']) && is_array($payload['metadata']) ? $payload['metadata'] : [],
+            ),
+        ]);
+
+        $this->recomputeInterestYearRange($interest, $year, $year);
+
+        return $event;
+    }
+
+    /**
+     * Find an existing basis event that was already created from the same reconciliation candidate
+     * source reference, used to enforce idempotency on the accept path.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function findExistingCandidateEvent(FinPartnershipInterest $interest, int $year, array $payload): ?FinPartnershipBasisEvent
+    {
+        $query = FinPartnershipBasisEvent::query()
+            ->where('user_id', $interest->user_id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->where('source_type', 'account_transaction');
+
+        $lineItemId = $payload['line_item_id'] ?? null;
+        $statementId = $payload['statement_id'] ?? null;
+        $statementInvestmentId = $payload['statement_investment_id'] ?? null;
+
+        if ($lineItemId !== null) {
+            $match = (clone $query)->where('line_item_id', (int) $lineItemId)->first();
+            if ($match instanceof FinPartnershipBasisEvent) {
+                return $match;
+            }
+        }
+
+        if ($statementInvestmentId !== null) {
+            $match = (clone $query)->where('statement_investment_id', (int) $statementInvestmentId)->first();
+            if ($match instanceof FinPartnershipBasisEvent) {
+                return $match;
+            }
+        }
+
+        if ($statementId !== null) {
+            $match = (clone $query)->where('statement_id', (int) $statementId)->first();
+            if ($match instanceof FinPartnershipBasisEvent) {
+                return $match;
+            }
+        }
+
+        return null;
+    }
+
     /** @return EloquentCollection<int, FinPartnershipBasisYear> */
     public function lockAccountYear(FinAccounts $account, int $userId, int $year): EloquentCollection
     {
