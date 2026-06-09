@@ -320,7 +320,7 @@ function amountClass(row: LiquidityDetailRow): string {
 
 function DetailRowsTable({ rows, totalLabel, total }: { rows: readonly LiquidityDetailRow[]; totalLabel?: string | undefined; total?: number | undefined }): ReactElement {
   return (
-    <div className="overflow-hidden rounded-md border">
+    <div className="overflow-hidden rounded-md border border-muted">
       <Table>
         <TableHeader>
           <TableRow>
