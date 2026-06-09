@@ -8,7 +8,7 @@ use Illuminate\Validation\Rule;
 
 class TaxReturnPdfExportRequest extends FormRequest
 {
-    public const array SCOPES = ['form', 'return'];
+    public const array SCOPES = ['form', 'return', 'selection'];
 
     public const array MODES = ['editable', 'print'];
 
@@ -28,6 +28,9 @@ class TaxReturnPdfExportRequest extends FormRequest
             'year' => ['required', 'integer', 'min:1900', 'max:2100'],
             'scope' => ['required', 'string', Rule::in(self::SCOPES)],
             'formId' => ['required_if:scope,form', 'nullable', 'string', Rule::in(self::FORM_IDS)],
+            'formIds' => ['required_if:scope,selection', 'nullable', 'array', 'min:1'],
+            'formIds.*' => ['string', Rule::in(self::FORM_IDS)],
+            'includeProfilePii' => ['sometimes', 'boolean'],
             'mode' => ['required', 'string', Rule::in(self::MODES)],
             'filename' => ['nullable', 'string', 'max:255'],
         ];
@@ -38,11 +41,14 @@ class TaxReturnPdfExportRequest extends FormRequest
         $scope = $this->normalizeString($this->input('scope', 'form'));
         $mode = $this->normalizeString($this->input('mode', 'editable'));
         $formId = $this->normalizeString($this->input('formId', $scope === 'form' ? 'form-1040' : null));
+        $formIds = $scope === 'selection' ? $this->normalizeFormIds($this->input('formIds', [])) : null;
 
         $this->merge([
             'scope' => $scope === '' ? 'form' : $scope,
             'mode' => $mode === '' ? 'editable' : $mode,
             'formId' => $formId === '' ? null : $formId,
+            'formIds' => $formIds,
+            'includeProfilePii' => $this->boolean('includeProfilePii'),
         ]);
     }
 
@@ -67,6 +73,31 @@ class TaxReturnPdfExportRequest extends FormRequest
         }
 
         return substr($filename, 0, 251).'.pdf';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function normalizeFormIds(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $requested = [];
+
+        foreach ($value as $formId) {
+            $normalized = $this->normalizeString($formId);
+
+            if ($normalized !== null && $normalized !== '') {
+                $requested[] = $normalized;
+            }
+        }
+
+        return array_values(array_filter(
+            self::FORM_IDS,
+            static fn (string $formId): bool => in_array($formId, $requested, true),
+        ));
     }
 
     private function normalizeString(mixed $value): ?string

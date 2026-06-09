@@ -130,7 +130,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
         ]);
     }
 
-    public function test_missing_required_profile_blocks_complete_return_export(): void
+    public function test_missing_profile_does_not_block_return_export_and_returns_warnings(): void
     {
         $user = User::factory()->create();
 
@@ -141,11 +141,11 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'filename' => '2025-federal-return.pdf',
         ]);
 
-        $response->assertUnprocessable();
-        $response->assertJsonPath('message', 'Tax return PDF export is not ready.');
+        $response->assertOk();
+        $this->assertStringStartsWith('%PDF', (string) $response->getContent());
         $this->assertNotEmpty(array_filter(
-            $response->json('errors'),
-            static fn (string $error): bool => str_contains($error, 'taxpayer first name'),
+            $this->warningsFromHeader($response->headers->get('X-Tax-Return-Pdf-Warnings')),
+            static fn (string $warning): bool => str_contains($warning, 'taxpayer first name'),
         ));
 
         $this->assertDatabaseHas('fin_tax_return_pdf_exports', [
@@ -153,9 +153,12 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'tax_year' => 2025,
             'scope' => 'return',
             'mode' => 'editable',
-            'status' => 'blocked',
+            'status' => 'succeeded',
             'filename' => '2025-federal-return.pdf',
         ]);
+
+        $audit = FinTaxReturnPdfExport::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
+        $this->assertStringNotContainsString('123-45-6789', json_encode($audit->error_summary, JSON_THROW_ON_ERROR));
     }
 
     public function test_individual_form_1040_editable_export_returns_pdf_and_audits_success(): void
@@ -184,6 +187,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'formId' => 'form-1040',
             'mode' => 'editable',
             'filename' => 'tax return form 1040.pdf',
+            'includeProfilePii' => true,
         ]);
 
         $response->assertOk();
@@ -244,7 +248,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
 
         $this->assertStringStartsWith('%PDF', $content);
         $this->assertSame(4, count((new Parser)->parseContent($content)->getPages()));
-        $this->assertStringContainsString('Taxpayer', $content);
+        $this->assertStringNotContainsString('Taxpayer', $content);
         $this->assertStringContainsString('/AcroForm', $content);
 
         $this->assertDatabaseHas('fin_tax_return_pdf_exports', [
@@ -258,6 +262,35 @@ class TaxReturnPdfExportControllerTest extends TestCase
 
         $audit = FinTaxReturnPdfExport::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
         $this->assertSame(['form-1040', 'schedule-1'], $audit->form_ids);
+    }
+
+    public function test_selection_scope_renders_selected_forms_and_audits_rendered_form_ids(): void
+    {
+        $user = User::factory()->create();
+        $this->mock(IrsReturnPdfBuilder::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('buildResultForUser')
+                ->once()
+                ->withArgs(static fn (User $user, TaxReturnPdfOptions $options): bool => $options->scope === 'selection'
+                    && $options->formIds === ['form-1040', 'schedule-1', 'schedule-d']
+                    && $options->includeProfilePii === false)
+                ->andReturn(new TaxReturnPdfBuildResult('%PDF-1.4
+%selection', ['form-1040', 'schedule-1', 'schedule-d'], ['Review identity fields.']));
+        });
+
+        $response = $this->actingAs($user)->postJson('/finance/tax-preview/export-pdf', [
+            'year' => 2025,
+            'scope' => 'selection',
+            'formIds' => ['schedule-d', 'form-1040', 'schedule-1', 'schedule-1'],
+            'mode' => 'editable',
+            'filename' => 'selected packet.pdf',
+        ]);
+
+        $response->assertOk();
+        $this->assertSame(['Review identity fields.'], $this->warningsFromHeader($response->headers->get('X-Tax-Return-Pdf-Warnings')));
+
+        $audit = FinTaxReturnPdfExport::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
+        $this->assertSame(['form-1040', 'schedule-1', 'schedule-d'], $audit->form_ids);
+        $this->assertSame('succeeded', $audit->status);
     }
 
     public function test_individual_form_1040_print_export_returns_flat_pdf(): void
@@ -281,6 +314,7 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'formId' => 'form-1040',
             'mode' => 'print',
             'filename' => 'tax return form 1040 print.pdf',
+            'includeProfilePii' => true,
         ]);
 
         $response->assertOk();
@@ -301,6 +335,20 @@ class TaxReturnPdfExportControllerTest extends TestCase
             'status' => 'succeeded',
             'filename' => 'tax-return-form-1040-print.pdf',
         ]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function warningsFromHeader(?string $header): array
+    {
+        if ($header === null || $header === '') {
+            return [];
+        }
+
+        $decoded = json_decode(base64_decode($header, true) ?: '[]', true);
+
+        return is_array($decoded) ? array_values(array_filter($decoded, 'is_string')) : [];
     }
 
     /**

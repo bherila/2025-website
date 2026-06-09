@@ -133,7 +133,7 @@ function TaxPreviewPageContent(): React.ReactElement {
       link.remove()
       URL.revokeObjectURL(url)
 
-      return { ok: true, errors: [], warnings: [] }
+      return { ok: true, errors: [], warnings: pdfWarningsFromHeader(response.headers) }
     } catch (error) {
       console.error('Failed to export IRS PDF', error)
 
@@ -197,4 +197,21 @@ export default function TaxPreviewPage({ initialData }: { initialData?: TaxPrevi
       <TaxPreviewPageContent />
     </TaxPreviewProvider>
   )
+}
+
+function pdfWarningsFromHeader(headers: Headers): string[] {
+  const encoded = headers.get('x-tax-return-pdf-warnings')
+
+  if (!encoded) {
+    return []
+  }
+
+  try {
+    const decoded = window.atob(encoded)
+    const parsed = JSON.parse(decoded) as unknown
+
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
 }

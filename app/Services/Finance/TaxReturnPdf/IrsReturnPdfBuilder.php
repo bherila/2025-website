@@ -42,18 +42,55 @@ class IrsReturnPdfBuilder
             $options->mode,
             $profile,
             $facts,
+            $options->formIds(),
         );
 
         if (! $readiness->isReady()) {
             throw new TaxReturnPdfUnavailableException($readiness->errors, $readiness->warnings);
         }
 
-        $formIds = $options->scope === 'return'
-            ? $readiness->requiredForms
-            : [$options->formId ?? 'form-1040'];
-        $content = $this->fillEngine->fillForms($this->formFillJobs($formIds, $options, $facts, $profile), $options);
+        $warnings = $readiness->warnings;
+        $formIds = $this->selectedFormIds($options, $readiness->requiredForms, $facts);
+        $profileForFields = $options->includeProfilePii ? $profile : null;
 
-        return new TaxReturnPdfBuildResult($content, array_values(array_filter($formIds)));
+        if ($formIds === []) {
+            throw new TaxReturnPdfUnavailableException(['Select at least one supported IRS PDF form to export.'], $warnings);
+        }
+
+        if (in_array('form-8949', $formIds, true) && $this->form8949Instances($facts) === []) {
+            $warnings[] = 'Form 8949 has no supported detail rows, so a blank Form 8949 was generated for manual completion.';
+        }
+
+        $content = $this->fillEngine->fillForms($this->formFillJobs($formIds, $options, $facts, $profileForFields), $options);
+
+        return new TaxReturnPdfBuildResult($content, array_values(array_filter($formIds)), array_values(array_unique($warnings)));
+    }
+
+    /**
+     * @param  array<int, string>  $requiredForms
+     * @param  array<string, mixed>  $facts
+     * @return array<int, string>
+     */
+    private function selectedFormIds(TaxReturnPdfOptions $options, array $requiredForms, array $facts): array
+    {
+        if ($options->scope === 'form') {
+            return TaxReturnPdfOptions::normalizeFormIds([$options->formId ?? 'form-1040']);
+        }
+
+        if ($options->scope === 'selection') {
+            return TaxReturnPdfOptions::normalizeFormIds($options->formIds);
+        }
+
+        $recommended = TaxReturnPdfOptions::normalizeFormIds($requiredForms);
+
+        if ($this->form8949Instances($facts) === []) {
+            $recommended = array_values(array_filter(
+                $recommended,
+                static fn (string $formId): bool => $formId !== 'form-8949',
+            ));
+        }
+
+        return $recommended === [] ? ['form-1040'] : $recommended;
     }
 
     /**
@@ -67,7 +104,15 @@ class IrsReturnPdfBuilder
 
         foreach ($formIds as $index => $formId) {
             if ($formId === 'form-8949') {
-                foreach ($this->form8949Instances($facts) as $instanceIndex => $instance) {
+                $instances = $this->form8949Instances($facts);
+
+                if ($instances === []) {
+                    $jobs[] = $this->formFillJob($formId, "{$options->scope}-{$index}-blank", $options, $this->withBlankForm8949Current($facts), $profile);
+
+                    continue;
+                }
+
+                foreach ($instances as $instanceIndex => $instance) {
                     $instanceFacts = $facts;
                     $instanceFacts['irsPdf']['form8949']['current'] = $instance;
                     $jobs[] = $this->formFillJob($formId, "{$options->scope}-{$index}-{$instanceIndex}", $options, $instanceFacts, $profile);
@@ -402,6 +447,17 @@ class IrsReturnPdfBuilder
     private function schedule3Line6DisplayAmount(float $amount): string
     {
         return (string) (int) round($amount);
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array<string, mixed>
+     */
+    private function withBlankForm8949Current(array $facts): array
+    {
+        $facts['irsPdf']['form8949']['current'] = $this->form8949Instance(null, [], null, [], 'blank');
+
+        return $facts;
     }
 
     /**
