@@ -25,6 +25,7 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 | K-1 badge system (future) | [k1-badge-system-future.md](k1-badge-system-future.md) | `K1ReviewPanel.tsx` |
 | CLI (artisan commands) | [cli.md](cli.md) | `app/Console/Commands/Finance*` |
 | MCP server (AI tools) | [mcp-server.md](mcp-server.md) | `app/Mcp/` |
+| Access control | [../access-control.md](../access-control.md) | `app/Support/Access/` + `feature:*` route middleware |
 
 ## How to find things fast
 
@@ -39,7 +40,7 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 ## Global rules
 
 - **Money math**: always `currency.js` — never raw `+ - * /` on dollar values. Exported compute functions return plain `number`, never `currency` objects. See `CLAUDE.md`.
-- **Authentication**: all finance endpoints are behind `web + auth` middleware; models apply a `auth()->id()` global scope.
+- **Authentication + feature access**: private finance endpoints are behind `web + auth` plus granular `feature:*` middleware where appropriate; models apply a `auth()->id()` global scope. Public financial-planning calculators remain public.
 - **Testing**: every change must pass `pnpm run type-check`, `pnpm run lint`, `pnpm exec jest`, `vendor/bin/pint`, and `php artisan test --compact`. See `TESTING.md` in the repo root.
 
 ## Conventions worth knowing

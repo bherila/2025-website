@@ -27,6 +27,11 @@ The following Laravel Gates are defined in `AppServiceProvider`:
 
 - **Admin**: Checks if user has `admin` role or is user ID 1
 - **ClientCompanyMember**: Checks if user is a member of a specific client company, or is an admin
+- **feature**: Checks a per-user feature permission through `App\Support\Access\FeatureAccess`
+
+## Feature Permissions
+
+Roles remain the login/admin layer only. Private module access is controlled by direct grants in `user_feature_permissions` and resolved through the central feature registry. Child permissions include only their declared dependencies; parent permissions such as `finance.access` do not imply all Finance submodules. See [Access Control](access-control.md).
 
 ## API Endpoints
 
@@ -38,7 +43,20 @@ All endpoints require `admin` role.
 ```
 GET /api/admin/users
 ```
-Returns all users with their roles and associated client companies.
+Returns all users with their roles, associated client companies, direct feature permissions, and effective feature permissions.
+
+#### List Feature Permissions
+```
+GET /api/admin/feature-permissions
+```
+Returns the feature registry grouped by category.
+
+#### Replace User Feature Permissions
+```
+PUT /api/admin/users/{id}/feature-permissions
+Body: { "permissions": ["finance.tax-preview.view"] }
+```
+Replaces the user's direct feature grants. Inherited dependencies are calculated by the backend.
 
 #### Add Role to User
 ```
@@ -130,6 +148,7 @@ The user management interface is available at `/admin/users` and includes:
    - Set password
    - Add role (dropdown of available roles not already assigned)
    - Remove role (X button on role tags)
+   - Manage direct feature permission grants with inherited dependency badges and Finance presets
 
 ## Security Considerations
 

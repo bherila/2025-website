@@ -102,7 +102,7 @@ Route::middleware(['web', 'auth'])->patch('/financial-planning/roth-conversion/s
 Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->prefix('/financial-planning/career-comparison/latest')->group(function (): void {
     Route::get('/', [CareerCompController::class, 'latest']);
     Route::put('/', [CareerCompController::class, 'saveLatest']);
-    Route::post('/import-rsu', [CareerCompController::class, 'importRsu']);
+    Route::post('/import-rsu', [CareerCompController::class, 'importRsu'])->middleware('feature:finance.rsu.view');
 });
 // Creating/managing a share requires an owner; editing a fork is open to anyone with the link.
 Route::middleware(['web', AuthenticateWebOrMcpRequest::class])->post('/financial-planning/career-comparison/share', [CareerCompController::class, 'share']);
@@ -116,7 +116,8 @@ Route::middleware(['web', 'auth'])->patch('/tools/markdown/s/{code}', [MarkdownR
 Route::middleware(['web', 'auth'])->post('/tools/toon-json/save', [ToonConverterController::class, 'store']);
 Route::middleware(['web', 'auth'])->patch('/tools/toon-json/s/{code}', [ToonConverterController::class, 'update']);
 
-Route::middleware(['web', 'auth'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
+Route::middleware(['web', 'auth', 'feature:finance.accounts.basic'])->get('/finance/accounts/basic', [FinanceApiController::class, 'basicAccounts']);
+Route::middleware(['web', 'auth', 'feature:finance.accounts.detail'])->get('/finance/accounts', [FinanceApiController::class, 'accounts']);
 Route::middleware(['web', 'auth'])->get('/finance/accounts/suggest', [AccountSuggestController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts', [FinanceApiController::class, 'createAccount']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/balance', [FinanceApiController::class, 'updateBalance']);
@@ -129,24 +130,24 @@ Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/reco
 Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/lock', [PartnershipBasisController::class, 'lock']);
 Route::middleware(['web', 'auth'])->post('/finance/accounts/{account}/basis/unlock', [PartnershipBasisController::class, 'unlock']);
 Route::middleware(['web', 'auth'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
-Route::middleware(['web', 'auth'])->get('/rsu', [FinanceRsuController::class, 'getRsuData']);
-Route::middleware(['web', 'auth'])->post('/rsu', [FinanceRsuController::class, 'upsertRsuGrants']);
-Route::middleware(['web', 'auth'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant']);
-Route::middleware(['web', 'auth'])->post('/rsu/genai-import/{jobId}/results/{resultId}/confirm', [FinanceRsuController::class, 'confirmGenAiImport']);
-Route::middleware(['web', 'auth'])->post('/rsu/genai-import/{jobId}/results/{resultId}/skip', [FinanceRsuController::class, 'skipGenAiImport']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu', [FinanceRsuController::class, 'getRsuData']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu', [FinanceRsuController::class, 'upsertRsuGrants']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/genai-import/{jobId}/results/{resultId}/confirm', [FinanceRsuController::class, 'confirmGenAiImport']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/genai-import/{jobId}/results/{resultId}/skip', [FinanceRsuController::class, 'skipGenAiImport']);
 
 // Transaction routes (FinanceTransactionsApiController)
 // /finance/all/... routes must come before /finance/{account_id}/... to avoid conflicts
-Route::middleware(['web', 'auth'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/all/fees', [FinanceFeesController::class, 'all']);
 Route::middleware(['web', 'auth'])->get('/finance/all/line_items/sync', [FinanceTransactionsApiController::class, 'syncLineItems']);
-Route::middleware(['web', 'auth'])->get('/finance/all/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/finance/all/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth'])->get('/finance/all/transaction-years', [FinanceTransactionsApiController::class, 'getTransactionYears']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items/sync', [FinanceTransactionsApiController::class, 'syncLineItems']);
-Route::middleware(['web', 'auth'])->get('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
-Route::middleware(['web', 'auth'])->post('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'importLineItems']);
+Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth', 'feature:finance.transactions.manage'])->post('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'importLineItems']);
 Route::middleware(['web', 'auth'])->post('/finance/{account_id}/transaction', [FinanceTransactionsApiController::class, 'createTransaction']);
-Route::middleware(['web', 'auth'])->delete('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'deleteLineItem']);
+Route::middleware(['web', 'auth', 'feature:finance.transactions.manage'])->delete('/finance/{account_id}/line_items', [FinanceTransactionsApiController::class, 'deleteLineItem']);
 Route::middleware(['web', 'auth'])->get('/finance/{account_id}/transaction-years', [FinanceTransactionsApiController::class, 'getTransactionYears']);
 Route::middleware(['web', 'auth'])->get('/finance/tags', [FinanceTransactionTaggingApiController::class, 'getUserTags']);
 Route::middleware(['web', 'auth'])->post('/finance/tags/apply', [FinanceTransactionTaggingApiController::class, 'applyTagToTransactions']);
@@ -504,11 +505,13 @@ Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/proposals/{propo
 Route::middleware(['web', 'auth'])->post('/client/portal/{slug}/proposals/{proposalId}/request-changes', [ClientPortalProposalApiController::class, 'requestChanges']);
 
 // User Management API routes (Admin only)
+Route::middleware(['web', 'auth'])->get('/admin/feature-permissions', [UserManagementApiController::class, 'featurePermissions']);
 Route::middleware(['web', 'auth'])->get('/admin/users', [UserManagementApiController::class, 'index']);
 Route::middleware(['web', 'auth'])->post('/admin/users', [UserManagementApiController::class, 'create']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/roles', [UserManagementApiController::class, 'addRole']);
 Route::middleware(['web', 'auth'])->delete('/admin/users/{id}/roles/{role}', [UserManagementApiController::class, 'removeRole']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/password', [UserManagementApiController::class, 'setPassword']);
+Route::middleware(['web', 'auth'])->put('/admin/users/{id}/feature-permissions', [UserManagementApiController::class, 'updateFeaturePermissions']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/email', [UserManagementApiController::class, 'updateEmail']);
 Route::middleware(['web', 'auth'])->post('/admin/users/{id}/login-as', [UserManagementApiController::class, 'loginAs']);
 
@@ -582,11 +585,11 @@ Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accoun
 Route::middleware(['web', 'auth'])->post('/utility-bill-tracker/accounts/{accountId}/bills/{billId}/unlink', [UtilityBillLinkingController::class, 'unlinkTransaction']);
 
 // Tax documents (W-2, W-2c, 1099-INT, 1099-INT-C, 1099-DIV, 1099-DIV-C, broker 1099, K-1, etc.)
-Route::middleware(['web', 'auth'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-preview.export'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-comparison/export-xlsx', [CareerCompXlsxExportController::class, 'export']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/reconciliation-summary', [ReconciliationSummaryController::class, 'show']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/reconciliation-summary', [ReconciliationSummaryController::class, 'show']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
 Route::middleware(['web', 'auth'])->post('/finance/tax-years/{year}/lots-match', [TaxYearLotsMatchController::class, 'store']);
 Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);

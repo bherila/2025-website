@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Support\AuthorizesFeatureAccess;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -15,8 +16,14 @@ use Laravel\Mcp\Server\Tool;
 #[Description('Get a summary of an account including transaction totals, per-symbol breakdown, and monthly totals. Optionally filter by year.')]
 class GetAccountSummary extends Tool
 {
+    use AuthorizesFeatureAccess;
+
     public function handle(Request $request): Response
     {
+        if (($denied = $this->requireFeaturePermission('finance.accounts.detail')) !== null) {
+            return $denied;
+        }
+
         $uid = Auth::id();
         $accountId = (int) $request->input('account_id');
 

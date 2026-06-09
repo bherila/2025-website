@@ -12,6 +12,8 @@
       $__isAuthenticated = !is_null($__currentUser);
       $__isAdmin = $__isAuthenticated && $__currentUser->hasRole('admin');
       $__clientCompanies = $__isAuthenticated ? $__currentUser->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get() : collect();
+      $__permissions = $__isAuthenticated ? $__currentUser->effectiveFeaturePermissions() : [];
+      $__hasPermission = fn($permission) => $__isAdmin || in_array($permission, $__permissions, true);
 
       // Build Projects submenu (public)
       $__projectItems = [
@@ -24,13 +26,13 @@
 
       // Build Finance submenu (public calculators plus authenticated account tools)
       $__financeItems = array_values(array_filter([
-        $__isAuthenticated ? ['type' => 'link', 'label' => 'Accounts', 'href' => '/finance/accounts'] : null,
-        $__isAuthenticated ? ['type' => 'link', 'label' => 'Transactions', 'href' => '/finance/all-transactions'] : null,
-        $__isAuthenticated ? ['type' => 'link', 'label' => 'RSU', 'href' => '/finance/rsu'] : null,
-        $__isAuthenticated ? ['type' => 'link', 'label' => 'Payslips', 'href' => '/finance/payslips'] : null,
-        $__isAuthenticated ? ['type' => 'link', 'label' => 'Utility Bill Tracker', 'href' => '/utility-bill-tracker'] : null,
+        ($__isAuthenticated && $__hasPermission('finance.accounts.detail')) ? ['type' => 'link', 'label' => 'Accounts', 'href' => '/finance/accounts'] : null,
+        ($__isAuthenticated && $__hasPermission('finance.transactions.view')) ? ['type' => 'link', 'label' => 'Transactions', 'href' => '/finance/all-transactions'] : null,
+        ($__isAuthenticated && $__hasPermission('finance.rsu.view')) ? ['type' => 'link', 'label' => 'RSU', 'href' => '/finance/rsu'] : null,
+        ($__isAuthenticated && $__hasPermission('finance.payslips.view')) ? ['type' => 'link', 'label' => 'Payslips', 'href' => '/finance/payslips'] : null,
+        ($__isAuthenticated && $__hasPermission('utility-bills.view')) ? ['type' => 'link', 'label' => 'Utility Bill Tracker', 'href' => '/utility-bill-tracker'] : null,
         ['type' => 'group', 'label' => 'Tax'],
-        $__isAuthenticated ? ['type' => 'link', 'label' => 'Tax Preview', 'href' => '/finance/tax-preview'] : null,
+        ($__isAuthenticated && $__hasPermission('finance.tax-preview.view')) ? ['type' => 'link', 'label' => 'Tax Preview', 'href' => '/finance/tax-preview'] : null,
         ['type' => 'link', 'label' => 'Capital Loss Carryover Worksheet', 'href' => '/tools/irs-f461'],
         ['type' => 'group', 'label' => 'Calculators'],
         ['type' => 'link', 'label' => 'Financial Planning Overview', 'href' => '/financial-planning'],
@@ -85,6 +87,7 @@
         'appUrl' => config('app.url', ''),
         'authenticated' => $__isAuthenticated,
         'isAdmin' => $__isAdmin,
+        'permissions' => $__permissions,
         'clientCompanies' => $__clientCompanies,
         'currentUser' => $__currentUser ? [
           'id' => $__currentUser->id,

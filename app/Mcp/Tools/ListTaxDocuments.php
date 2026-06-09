@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Support\AuthorizesFeatureAccess;
 use App\Models\Files\FileForTaxDocument;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
@@ -13,8 +14,14 @@ use Laravel\Mcp\Server\Tool;
 #[Description('List tax documents (W-2, 1099-INT, 1099-DIV, 1099-MISC, 1099-B, 1099-NEC, 1099-R, broker_1099 consolidated statements, K-1, Form 1116) for the authenticated user. Supports filtering by year, form type, and review status.')]
 class ListTaxDocuments extends Tool
 {
+    use AuthorizesFeatureAccess;
+
     public function handle(Request $request): Response
     {
+        if (($denied = $this->requireFeaturePermission('finance.tax-documents.view')) !== null) {
+            return $denied;
+        }
+
         $userId = Auth::id();
 
         $query = FileForTaxDocument::where('user_id', $userId)

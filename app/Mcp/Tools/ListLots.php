@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Support\AuthorizesFeatureAccess;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -14,8 +15,14 @@ use Laravel\Mcp\Server\Tool;
 #[Description('List investment lots. Pass as_of=YYYY-12-31 to get lots held at year-end. Optionally filter by account_id.')]
 class ListLots extends Tool
 {
+    use AuthorizesFeatureAccess;
+
     public function handle(Request $request): Response
     {
+        if (($denied = $this->requireFeaturePermission('finance.lots.view')) !== null) {
+            return $denied;
+        }
+
         $uid = Auth::id();
         $accountId = $request->input('account_id');
 

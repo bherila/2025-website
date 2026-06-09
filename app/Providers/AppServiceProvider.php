@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Listeners\UpdateLastLoginDate;
 use App\Models\ClientManagement\ClientCompany;
+use App\Models\User;
 use App\Services\Finance\TaxReturnPdf\IrsAcroFormFillEngine;
 use App\Services\Finance\TaxReturnPdf\TcpdfFpdiFormEngine;
+use App\Support\Access\FeatureAccess;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Blade;
@@ -55,6 +57,10 @@ class AppServiceProvider extends ServiceProvider
         // Alias for backward compatibility (uppercase)
         Gate::define('Admin', function ($user) {
             return $user->hasRole('admin');
+        });
+
+        Gate::define('feature', function (User $user, string $permission): bool {
+            return app(FeatureAccess::class)->can($user, $permission);
         });
 
         // Gate for Vantage queue monitor dashboard - admin only

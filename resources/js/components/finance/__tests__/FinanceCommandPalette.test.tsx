@@ -45,7 +45,7 @@ describe('FinanceCommandPalette', () => {
     openPalette()
 
     expect(screen.getByPlaceholderText('Jump to an account, tool, or page…')).toBeInTheDocument()
-    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/accounts'))
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/accounts/basic'))
 
     fireEvent.change(screen.getByPlaceholderText('Jump to an account, tool, or page…'), {
       target: { value: 'checking transactions' },

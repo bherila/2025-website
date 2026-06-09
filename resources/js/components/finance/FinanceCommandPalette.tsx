@@ -5,6 +5,7 @@ import { MillerCommandPalette, type MillerCommandPaletteRow } from '@/components
 import { commandFilter } from '@/lib/commandSearch'
 import { FINANCE_ACCOUNT_TOOLS, FINANCE_TOP_TOOLS, type FinanceAccountToolDef } from '@/lib/financeNavigation'
 import { financeAccountToolUrl, getEffectiveYear, getYearFromUrl, YEAR_CHANGED_EVENT, type YearSelection } from '@/lib/financeRouteBuilder'
+import { hasPermission } from '@/lib/permissions'
 
 import {
   type FinanceCommandCategory,
@@ -49,7 +50,7 @@ export function FinanceCommandPalette({
   const [open, setOpen] = useFinanceCommandPaletteOpen()
   const [hasOpened, setHasOpened] = useState(open)
   const [currentYear, setCurrentYear] = useState<YearSelection | null>(() => readPaletteYear(currentAccountId, activeTab))
-  const { accounts: fetchedAccounts } = useFinanceAccounts({ enabled: hasOpened && providedAccounts === undefined })
+  const { accounts: fetchedAccounts } = useFinanceAccounts({ enabled: hasOpened && providedAccounts === undefined && hasPermission('finance.accounts.basic') })
   const accounts = providedAccounts ?? fetchedAccounts
   const registeredRows = useFinanceCommandRows()
 
@@ -140,7 +141,7 @@ function buildFinanceCommandRows(
   currentAccountId: number | 'all' | undefined,
   currentYear: YearSelection | null,
 ): FinanceCommandRow[] {
-  const rows: FinanceCommandRow[] = FINANCE_TOP_TOOLS.map((tool) => ({
+  const rows: FinanceCommandRow[] = FINANCE_TOP_TOOLS.filter((tool) => !tool.permission || hasPermission(tool.permission)).map((tool) => ({
     id: `tool:${tool.id}`,
     label: tool.label,
     description: 'Finance tool',
@@ -149,7 +150,7 @@ function buildFinanceCommandRows(
     keywords: [tool.id, tool.label, ...tool.keywords],
   }))
 
-  for (const tool of FINANCE_ACCOUNT_TOOLS) {
+  for (const tool of FINANCE_ACCOUNT_TOOLS.filter((tool) => hasPermission(tool.permission))) {
     const options = routeOptionsForTool(tool, currentYear)
     if (tool.supportsAllAccounts) {
       rows.push({

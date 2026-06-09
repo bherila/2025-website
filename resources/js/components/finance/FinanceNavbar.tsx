@@ -21,6 +21,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FINANCE_ACCOUNT_TOOLS, FINANCE_TOP_TOOLS, type FinanceTopToolId } from '@/lib/financeNavigation'
 import { accountTabUrl, allAccountsUrl, type YearSelection } from '@/lib/financeRouteBuilder'
+import { hasPermission } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 import { FinanceCommandPalette, FinanceCommandPaletteTrigger } from './FinanceCommandPalette'
@@ -31,7 +32,7 @@ const ALL_ACCOUNTS_SENTINEL: FinAccount = { acct_id: 0, acct_name: 'All Accounts
 
 export type FinanceSection = FinanceTopToolId | 'all-transactions'
 
-const RIGHT_SECTIONS = FINANCE_TOP_TOOLS.filter((tool) => tool.id !== 'config').map((tool) => ({
+const RIGHT_SECTIONS = FINANCE_TOP_TOOLS.filter((tool) => tool.id !== 'config' && (!tool.permission || hasPermission(tool.permission))).map((tool) => ({
   value: tool.id,
   label: tool.label,
   href: tool.href,
@@ -42,7 +43,7 @@ export const FINANCE_SECTIONS = RIGHT_SECTIONS
 
 /** Left-side account tabs */
 const ACCOUNT_TABS = FINANCE_ACCOUNT_TOOLS
-  .filter((tool) => tool.visibleInNavbarTabs)
+  .filter((tool) => tool.visibleInNavbarTabs && hasPermission(tool.permission))
   .map((tool) => ({
     value: tool.id,
     label: tool.label,
@@ -68,7 +69,7 @@ export default function FinanceNavbar({
   activeSection,
   children,
 }: FinanceNavbarProps) {
-  const { accounts } = useFinanceAccounts({ enabled: accountId !== undefined })
+  const { accounts } = useFinanceAccounts({ enabled: accountId !== undefined && hasPermission('finance.accounts.basic') })
   const [searchValue, setSearchValue] = useState('')
   const [isComboboxOpen, setIsComboboxOpen] = useState(false)
 
@@ -177,7 +178,7 @@ export default function FinanceNavbar({
           )}
 
           {/* Transactions link (only when accountId is undefined, i.e. non-account pages) */}
-          {accountId === undefined && (
+          {accountId === undefined && hasPermission('finance.transactions.view') && (
             <a
               href="/finance/account/all/transactions"
               className={cn(
@@ -235,6 +236,7 @@ export default function FinanceNavbar({
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               ))}
+              {hasPermission('finance.config.manage') && (
               <NavigationMenuItem>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -256,6 +258,7 @@ export default function FinanceNavbar({
                   <TooltipContent side="bottom">Config</TooltipContent>
                 </Tooltip>
               </NavigationMenuItem>
+              )}
             </NavigationMenuList>
           </NavigationMenu>
         </div>

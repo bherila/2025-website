@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Support\AuthorizesFeatureAccess;
 use App\Models\FinanceTool\FinEmploymentEntity;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
@@ -13,8 +14,14 @@ use Laravel\Mcp\Server\Tool;
 #[Description('List all employment entities for the authenticated user (W-2 employers, Schedule C businesses, etc.).')]
 class ListEmploymentEntities extends Tool
 {
+    use AuthorizesFeatureAccess;
+
     public function handle(Request $request): Response
     {
+        if (($denied = $this->requireFeaturePermission('finance.tax-preview.view')) !== null) {
+            return $denied;
+        }
+
         $entities = FinEmploymentEntity::where('user_id', Auth::id())
             ->orderBy('start_date', 'desc')
             ->get();

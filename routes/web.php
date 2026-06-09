@@ -47,49 +47,49 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/finance/rsu', function () {
         return view('finance.rsu');
-    });
+    })->middleware('feature:finance.rsu.view');
 
     Route::get('/finance/rsu/manage', function () {
         return view('finance.rsu-manage');
-    });
+    })->middleware('feature:finance.rsu.manage');
 
     Route::get('/finance/rsu/add-grant', function () {
         return view('finance.rsu-add-grant');
-    });
+    })->middleware('feature:finance.rsu.manage');
 
-    Route::get('/finance/accounts', [FinanceAccountsController::class, 'index']);
+    Route::get('/finance/accounts', [FinanceAccountsController::class, 'index'])->middleware('feature:finance.accounts.detail');
     Route::get('/finance/documents', function () {
         return view('finance.documents');
-    });
-    Route::get('/finance/payslips', [FinancePayslipController::class, 'index']);
-    Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry']);
-    Route::get('/finance/tax-preview', [TaxPreviewController::class, 'show']);
-    Route::post('/finance/tax-preview/export-pdf', [TaxReturnPdfExportController::class, 'export']);
-    Route::get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationPageController::class, 'show'])->where('id', '[0-9]+');
+    })->middleware('feature:finance.tax-documents.view');
+    Route::get('/finance/payslips', [FinancePayslipController::class, 'index'])->middleware('feature:finance.payslips.view');
+    Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry'])->middleware('feature:finance.payslips.manage');
+    Route::get('/finance/tax-preview', [TaxPreviewController::class, 'show'])->middleware('feature:finance.tax-preview.view');
+    Route::post('/finance/tax-preview/export-pdf', [TaxReturnPdfExportController::class, 'export'])->middleware('feature:finance.tax-preview.export');
+    Route::get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationPageController::class, 'show'])->middleware('feature:finance.tax-documents.view')->where('id', '[0-9]+');
     // Backward compat redirect for old Schedule C URL
     Route::redirect('/finance/schedule-c', '/finance/tax-preview', 301);
     Route::get('/finance/tags', function () {
         return view('finance.tags');
-    });
+    })->middleware('feature:finance.rules.manage');
     Route::get('/finance/config', function () {
         return view('finance.config');
-    });
+    })->middleware('feature:finance.config.manage');
 
     // New account-prefixed routes
-    Route::get('/finance/account/all/transactions', [FinanceAccountsController::class, 'showAllTransactions']);
-    Route::get('/finance/account/all/lots', [FinanceAccountsController::class, 'showAllLots']);
-    Route::get('/finance/account/all/fees', [FinanceAccountsController::class, 'showAllFees']);
-    Route::get('/finance/account/all/import', [FinanceAccountsController::class, 'showAllImportPage']);
-    Route::get('/finance/account/{account_id}/transactions', [FinanceAccountsController::class, 'show'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/duplicates', [FinanceAccountsController::class, 'duplicates'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/linker', [FinanceAccountsController::class, 'linker'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/statements', [FinanceAccountsController::class, 'statements'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/lots', [FinanceAccountsController::class, 'lots'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/summary', [FinanceAccountsController::class, 'summary'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/fees', [FinanceAccountsController::class, 'fees'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/basis', [FinanceAccountsController::class, 'basis'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/maintenance', [FinanceAccountsController::class, 'maintenance'])->where('account_id', '[0-9]+');
-    Route::get('/finance/account/{account_id}/import', [FinanceAccountsController::class, 'showImportTransactionsPage'])->where('account_id', '[0-9]+');
+    Route::get('/finance/account/all/transactions', [FinanceAccountsController::class, 'showAllTransactions'])->middleware('feature:finance.transactions.view');
+    Route::get('/finance/account/all/lots', [FinanceAccountsController::class, 'showAllLots'])->middleware('feature:finance.lots.view');
+    Route::get('/finance/account/all/fees', [FinanceAccountsController::class, 'showAllFees'])->middleware('feature:finance.accounts.detail');
+    Route::get('/finance/account/all/import', [FinanceAccountsController::class, 'showAllImportPage'])->middleware('feature:finance.transactions.import');
+    Route::get('/finance/account/{account_id}/transactions', [FinanceAccountsController::class, 'show'])->middleware('feature:finance.transactions.view')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/duplicates', [FinanceAccountsController::class, 'duplicates'])->middleware('feature:finance.transactions.manage')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/linker', [FinanceAccountsController::class, 'linker'])->middleware('feature:finance.transactions.manage')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/statements', [FinanceAccountsController::class, 'statements'])->middleware('feature:finance.accounts.detail')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/lots', [FinanceAccountsController::class, 'lots'])->middleware('feature:finance.lots.view')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/summary', [FinanceAccountsController::class, 'summary'])->middleware('feature:finance.accounts.detail')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/fees', [FinanceAccountsController::class, 'fees'])->middleware('feature:finance.accounts.detail')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/basis', [FinanceAccountsController::class, 'basis'])->middleware('feature:finance.accounts.detail')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/maintenance', [FinanceAccountsController::class, 'maintenance'])->middleware('feature:finance.accounts.manage')->where('account_id', '[0-9]+');
+    Route::get('/finance/account/{account_id}/import', [FinanceAccountsController::class, 'showImportTransactionsPage'])->middleware('feature:finance.transactions.import')->where('account_id', '[0-9]+');
 
     // Backward compat: 301 redirects from old URL structure to new /finance/account/{id}/{tab} routes
     Route::redirect('/finance/all-transactions', '/finance/account/all/transactions', 301);

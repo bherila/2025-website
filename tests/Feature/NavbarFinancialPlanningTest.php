@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\UserFeaturePermission;
 use Tests\TestCase;
 
 class NavbarFinancialPlanningTest extends TestCase
@@ -51,6 +52,17 @@ class NavbarFinancialPlanningTest extends TestCase
     {
         $this->withoutVite();
         $user = $this->createUser(['id' => 2]);
+        foreach ([
+            'finance.accounts.detail',
+            'finance.transactions.view',
+            'finance.tax-preview.view',
+            'utility-bills.view',
+        ] as $permission) {
+            UserFeaturePermission::query()->create([
+                'user_id' => $user->id,
+                'permission' => $permission,
+            ]);
+        }
 
         $response = $this->actingAs($user)->get('/');
 

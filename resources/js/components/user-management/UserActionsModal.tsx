@@ -24,11 +24,12 @@ import {
 } from '@/components/ui/select'
 import { fetchWrapper } from '@/fetchWrapper'
 
-import type { User } from './UserManagementPage'
+import type { FeaturePermissionDefinition, User } from './UserManagementPage'
 
 interface UserActionsModalProps {
   user: User
   availableRoles: string[]
+  featurePermissions: Record<string, FeaturePermissionDefinition[]>
   isOpen: boolean
   onClose: () => void
   onUpdate: () => void
@@ -37,6 +38,7 @@ interface UserActionsModalProps {
 export default function UserActionsModal({
   user,
   availableRoles,
+  featurePermissions,
   isOpen,
   onClose,
   onUpdate,
@@ -44,6 +46,7 @@ export default function UserActionsModal({
   const [newPassword, setNewPassword] = useState('')
   const [newEmail, setNewEmail] = useState(user.email)
   const [selectedRole, setSelectedRole] = useState<string>('')
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>(user.direct_permissions ?? [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -53,6 +56,39 @@ export default function UserActionsModal({
     (role) => !user.roles.includes(role)
   )
   const canPreviewClientPortal = user.can_login_as_client && user.client_companies.length > 0
+
+  const handlePermissionToggle = (permission: string, checked: boolean): void => {
+    setSelectedPermissions((current) => checked ? Array.from(new Set([...current, permission])) : current.filter((item) => item !== permission))
+  }
+
+  const handlePreset = (permissions: string[]): void => {
+    setSelectedPermissions(permissions)
+  }
+
+  const handleSaveFeaturePermissions = async (): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      await fetchWrapper.put(`/api/admin/users/${user.id}/feature-permissions`, {
+        permissions: selectedPermissions,
+      })
+      setSuccess('Feature permissions updated')
+      onUpdate()
+    } catch (err) {
+      setError('Failed to update feature permissions')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const inheritedPermissions = user.effective_permissions.filter((permission) => !selectedPermissions.includes(permission))
+  const fullFinancePermissions = Object.values(featurePermissions)
+    .flat()
+    .map((definition) => definition.permission)
+    .filter((permission) => permission.startsWith('finance.'))
+
 
   const handleUpdateEmail = async () => {
     if (!newEmail || !newEmail.includes('@')) {
@@ -279,6 +315,59 @@ export default function UserActionsModal({
             <p className="text-xs text-muted-foreground">
               Users without &apos;user&apos; or &apos;admin&apos; role cannot log in.
             </p>
+          </div>
+
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Feature Access</Label>
+              <Button type="button" size="sm" variant="outline" onClick={handleSaveFeaturePermissions} disabled={loading}>
+                Save features
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => handlePreset(['finance.tax-preview.view'])}>Tax Preview only</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => handlePreset(['finance.rsu.view'])}>RSU only</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => handlePreset(['finance.transactions.view'])}>Transactions read-only</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => handlePreset(fullFinancePermissions)}>Full Finance</Button>
+            </div>
+            <div className="max-h-80 space-y-4 overflow-y-auto rounded-md border p-3">
+              {Object.entries(featurePermissions).map(([category, definitions]) => (
+                <div key={category} className="space-y-2">
+                  <p className="text-sm font-medium">{category}</p>
+                  <div className="space-y-2">
+                    {definitions.map((definition) => (
+                      <label key={definition.permission} className="flex items-start gap-2 rounded-md border p-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={selectedPermissions.includes(definition.permission)}
+                          onChange={(event) => handlePermissionToggle(definition.permission, event.target.checked)}
+                        />
+                        <span className="space-y-1">
+                          <span className="block font-medium">{definition.label}</span>
+                          <span className="block text-xs text-muted-foreground">{definition.permission}</span>
+                          <span className="block text-xs text-muted-foreground">{definition.description}</span>
+                          {definition.permission === 'finance.accounts.basic' && (
+                            <span className="block text-xs text-amber-600 dark:text-amber-400">Dependency only: does not grant full Accounts pages.</span>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {inheritedPermissions.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Included dependencies</p>
+                <div className="flex flex-wrap gap-1">
+                  {inheritedPermissions.map((permission) => (
+                    <Badge key={permission} variant="outline">{permission}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Set Password Section */}

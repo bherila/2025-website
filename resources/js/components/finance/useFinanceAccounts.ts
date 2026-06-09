@@ -15,6 +15,7 @@ interface FinanceAccountsResponse {
   assetAccounts?: FinAccount[]
   liabilityAccounts?: FinAccount[]
   retirementAccounts?: FinAccount[]
+  accounts?: FinAccount[]
 }
 
 export function useFinanceAccounts(options: { enabled?: boolean } = {}): {
@@ -32,12 +33,16 @@ export function useFinanceAccounts(options: { enabled?: boolean } = {}): {
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchWrapper.get('/api/finance/accounts') as FinanceAccountsResponse
-      setAccounts([
-        ...(data.assetAccounts ?? []),
-        ...(data.liabilityAccounts ?? []),
-        ...(data.retirementAccounts ?? []),
-      ])
+      const data = await fetchWrapper.get('/api/finance/accounts/basic') as FinanceAccountsResponse
+      if (data.accounts) {
+        setAccounts(data.accounts)
+      } else {
+        setAccounts([
+          ...(data.assetAccounts ?? []),
+          ...(data.liabilityAccounts ?? []),
+          ...(data.retirementAccounts ?? []),
+        ])
+      }
     } catch (caught) {
       const nextError = caught instanceof Error ? caught : new Error(String(caught))
       setError(nextError)

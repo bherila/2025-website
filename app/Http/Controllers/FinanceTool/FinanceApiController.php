@@ -22,6 +22,26 @@ class FinanceApiController extends Controller
 {
     public function __construct(private readonly FeeAnalyticsService $feeAnalyticsService) {}
 
+    public function basicAccounts(Request $request): JsonResponse
+    {
+        $accounts = FinAccounts::query()
+            ->where('acct_owner', Auth::id())
+            ->orderBy('when_closed', 'asc')
+            ->orderBy('acct_sort_order', 'asc')
+            ->orderBy('acct_name', 'asc')
+            ->get([
+                'acct_id',
+                'acct_name',
+                'acct_is_debt',
+                'acct_is_retirement',
+                'when_closed',
+            ]);
+
+        return response()->json([
+            'accounts' => $accounts->values(),
+        ]);
+    }
+
     public function accounts(Request $request): JsonResponse
     {
         $uid = Auth::id();
