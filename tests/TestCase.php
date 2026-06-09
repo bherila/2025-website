@@ -3,6 +3,8 @@
 namespace Tests;
 
 use App\Models\User;
+use App\Models\UserFeaturePermission;
+use App\Support\Access\FeatureRegistry;
 
 /**
  * Base test case for all tests.
@@ -13,6 +15,25 @@ use App\Models\User;
 abstract class TestCase extends SafeTestCase
 {
     use CreatesApplication;
+
+    /**
+     * Grant a non-admin user every feature permission in the registry.
+     *
+     * Useful for ownership/scope tests where a second, non-admin user must
+     * pass the feature-permission gate so the controller's own scope check
+     * (not the gate) is what's being exercised. User ID 1 is always admin.
+     */
+    protected function grantAllFeatures(User $user): User
+    {
+        foreach (app(FeatureRegistry::class)->keys() as $permission) {
+            UserFeaturePermission::query()->firstOrCreate([
+                'user_id' => $user->id,
+                'permission' => $permission,
+            ]);
+        }
+
+        return $user;
+    }
 
     /**
      * Create a user with admin role for testing.

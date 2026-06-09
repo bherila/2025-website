@@ -11,6 +11,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/
 import { Label } from '@/components/ui/label'
 import type { MillerRegistryEntry } from '@/components/ui/miller'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { parseMoneyOrZero } from '@/lib/finance/money'
 import { formatCurrencyInput } from '@/lib/formatCurrency'
 
 import { buildDefaultJob, buildDefaultOptionGrant, buildDefaultRsuGrant, DEFAULT_MODEL_ASSUMPTIONS } from './defaults'
@@ -326,10 +327,6 @@ function parseNumber(raw: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function parseMoney(raw: string): number {
-  return currency(raw).value
-}
-
 type OptionGrantShareInputMode = 'count' | 'percent'
 
 function parseGrantYear(grantDate: string): number | null {
@@ -526,7 +523,7 @@ function MoneyField({ label, value, compact = false, onChange }: MoneyFieldProps
 
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
     setDraft(event.target.value)
-    onChange(parseMoney(event.target.value))
+    onChange(parseMoneyOrZero(event.target.value))
   }
 
   function handleFocus(event: FocusEvent<HTMLInputElement>): void {

@@ -24,6 +24,14 @@ const accountsResponse = {
 beforeEach(() => {
   jest.clearAllMocks()
   window.sessionStorage.clear()
+  // The palette gates account loading on finance.accounts.basic via hasPermission,
+  // which fails closed without an app-initial-data node. Mark this test user admin.
+  document.getElementById('app-initial-data')?.remove()
+  const initialData = document.createElement('script')
+  initialData.id = 'app-initial-data'
+  initialData.type = 'application/json'
+  initialData.textContent = JSON.stringify({ isAdmin: true })
+  document.body.appendChild(initialData)
   ;(fetchWrapper.get as jest.Mock).mockResolvedValue(accountsResponse)
   window.history.replaceState({}, '', '/finance/account/1/transactions?year=2025')
   setFinanceCommandPaletteOpen(false)

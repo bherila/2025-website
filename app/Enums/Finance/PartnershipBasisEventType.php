@@ -25,7 +25,9 @@ namespace App\Enums\Finance;
  *                outside-basis effect (prior-year carryforward marker, capital-
  *                account net income used only for reconciliation, guaranteed
  *                payments, §754 step-up pending detail, AMT/credit informational
- *                codes).
+ *                codes, and the manual tax-capital / book-capital adjustments,
+ *                which move only the capital columns — see
+ *                PartnershipBasisService::endingCapitalCents() — never outside basis).
  */
 enum PartnershipBasisEventType: string
 {
@@ -56,6 +58,10 @@ enum PartnershipBasisEventType: string
     case LiquidationDistributionProperty = 'liquidation_distribution_property';
     case ManualIncreaseToOutsideBasis = 'manual_increase_to_outside_basis';
     case ManualDecreaseToOutsideBasis = 'manual_decrease_to_outside_basis';
+    case ManualIncreaseToTaxCapital = 'manual_increase_to_tax_capital';
+    case ManualDecreaseToTaxCapital = 'manual_decrease_to_tax_capital';
+    case ManualIncreaseToBookCapital = 'manual_increase_to_book_capital';
+    case ManualDecreaseToBookCapital = 'manual_decrease_to_book_capital';
     case ManualReconciliationNote = 'manual_reconciliation_note';
     case ReconciliationAdjustment = 'reconciliation_adjustment';
     case Memorandum = 'memorandum';

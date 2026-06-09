@@ -307,3 +307,7 @@ php artisan test --filter=FinanceLotsControllerTest
 - Search opening transactions by symbol
 - Save manual lot assignments
 - Authorization and authentication
+
+## RSU tax-lot links
+
+RSU vest settlements may create or explain brokerage tax lots. The `tax_lot` RSU link type connects a settlement, allocation, or individual vest row to `fin_account_lots.lot_id`. The vested-share basis is the vest-date FMV per share; later sales remain in the normal lot analyzer and capital-gain workflow.

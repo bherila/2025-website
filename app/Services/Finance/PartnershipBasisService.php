@@ -425,7 +425,7 @@ class PartnershipBasisService
             ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
             ->get();
 
-        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'locked', 'locked_at' => now()]));
+        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'locked', 'locked_at' => now(), 'locked_by_user_id' => $userId]));
 
         return $basisYears;
     }
@@ -437,7 +437,7 @@ class PartnershipBasisService
      *
      * @return EloquentCollection<int, FinPartnershipBasisYear>
      */
-    public function unlockAccountYear(FinAccounts $account, int $userId, int $year): EloquentCollection
+    public function unlockAccountYear(FinAccounts $account, int $userId, int $year, string $reason, ?string $amendmentReason = null, ?int $amendedSourceDocumentId = null): EloquentCollection
     {
         $basisYears = FinPartnershipBasisYear::query()
             ->with('partnershipInterest')
@@ -447,7 +447,15 @@ class PartnershipBasisService
             ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
             ->get();
 
-        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'needs_review', 'locked_at' => null]));
+        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update([
+            'review_status' => 'needs_review',
+            'locked_at' => null,
+            'unlocked_at' => now(),
+            'unlocked_by_user_id' => $userId,
+            'unlock_reason' => $reason,
+            'amendment_reason' => $amendmentReason,
+            'amended_source_document_id' => $amendedSourceDocumentId,
+        ]));
 
         $basisYears->pluck('partnershipInterest')
             ->filter(fn ($interest): bool => $interest instanceof FinPartnershipInterest)
@@ -592,6 +600,12 @@ class PartnershipBasisService
             'reviewStatus' => $basisYear->review_status,
             'isStale' => (bool) $basisYear->is_stale,
             'lockedAt' => $basisYear->locked_at,
+            'lockedByUserId' => $basisYear->locked_by_user_id,
+            'unlockedAt' => $basisYear->unlocked_at,
+            'unlockedByUserId' => $basisYear->unlocked_by_user_id,
+            'unlockReason' => $basisYear->unlock_reason,
+            'amendmentReason' => $basisYear->amendment_reason,
+            'amendedSourceDocumentId' => $basisYear->amended_source_document_id,
             'events' => $events->map(fn (FinPartnershipBasisEvent $event): array => $this->eventToArray($event))->values()->all(),
         ];
     }
@@ -1408,7 +1422,9 @@ class PartnershipBasisService
     private function basisSideFor(PartnershipBasisEventType $type): string
     {
         return match ($type) {
-            PartnershipBasisEventType::InitialTaxBasisCapital, PartnershipBasisEventType::InitialCapitalAccountValue => 'inside',
+            PartnershipBasisEventType::InitialTaxBasisCapital, PartnershipBasisEventType::InitialCapitalAccountValue,
+            PartnershipBasisEventType::ManualIncreaseToTaxCapital, PartnershipBasisEventType::ManualDecreaseToTaxCapital,
+            PartnershipBasisEventType::ManualIncreaseToBookCapital, PartnershipBasisEventType::ManualDecreaseToBookCapital => 'inside',
             PartnershipBasisEventType::Memorandum, PartnershipBasisEventType::ReconciliationAdjustment, PartnershipBasisEventType::ManualReconciliationNote => 'memorandum',
             PartnershipBasisEventType::PriorYearRollforward => 'both',
             default => 'outside',
@@ -1461,6 +1477,21 @@ class PartnershipBasisService
     private function endingCapitalCents(Collection $events, int $beginning, string $kind): int
     {
         $metadataKey = $kind === 'book' ? 'ending_book_capital_cents' : 'ending_tax_basis_capital_cents';
+
+        // Magnitudes (like the outside-basis rollforward) so a signed manual amount cannot flip a
+        // decrease into an increase.
+        $absSum = fn (array $eventTypes): int => (int) $events
+            ->whereIn('event_type', $eventTypes)
+            ->sum(fn (FinPartnershipBasisEvent $event): int => abs((int) $event->amount_cents));
+
+        // Manual capital corrections always apply — even on top of a reported K-1 ending — so the
+        // saved adjustment has the effect the UI advertises.
+        $manualDelta = $kind === 'book'
+            ? $absSum(['manual_increase_to_book_capital']) - $absSum(['manual_decrease_to_book_capital'])
+            : $absSum(['manual_increase_to_tax_capital']) - $absSum(['manual_decrease_to_tax_capital']);
+
+        // An explicit reported ending (from a K-1 / reconciliation event) wins for the non-manual
+        // base; the manual correction layers on top.
         $explicitEnding = $events->filter(function (FinPartnershipBasisEvent $event) use ($metadataKey): bool {
             $metadata = $event->getAttribute('metadata');
 
@@ -1469,28 +1500,26 @@ class PartnershipBasisService
         if ($explicitEnding instanceof FinPartnershipBasisEvent) {
             $metadata = $explicitEnding->getAttribute('metadata');
 
-            return (int) $metadata[$metadataKey];
+            return (int) $metadata[$metadataKey] + $manualDelta;
         }
 
         if ($kind === 'book') {
-            return $beginning;
+            // Book / §704(b) capital moves only on an explicit K-1 ending (handled above) or a
+            // manual book-capital adjustment; nothing in the outside-basis rollforward touches it.
+            return $beginning + $manualDelta;
         }
 
         // Tax-basis capital uses the same increase/decrease set as outside basis EXCEPT liability
         // share changes (which affect outside basis but not tax-basis capital). §179 and depletion
-        // reduce capital even when basis-limited, so they must be subtracted here too. Amounts are
-        // taken as magnitudes (like the outside-basis rollforward) so a signed manual amount cannot
-        // flip a decrease into an increase.
-        $absSum = fn (array $eventTypes): int => (int) $events
-            ->whereIn('event_type', $eventTypes)
-            ->sum(fn (FinPartnershipBasisEvent $event): int => abs((int) $event->amount_cents));
-
+        // reduce capital even when basis-limited, so they must be subtracted here too. Manual
+        // OUTSIDE-basis adjustments are intentionally excluded — they move outside basis only;
+        // manual_*_to_tax_capital is the explicit lever for tax-basis capital.
         $currentYear = $absSum([
             'capital_contribution_cash',
             'capital_contribution_property_basis',
             'taxable_income',
             'tax_exempt_income',
-            'manual_increase_to_outside_basis',
+            'manual_increase_to_tax_capital',
         ]) - $absSum([
             'cash_distribution',
             'property_distribution_basis',
@@ -1500,7 +1529,7 @@ class PartnershipBasisService
             'foreign_tax',
             'section179',
             'depletion',
-            'manual_decrease_to_outside_basis',
+            'manual_decrease_to_tax_capital',
         ]);
 
         return $beginning + $currentYear;
@@ -1624,7 +1653,9 @@ class PartnershipBasisService
             'suspended_loss_released' => 80,
             'sale_exchange', 'liquidation_distribution_cash', 'liquidation_distribution_property' => 70,
             'manual_increase_to_outside_basis' => 25,
+            'manual_increase_to_tax_capital', 'manual_increase_to_book_capital' => 26,
             'manual_decrease_to_outside_basis' => 65,
+            'manual_decrease_to_tax_capital', 'manual_decrease_to_book_capital' => 66,
             'manual_reconciliation_note', 'reconciliation_adjustment', 'memorandum' => 90,
             default => 100,
         };

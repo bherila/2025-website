@@ -121,6 +121,7 @@ class FinanceSummaryApiTest extends TestCase
     {
         $user = User::factory()->create();
         $otherUser = User::factory()->create();
+        $this->grantAllFeatures($otherUser);
         $account = $this->createAccount($user);
         $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -40]);
 

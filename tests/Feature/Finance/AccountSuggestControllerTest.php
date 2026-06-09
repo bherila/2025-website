@@ -73,6 +73,7 @@ class AccountSuggestControllerTest extends TestCase
     {
         $owner = User::factory()->create();
         $other = User::factory()->create();
+        $this->grantAllFeatures($other);
         $document = $this->createTaxDocument($owner);
         $link = TaxDocumentAccount::createLink((int) $document->id, null, '1099_b', 2024, aiIdentifier: '1234');
 

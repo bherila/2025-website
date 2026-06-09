@@ -174,7 +174,7 @@ function buildFinanceCommandRows(
           account.acct_name,
           String(account.acct_id),
           account.acct_number ?? '',
-          last4(account.acct_number),
+          account.acct_number_last4 ?? last4(account.acct_number),
           tool.label,
           ...keywordsForAccountTool(tool),
         ],

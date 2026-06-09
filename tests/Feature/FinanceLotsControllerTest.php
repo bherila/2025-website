@@ -342,6 +342,7 @@ class FinanceLotsControllerTest extends TestCase
     {
         $owner = $this->createUser();
         $otherUser = $this->createUser();
+        $this->grantAllFeatures($otherUser);
         $acctId = $this->createAccountWithLots($owner->id);
 
         $response = $this->actingAs($otherUser)->getJson("/api/finance/{$acctId}/lots?status=open");

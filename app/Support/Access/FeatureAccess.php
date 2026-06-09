@@ -37,6 +37,14 @@ class FeatureAccess
             return $this->registry->keys();
         }
 
-        return $this->registry->resolveEffective($this->directPermissions($user));
+        // Ignore stored grants whose key is no longer in the registry (e.g. a
+        // permission was renamed/removed). resolveEffective() throws on unknown
+        // keys, which would otherwise 500 every authorization check for the user.
+        $known = array_values(array_filter(
+            $this->directPermissions($user),
+            fn (string $permission): bool => $this->registry->exists($permission)
+        ));
+
+        return $this->registry->resolveEffective($known);
     }
 }

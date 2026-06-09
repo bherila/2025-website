@@ -8,14 +8,6 @@ use App\Services\Finance\TaxReturnPdf\Data\IrsReturnReadinessResult;
 
 class IrsReturnReadinessService
 {
-    private const array FORM_LABELS = [
-        'form-1040' => 'Form 1040',
-        'schedule-1' => 'Schedule 1',
-        'schedule-3' => 'Schedule 3',
-        'schedule-d' => 'Schedule D',
-        'form-8949' => 'Form 8949',
-    ];
-
     private const array BASE_REQUIRED_PROFILE_FIELDS = [
         'filing_status' => 'filing status',
         'taxpayer_first_name' => 'taxpayer first name',
@@ -35,6 +27,7 @@ class IrsReturnReadinessService
 
     /**
      * @param  array<string, mixed>  $facts
+     * @param  array<int, string>  $selectedFormIds
      */
     public function forRequest(
         User $user,
@@ -44,40 +37,35 @@ class IrsReturnReadinessService
         string $mode,
         ?FinTaxReturnProfile $profile,
         array $facts,
+        array $selectedFormIds = [],
     ): IrsReturnReadinessResult {
         $errors = [];
         $warnings = [];
-        $unsupportedForms = $scope === 'return' ? $this->formSelector->unsupportedRequiredForms($facts) : [];
-        $requiredForms = $scope === 'return' ? $this->formSelector->requiredForms($facts) : [$formId ?? 'form-1040'];
+        $unsupportedForms = in_array($scope, ['return', 'selection'], true) ? $this->formSelector->unsupportedRequiredForms($facts) : [];
+        $requiredForms = $scope === 'return' ? $this->formSelector->requiredForms($facts) : $this->requestedForms($scope, $formId, $selectedFormIds);
 
-        if ($scope === 'return') {
-            $missingProfileFields = $this->missingProfileFields($profile);
+        if ($requiredForms === []) {
+            $errors[] = 'Select at least one supported IRS PDF form to export.';
+        }
 
-            foreach ($missingProfileFields as $label) {
-                $errors[] = "Complete federal return export requires {$label} in the tax return profile.";
-            }
+        foreach ($this->missingProfileFields($profile) as $label) {
+            $warnings[] = "Taxpayer identity field {$label} is not included by default and may be blank in the generated PDF.";
+        }
 
-            foreach ($unsupportedForms as $unsupportedForm) {
-                $errors[] = "Complete federal return export is blocked because {$unsupportedForm} appears required but is not pinned or mapped yet.";
-            }
-        } else {
-            $formLabel = self::FORM_LABELS[$formId ?? 'form-1040'] ?? 'This IRS form';
-
-            foreach ($this->missingProfileFields($profile) as $label) {
-                $warnings[] = "{$formLabel} can be generated with {$label} blank, but the user must complete it manually.";
-            }
+        foreach ($unsupportedForms as $unsupportedForm) {
+            $warnings[] = "{$unsupportedForm} appears required from Tax Preview facts but no pinned or mapped PDF exists yet, so it was omitted from this supported packet.";
         }
 
         if ($this->hasUnsupportedForm8949Rows($facts) && $this->requiresForm8949($scope, $formId, $requiredForms)) {
-            $errors[] = 'Form 8949 export is blocked because one or more capital-gain rows do not have a supported Form 8949 box.';
+            $warnings[] = 'One or more capital-gain rows do not have a supported Form 8949 box and were omitted from the Form 8949 PDF detail.';
         }
 
         if ($this->missingRequiredForm8949Rows($facts) && $this->requiresForm8949($scope, $formId, $requiredForms)) {
-            $errors[] = 'Form 8949 export is blocked because Schedule D requires transaction detail but no supported Form 8949 rows are available.';
+            $warnings[] = 'Form 8949 was selected or appears required, but no supported Form 8949 detail rows are available; a blank Form 8949 may be generated for manual completion.';
         }
 
         if ($this->hasUnsupportedSchedule3Line6Details($facts) && $this->requiresSchedule3($scope, $formId, $requiredForms)) {
-            $errors[] = 'Schedule 3 export is blocked because line 7 includes other nonrefundable credits without supported line 6 details.';
+            $warnings[] = 'Schedule 3 line 6 details cannot be fully itemized from the current facts; review line 6 manually in the generated PDF.';
         }
 
         if ($mode === 'editable' && ! $this->fillEngine->supportsEditableOutput()) {
@@ -90,6 +78,19 @@ class IrsReturnReadinessService
             requiredForms: array_values(array_filter($requiredForms)),
             unsupportedForms: $unsupportedForms,
         );
+    }
+
+    /**
+     * @param  array<int, string>  $selectedFormIds
+     * @return array<int, string>
+     */
+    private function requestedForms(string $scope, ?string $formId, array $selectedFormIds): array
+    {
+        if ($scope === 'selection') {
+            return array_values(array_filter($selectedFormIds));
+        }
+
+        return [$formId ?? 'form-1040'];
     }
 
     /**

@@ -2,6 +2,14 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 
 describe('FinanceNavbar', () => {
   beforeEach(() => {
+    // FinanceNavbar filters section links via hasPermission, which fails closed
+    // without an app-initial-data node. Mark this test user admin so all links show.
+    document.getElementById('app-initial-data')?.remove()
+    const initialData = document.createElement('script')
+    initialData.id = 'app-initial-data'
+    initialData.type = 'application/json'
+    initialData.textContent = JSON.stringify({ isAdmin: true })
+    document.body.appendChild(initialData)
     // Mock fetch for account loading
     ;(window as any).fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/api/finance/accounts')) {

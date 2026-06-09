@@ -33,9 +33,13 @@ class GenAiImportController extends Controller
         private FeatureAccess $featureAccess,
     ) {}
 
-    private function authorizeJobType(User $user, string $jobType): ?JsonResponse
+    /**
+     * Feature permission required to view/act on a given import job type.
+     * Job types not listed here (e.g. PHR types) are unrestricted.
+     */
+    private function permissionForJobType(string $jobType): ?string
     {
-        $permission = match ($jobType) {
+        return match ($jobType) {
             'finance_transactions' => 'finance.transactions.import',
             'finance_payslip' => 'finance.payslips.manage',
             'equity_award' => 'finance.rsu.manage',
@@ -43,6 +47,11 @@ class GenAiImportController extends Controller
             'document_extract' => 'finance.tax-documents.manage',
             default => null,
         };
+    }
+
+    private function authorizeJobType(User $user, string $jobType): ?JsonResponse
+    {
+        $permission = $this->permissionForJobType($jobType);
 
         if ($permission === null) {
             return null;
@@ -311,6 +320,21 @@ class GenAiImportController extends Controller
                 return $denied;
             }
             $query->where('job_type', $jobType);
+        } else {
+            // No explicit filter: never leak restricted job types (and their
+            // parsed results) the user is not authorized for. Reuse the same
+            // job_type -> permission mapping as the per-type authorization.
+            $blocked = array_values(array_filter(
+                GenAiImportJob::VALID_JOB_TYPES,
+                function (string $type) use ($user): bool {
+                    $permission = $this->permissionForJobType($type);
+
+                    return $permission !== null && ! $this->featureAccess->can($user, $permission);
+                }
+            ));
+            if ($blocked !== []) {
+                $query->whereNotIn('job_type', $blocked);
+            }
         }
 
         $acctId = $request->query('acct_id');

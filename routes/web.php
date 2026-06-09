@@ -16,6 +16,7 @@ use App\Http\Controllers\FinanceTool\FinanceAccountsController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\FinanceTool\TaxReturnPdfExportController;
+use App\Http\Controllers\FinanceTool\TaxReturnPdfExportOptionsController;
 use App\Http\Controllers\FinancialPlanning\CareerCompController;
 use App\Http\Controllers\FinancialPlanning\RothConversionController;
 use App\Http\Controllers\LoginController;
@@ -64,6 +65,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/payslips', [FinancePayslipController::class, 'index'])->middleware('feature:finance.payslips.view');
     Route::get('/finance/payslips/entry', [FinancePayslipController::class, 'entry'])->middleware('feature:finance.payslips.manage');
     Route::get('/finance/tax-preview', [TaxPreviewController::class, 'show'])->middleware('feature:finance.tax-preview.view');
+    Route::get('/finance/tax-preview/pdf-export-options', TaxReturnPdfExportOptionsController::class)->middleware('feature:finance.tax-preview.view');
     Route::post('/finance/tax-preview/export-pdf', [TaxReturnPdfExportController::class, 'export'])->middleware('feature:finance.tax-preview.export');
     Route::get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationPageController::class, 'show'])->middleware('feature:finance.tax-documents.view')->where('id', '[0-9]+');
     // Backward compat redirect for old Schedule C URL
@@ -158,8 +160,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/client/portal/{slug}/expenses', [ClientPortalController::class, 'expenses'])->name('client-portal.expenses');
 
     // Utility Bill Tracker Routes
-    Route::get('/utility-bill-tracker', [UtilityAccountController::class, 'index'])->name('utility-bill-tracker.index');
-    Route::get('/utility-bill-tracker/{id}/bills', [UtilityAccountController::class, 'bills'])->name('utility-bill-tracker.bills');
+    Route::get('/utility-bill-tracker', [UtilityAccountController::class, 'index'])->middleware('feature:utility-bills.view')->name('utility-bill-tracker.index');
+    Route::get('/utility-bill-tracker/{id}/bills', [UtilityAccountController::class, 'bills'])->middleware('feature:utility-bills.view')->name('utility-bill-tracker.bills');
 });
 
 Route::get('/tools/bingo', [BingoController::class, 'index']);

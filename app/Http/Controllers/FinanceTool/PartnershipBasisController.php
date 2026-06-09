@@ -131,7 +131,19 @@ class PartnershipBasisController extends Controller
     {
         $year = $this->year($request);
         $financeAccount = $this->account($account);
-        $basisYears = $this->partnershipBasisService->unlockAccountYear($financeAccount, (int) Auth::id(), $year);
+        $payload = $request->validate([
+            'reason' => ['required', 'string', 'max:2000', 'not_regex:/^\\s*$/'],
+            'amendment_reason' => ['nullable', 'string', 'max:2000'],
+            'amended_source_document_id' => ['nullable', 'integer', Rule::exists('fin_tax_documents', 'id')->where('user_id', Auth::id())],
+        ]);
+        $basisYears = $this->partnershipBasisService->unlockAccountYear(
+            $financeAccount,
+            (int) Auth::id(),
+            $year,
+            $payload['reason'],
+            $payload['amendment_reason'] ?? null,
+            isset($payload['amended_source_document_id']) ? (int) $payload['amended_source_document_id'] : null,
+        );
         abort_if($basisYears->isEmpty(), 404);
 
         return response()->json($this->partnershipBasisService->accountBasisData($financeAccount, (int) Auth::id(), $year));

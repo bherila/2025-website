@@ -68,6 +68,13 @@ interface PartnershipBasisInterest {
   liquidationGainLoss: number | null
   reviewStatus: string
   isStale: boolean
+  lockedAt: string | null
+  lockedByUserId: number | null
+  unlockedAt: string | null
+  unlockedByUserId: number | null
+  unlockReason: string | null
+  amendmentReason: string | null
+  amendedSourceDocumentId: number | null
   events: PartnershipBasisEvent[]
 }
 
@@ -127,10 +134,25 @@ const MANUAL_EVENT_TYPES: { value: string; label: string }[] = [
   { value: 'nondeductible_expense', label: 'Nondeductible expense' },
   { value: 'foreign_tax', label: 'Foreign tax' },
   { value: 'beginning_basis', label: 'Beginning basis override' },
-  { value: 'manual_increase_to_outside_basis', label: 'Manual basis increase' },
-  { value: 'manual_decrease_to_outside_basis', label: 'Manual basis decrease' },
+  { value: 'manual_increase_to_outside_basis', label: 'Manual outside-basis increase' },
+  { value: 'manual_decrease_to_outside_basis', label: 'Manual outside-basis decrease' },
+  { value: 'manual_increase_to_tax_capital', label: 'Manual tax-capital increase' },
+  { value: 'manual_decrease_to_tax_capital', label: 'Manual tax-capital decrease' },
+  { value: 'manual_increase_to_book_capital', label: 'Manual book-capital increase' },
+  { value: 'manual_decrease_to_book_capital', label: 'Manual book-capital decrease' },
   { value: 'manual_reconciliation_note', label: 'Memorandum note (no basis effect)' },
 ]
+
+/** Which figure each manual adjustment moves — surfaced in the dialog before saving. */
+const MANUAL_EVENT_EFFECT: Record<string, string> = {
+  manual_increase_to_outside_basis: 'Increases outside basis only — not tax-basis or book capital.',
+  manual_decrease_to_outside_basis: 'Decreases outside basis only — not tax-basis or book capital.',
+  manual_increase_to_tax_capital: 'Increases tax-basis capital (and the inside-basis proxy) only — not outside basis.',
+  manual_decrease_to_tax_capital: 'Decreases tax-basis capital (and the inside-basis proxy) only — not outside basis.',
+  manual_increase_to_book_capital: 'Increases book/FMV capital only — not outside basis or tax-basis capital.',
+  manual_decrease_to_book_capital: 'Decreases book/FMV capital only — not outside basis or tax-basis capital.',
+  manual_reconciliation_note: 'Memorandum only — no effect on any basis or capital figure.',
+}
 
 function selectedYearForAccount(accountId: number): number {
   const year = getEffectiveYear(accountId)
@@ -271,11 +293,17 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
   }, [runMutation, accountId, year])
 
   const unlockYear = useCallback(() => {
-    if (!window.confirm(`Unlock ${year}? This re-opens the basis rollforward for amendment (e.g. an amended K-1) and recomputes it.`)) {
+    const reason = window.prompt(`Unlock ${year}? This re-opens the basis rollforward for amendment (e.g. an amended K-1) and recomputes it.\n\nEnter a reason for the audit trail:`)
+    if (reason === null) {
       return
     }
-    void runMutation(() => fetchWrapper.post(`/api/finance/accounts/${accountId}/basis/unlock?year=${year}`, {}))
-  }, [runMutation, accountId, year])
+    const trimmedReason = reason.trim()
+    if (trimmedReason === '') {
+      setError('An unlock reason is required.')
+      return
+    }
+    void runMutation(() => fetchWrapper.post(`/api/finance/accounts/${accountId}/basis/unlock?year=${year}`, { reason: trimmedReason }))
+  }, [runMutation, accountId, year, setError])
 
   const totals = useMemo(() => {
     const interests = data?.interests ?? []
@@ -350,6 +378,19 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
                     {interest.interestEndDate ? ` · Disposed: ${interest.interestEndDate}` : ''}
                   </span>
                 </div>
+                {interest.lockedAt ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <Lock className="mr-1 inline h-3 w-3" />Locked {interest.lockedAt}
+                    {interest.lockedByUserId ? ` by user #${interest.lockedByUserId}` : ''}
+                  </p>
+                ) : null}
+                {interest.unlockReason ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <LockOpen className="mr-1 inline h-3 w-3" />Last unlocked{interest.unlockedAt ? ` ${interest.unlockedAt}` : ''}{interest.unlockedByUserId ? ` by user #${interest.unlockedByUserId}` : ''}: {interest.unlockReason}
+                    {interest.amendmentReason ? ` (amendment: ${interest.amendmentReason})` : ''}
+                    {interest.amendedSourceDocumentId ? ` [doc #${interest.amendedSourceDocumentId}]` : ''}
+                  </p>
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 {interest.reviewStatus === 'locked' && <Lock className="h-4 w-4 text-muted-foreground" />}
@@ -634,6 +675,9 @@ function AddEventDialog({ accountId, year, interestId, disabled, onSaved, setErr
                 {MANUAL_EVENT_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
               </SelectContent>
             </Select>
+            {MANUAL_EVENT_EFFECT[form.eventType] ? (
+              <p className="text-xs text-muted-foreground">{MANUAL_EVENT_EFFECT[form.eventType]}</p>
+            ) : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <CurrencyField id="ae-amount" label="Amount" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} info="Enter the gross amount; the rollforward applies the correct sign for the chosen type." />

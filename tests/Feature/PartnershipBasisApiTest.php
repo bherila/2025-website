@@ -512,11 +512,19 @@ class PartnershipBasisApiTest extends TestCase
             'amount_cents' => 10_00,
         ])->assertStatus(422);
 
-        // Unlocking reopens the rollforward for amendment.
+        // Unlocking requires an audit reason.
         $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/unlock?year=2024")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('reason');
+
+        // Unlocking reopens the rollforward for amendment and records the audit reason.
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/unlock?year=2024", [
+            'reason' => 'Amended K-1 received',
+        ])
             ->assertOk()
             ->assertJsonPath('interests.0.reviewStatus', 'needs_review')
-            ->assertJsonPath('interests.0.lockedAt', null);
+            ->assertJsonPath('interests.0.lockedAt', null)
+            ->assertJsonPath('interests.0.unlockReason', 'Amended K-1 received');
 
         // The year is editable again.
         $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/events", [

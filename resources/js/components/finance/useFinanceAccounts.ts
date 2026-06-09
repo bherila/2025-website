@@ -5,7 +5,10 @@ import { fetchWrapper } from '@/fetchWrapper'
 export interface FinAccount {
   acct_id: number
   acct_name: string
+  /** Full account number — only present from the detailed /api/finance/accounts endpoint. */
   acct_number?: string | null
+  /** Last four digits — exposed by the sanitized /api/finance/accounts/basic endpoint for suffix matching. */
+  acct_number_last4?: string | null
   acct_is_debt?: boolean
   acct_is_retirement?: boolean
   when_closed?: string | null

@@ -85,6 +85,7 @@ class UserDeductionControllerTest extends TestCase
     public function test_cannot_modify_another_users_deduction(): void
     {
         $other = User::factory()->create();
+        $this->grantAllFeatures($other);
         $this->actingAs($other);
         $create = $this->postJson('/api/finance/user-deductions', [
             'tax_year' => 2025,

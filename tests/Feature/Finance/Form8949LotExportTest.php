@@ -418,6 +418,7 @@ class Form8949LotExportTest extends TestCase
     {
         $owner = $this->createUser();
         $attacker = $this->createUser();
+        $this->grantAllFeatures($attacker);
         $account = $this->makeAccount($owner->id);
         $document = $this->makeTaxDocument($owner->id);
 

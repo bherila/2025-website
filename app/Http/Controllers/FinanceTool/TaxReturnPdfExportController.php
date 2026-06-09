@@ -29,15 +29,20 @@ class TaxReturnPdfExportController extends Controller
             mode: (string) $validated['mode'],
             formId: isset($validated['formId']) ? (string) $validated['formId'] : null,
             filename: $request->sanitizedFilename(),
+            formIds: isset($validated['formIds']) && is_array($validated['formIds']) ? array_values($validated['formIds']) : [],
+            includeProfilePii: (bool) ($validated['includeProfilePii'] ?? false),
         );
 
         try {
             $result = $this->pdfBuilder->buildResultForUser(Auth::user(), $options);
-            $this->audit($options, 'succeeded', formIds: $result->formIds);
+            $this->audit($options, 'succeeded', [
+                'warnings' => $result->warnings,
+            ], formIds: $result->formIds);
 
             return response($result->content, 200, [
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => "attachment; filename=\"{$options->filename}\"",
+                'X-Tax-Return-Pdf-Warnings' => base64_encode(json_encode($result->warnings, JSON_THROW_ON_ERROR)),
             ]);
         } catch (TaxReturnPdfUnavailableException $exception) {
             $this->audit($options, 'blocked', [

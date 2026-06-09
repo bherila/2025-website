@@ -85,6 +85,7 @@ class FinanceBatchOperationsApiControllerTest extends TestCase
     {
         $owner = $this->createUser();
         $attacker = $this->createUser();
+        $this->grantAllFeatures($attacker);
 
         $account = $this->createAccountWithTransactions($owner->id, 2);
         $ids = FinAccountLineItems::where('t_account', $account->acct_id)->pluck('t_id')->toArray();
@@ -102,6 +103,7 @@ class FinanceBatchOperationsApiControllerTest extends TestCase
     {
         $owner = $this->createUser();
         $attacker = $this->createUser();
+        $this->grantAllFeatures($attacker);
 
         $ownerAccount = $this->createAccountWithTransactions($owner->id, 1);
         $ownerTransactionId = FinAccountLineItems::where('t_account', $ownerAccount->acct_id)->value('t_id');
@@ -220,6 +222,7 @@ class FinanceBatchOperationsApiControllerTest extends TestCase
     {
         $owner = $this->createUser();
         $attacker = $this->createUser();
+        $this->grantAllFeatures($attacker);
 
         $account = $this->createAccountWithTransactions($owner->id, 2);
         $ids = FinAccountLineItems::where('t_account', $account->acct_id)->pluck('t_id')->toArray();

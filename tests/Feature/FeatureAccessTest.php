@@ -93,6 +93,8 @@ class FeatureAccessTest extends TestCase
         $this->assertArrayHasKey('acct_id', $account);
         $this->assertArrayHasKey('acct_name', $account);
         $this->assertArrayNotHasKey('acct_number', $account);
+        $this->assertArrayHasKey('acct_number_last4', $account);
+        $this->assertSame('6789', $account['acct_number_last4']);
         $this->assertArrayNotHasKey('acct_last_balance', $account);
         $this->assertArrayNotHasKey('expected_fee_pct', $account);
         $this->assertArrayNotHasKey('acct_capital_commitment', $account);

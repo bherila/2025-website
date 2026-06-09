@@ -130,6 +130,7 @@ class PalCarryforwardControllerTest extends TestCase
     public function test_cannot_modify_another_users_carryforward(): void
     {
         $other = User::factory()->create();
+        $this->grantAllFeatures($other);
         $this->actingAs($other);
         $create = $this->postJson(self::ENDPOINT, [
             'tax_year' => 2025,

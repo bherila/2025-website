@@ -418,6 +418,42 @@ class PartnershipBasisServiceTest extends TestCase
         ]);
     }
 
+    public function test_lock_records_the_locking_user(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Audit Lock LP',
+            'initial_cash_contribution_cents' => 100_00,
+        ]);
+
+        $this->service->lockAccountYear($this->account, $this->user->id, 2024);
+
+        $basisYear = FinPartnershipBasisYear::query()->where('tax_year', 2024)->firstOrFail();
+        $this->assertSame('locked', $basisYear->review_status);
+        $this->assertNotNull($basisYear->locked_at);
+        $this->assertSame($this->user->id, (int) $basisYear->locked_by_user_id);
+    }
+
+    public function test_unlock_persists_audit_reason_and_user(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Audit Unlock LP',
+            'initial_cash_contribution_cents' => 100_00,
+        ]);
+        $this->service->lockAccountYear($this->account, $this->user->id, 2024);
+
+        $this->service->unlockAccountYear($this->account, $this->user->id, 2024, 'Amended K-1 received', 'Box 1 ordinary income corrected');
+
+        $basisYear = FinPartnershipBasisYear::query()->where('tax_year', 2024)->firstOrFail();
+        $this->assertSame('needs_review', $basisYear->review_status);
+        $this->assertNull($basisYear->locked_at);
+        $this->assertNotNull($basisYear->unlocked_at);
+        $this->assertSame($this->user->id, (int) $basisYear->unlocked_by_user_id);
+        $this->assertSame('Amended K-1 received', $basisYear->unlock_reason);
+        $this->assertSame('Box 1 ordinary income corrected', $basisYear->amendment_reason);
+    }
+
     public function test_manual_event_requires_interest_id_when_account_has_multiple_interests(): void
     {
         $this->basisFromK1(2024, 'First Fund LP', ['5' => '100'], [], [], '11-1111111');
@@ -592,6 +628,74 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(75_00, $basisYear->ending_outside_basis_cents);
         $this->assertSame(100_00, $basisYear->capital_contributions_cents);
         $this->assertSame(25_00, $basisYear->deductions_losses_decrease_cents);
+    }
+
+    public function test_manual_tax_capital_event_moves_tax_capital_and_inside_basis_only(): void
+    {
+        $interest = $this->interest('Tax Capital LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 200_00);
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 100_00);
+        $this->manualEvent($interest, 2024, 'manual_increase_to_tax_capital', 30_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(130_00, $basisYear->ending_tax_basis_capital_cents);
+        $this->assertSame(130_00, $basisYear->ending_inside_basis_cents);
+        $this->assertSame(200_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_manual_book_capital_event_moves_book_capital_only(): void
+    {
+        $interest = $this->interest('Book Capital LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 50_00);
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 80_00);
+        $this->manualEvent($interest, 2024, 'initial_capital_account_value', 120_00);
+        $this->manualEvent($interest, 2024, 'manual_decrease_to_book_capital', 20_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(100_00, $basisYear->ending_book_capital_cents);
+        $this->assertSame(80_00, $basisYear->ending_tax_basis_capital_cents);
+        $this->assertSame(50_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_manual_outside_basis_adjustment_does_not_change_tax_basis_capital(): void
+    {
+        // Regression for #945: a manual outside-basis adjustment moves outside basis only and must
+        // NOT leak into the tax-basis capital fallback.
+        $interest = $this->interest('Outside Only LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 100_00);
+        $this->manualEvent($interest, 2024, 'manual_increase_to_outside_basis', 50_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(150_00, $basisYear->ending_outside_basis_cents);
+        $this->assertSame(100_00, $basisYear->ending_tax_basis_capital_cents);
+    }
+
+    public function test_manual_tax_capital_adjustment_applies_on_top_of_reported_k1_ending(): void
+    {
+        // A reported K-1 ending must not swallow a manual capital correction — the manual delta
+        // layers on top of the reported ending so the saved event has its advertised effect.
+        $interest = $this->interest('Reported Ending LP');
+        $this->manualEvent($interest, 2024, 'initial_tax_basis_capital', 100_00);
+        FinPartnershipBasisEvent::create([
+            'user_id' => $this->user->id,
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2024,
+            'event_type' => 'memorandum',
+            'amount_cents' => 0,
+            'source_type' => 'k1_field',
+            'review_status' => 'reviewed',
+            'metadata' => ['ending_tax_basis_capital_cents' => 90_00],
+        ]);
+        $this->manualEvent($interest, 2024, 'manual_increase_to_tax_capital', 15_00);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        // 90_00 reported ending + 15_00 manual increase = 105_00 (not 90_00, and not the 115_00 fallback).
+        $this->assertSame(105_00, $basisYear->ending_tax_basis_capital_cents);
     }
 
     public function test_non_1065_k1_documents_are_skipped(): void

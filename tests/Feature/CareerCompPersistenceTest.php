@@ -566,6 +566,52 @@ class CareerCompPersistenceTest extends TestCase
         $response->assertJsonPath('currentJob.rsuGrants.0.vestingEvents.1.vestDate', '2026-07-15');
     }
 
+    public function test_shared_rsu_snapshot_does_not_refresh_after_source_awards_change(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-SNAP',
+            'grant_date' => '2026-01-15',
+            'vest_date' => '2026-04-15',
+            'share_count' => 12.5,
+            'symbol' => 'TEST',
+            'grant_price' => 10,
+            'vest_price' => 20,
+        ]);
+
+        $import = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/latest/import-rsu', [
+            'currentJob' => CareerCompInputs::defaults()['currentJob'],
+        ]);
+        $import->assertOk();
+
+        $inputs = CareerCompInputs::defaults();
+        $inputs['currentJob'] = $import->json('currentJob');
+        $inputs['currentJobs'] = [$inputs['currentJob']];
+
+        $share = $this->actingAs($user)->postJson('/api/financial-planning/career-comparison/share', [
+            'inputs' => $inputs,
+            'shareIncludesCurrent' => true,
+        ]);
+        $share->assertCreated();
+        $code = $share->json('shortCode');
+        $comparison = CareerComparison::query()->where('short_code', $code)->firstOrFail();
+        $storedJobId = $comparison->current_job_ids[0];
+        $storedJob = CareerJob::query()->findOrFail($storedJobId);
+        $snapshot = $storedJob->spec_json['rsuGrants'][0];
+        $this->assertSame('snapshot', $snapshot['rsuSource']['mode']);
+        $this->assertSame([$award->id], $snapshot['rsuSource']['sourceAwardRowIds']);
+
+        $award->update(['share_count' => 99, 'vest_price' => 999]);
+        $award->delete();
+
+        $reloaded = CareerJob::query()->findOrFail($storedJobId)->spec_json['rsuGrants'][0];
+        $this->assertSame(12.5, $reloaded['shareCount']);
+        $this->assertSame(12.5, $reloaded['vestingEvents'][0]['shareCount']);
+        $this->assertEquals(20.0, $reloaded['vestingEvents'][0]['vestPrice']);
+        $this->assertSame($snapshot['rsuSource']['sourceHash'], $reloaded['rsuSource']['sourceHash']);
+    }
+
     public function test_imported_rsu_vesting_events_are_persisted_and_recalculated_after_reload(): void
     {
         $user = User::factory()->create();

@@ -32,13 +32,30 @@ class FinanceApiController extends Controller
             ->get([
                 'acct_id',
                 'acct_name',
+                'acct_number',
                 'acct_is_debt',
                 'acct_is_retirement',
                 'when_closed',
             ]);
 
+        // Expose only the last four digits (not the full PII account number) so
+        // statement/PDF import auto-matching by suffix keeps working for callers
+        // holding finance.accounts.basic, without leaking full account numbers.
+        $shaped = $accounts->map(static function (FinAccounts $account): array {
+            $number = $account->acct_number;
+
+            return [
+                'acct_id' => $account->acct_id,
+                'acct_name' => $account->acct_name,
+                'acct_is_debt' => $account->acct_is_debt,
+                'acct_is_retirement' => $account->acct_is_retirement,
+                'when_closed' => $account->when_closed,
+                'acct_number_last4' => is_string($number) && $number !== '' ? substr($number, -4) : null,
+            ];
+        });
+
         return response()->json([
-            'accounts' => $accounts->values(),
+            'accounts' => $shaped->values(),
         ]);
     }
 

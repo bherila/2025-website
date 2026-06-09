@@ -6,109 +6,183 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FinanceTool\ConfirmRsuGenAiImportRequest;
+use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinEquityAwards;
-use App\Services\Finance\StockQuotes\StockQuoteService;
+use App\Models\FinanceTool\FinPayslips;
+use App\Models\FinanceTool\FinRsuLink;
+use App\Models\FinanceTool\FinRsuVestSettlement;
+use App\Services\Finance\Rsu\RsuAwardService;
+use App\Services\Finance\Rsu\RsuSettlementService;
+use App\Services\Finance\Rsu\RsuTaxProjectionService;
+use App\Services\Finance\Rsu\RsuTransactionMatcher;
+use App\Services\Finance\Rsu\RsuVestPriceBackfillService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class FinanceRsuController extends Controller
 {
     private const GENAI_JOB_TYPE = 'equity_award';
 
-    public function __construct(private readonly StockQuoteService $stockQuoteService) {}
+    public function __construct(
+        private readonly RsuAwardService $awardService,
+        private readonly RsuVestPriceBackfillService $backfillService,
+        private readonly RsuSettlementService $settlementService,
+        private readonly RsuTransactionMatcher $matcher,
+        private readonly RsuTaxProjectionService $taxProjectionService,
+    ) {}
 
     public function getRsuData(Request $request): JsonResponse
     {
-        $user = Auth::user();
+        $userId = (int) Auth::id();
+        $this->backfillService->backfillMissingVestPrices($userId);
+
         $awards = FinEquityAwards::query()
-            ->where('uid', $user->id)
+            ->where('uid', $userId)
+            ->with(['settlementAllocations.settlement', 'rsuLinks'])
+            ->orderBy('vest_date')
             ->get();
 
-        $awardsNeedingFetchedPrices = $awards
-            ->filter(static fn (FinEquityAwards $award): bool => $award->vest_price === null)
-            ->values();
-
-        $this->stockQuoteService->ensureCoverageForAwards($awardsNeedingFetchedPrices);
-        $closes = $this->stockQuoteService->closesForAwards($awardsNeedingFetchedPrices);
-
-        $data = $awards->map(function ($item) use ($closes) {
-            $fetchedVestPrice = $closes[$item->id] ?? null;
-            if ($item->vest_price === null && $fetchedVestPrice !== null) {
-                $item->vest_price = $fetchedVestPrice;
-            }
-            if ($item->vest_price === null) {
-                unset($item->vest_price);
-            }
-
-            return $item;
-        });
-
-        return response()->json($data);
+        return response()->json($awards);
     }
 
     public function upsertRsuGrants(Request $request): JsonResponse
     {
-        $user = Auth::user();
-        $grants = $request->json()->all();
+        $payload = $request->json()->all();
+        $grants = array_values(array_filter($payload, static fn (mixed $grant): bool => is_array($grant)));
 
-        foreach ($grants as $grant) {
-            // Handle share_count which might be currency object or number
-            $shareCount = isset($grant['share_count']['value'])
-                ? $grant['share_count']['value']
-                : $grant['share_count'];
+        $awards = $this->awardService->upsertMany((int) Auth::id(), $grants, RsuAwardService::PRICE_SOURCE_MANUAL);
 
-            // If id is provided, update the specific record
-            if (isset($grant['id'])) {
-                DB::table('fin_equity_awards')
-                    ->where('id', $grant['id'])
-                    ->where('uid', $user->id) // Ensure user can only update their own records
-                    ->update([
-                        'award_id' => $grant['award_id'],
-                        'grant_date' => $grant['grant_date'],
-                        'vest_date' => $grant['vest_date'],
-                        'symbol' => $grant['symbol'],
-                        'share_count' => $shareCount,
-                        'grant_price' => $grant['grant_price'] ?? null,
-                        'vest_price' => $grant['vest_price'] ?? null,
-                    ]);
-            } else {
-                // Otherwise use updateOrInsert based on unique key
-                DB::table('fin_equity_awards')->updateOrInsert(
-                    [
-                        'uid' => $user->id,
-                        'award_id' => $grant['award_id'],
-                        'grant_date' => $grant['grant_date'],
-                        'vest_date' => $grant['vest_date'],
-                        'symbol' => $grant['symbol'],
-                    ],
-                    [
-                        'share_count' => $shareCount,
-                        'grant_price' => $grant['grant_price'] ?? null,
-                        'vest_price' => $grant['vest_price'] ?? null,
-                    ]
-                );
-            }
-        }
-
-        return response()->json(['status' => 'success']);
+        return response()->json(['status' => 'success', 'awards' => $awards]);
     }
 
     public function deleteRsuGrant(Request $request, int $id): JsonResponse
     {
-        $user = Auth::user();
-
-        $deleted = DB::table('fin_equity_awards')
-            ->where('id', $id)
-            ->where('uid', $user->id) // Ensure user can only delete their own records
-            ->delete();
-
-        if ($deleted) {
+        if ($this->awardService->deleteForUser((int) Auth::id(), $id)) {
             return response()->json(['status' => 'success']);
-        } else {
-            return response()->json(['status' => 'error', 'message' => 'Record not found'], 404);
         }
+
+        return response()->json(['status' => 'error', 'message' => 'Record not found'], 404);
+    }
+
+    public function backfillVestPrices(): JsonResponse
+    {
+        return response()->json($this->backfillService->backfillMissingVestPrices((int) Auth::id()));
+    }
+
+    public function settlements(): JsonResponse
+    {
+        return response()->json(FinRsuVestSettlement::query()
+            ->where('uid', Auth::id())
+            ->with(['allocations.award', 'links'])
+            ->orderByDesc('vest_date')
+            ->get());
+    }
+
+    public function suggestSettlements(): JsonResponse
+    {
+        return response()->json($this->settlementService->suggest((int) Auth::id()));
+    }
+
+    public function confirmSettlement(Request $request, FinRsuVestSettlement $settlement): JsonResponse
+    {
+        $this->authorizeSettlement($settlement);
+        $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, ['settlement_id' => $settlement->id] + $request->all());
+
+        return response()->json($confirmed->load(['allocations.award', 'links']));
+    }
+
+    public function updateSettlement(Request $request, FinRsuVestSettlement $settlement): JsonResponse
+    {
+        $this->authorizeSettlement($settlement);
+        $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, ['settlement_id' => $settlement->id] + $request->all());
+
+        return response()->json($confirmed->load(['allocations.award', 'links']));
+    }
+
+    public function ignoreSettlement(FinRsuVestSettlement $settlement): JsonResponse
+    {
+        $this->authorizeSettlement($settlement);
+
+        return response()->json($this->settlementService->ignore($settlement));
+    }
+
+    public function settlementLinks(FinRsuVestSettlement $settlement): JsonResponse
+    {
+        $this->authorizeSettlement($settlement);
+
+        return response()->json($settlement->links()->with(['transaction', 'payslip'])->get());
+    }
+
+    public function settlementCandidates(FinRsuVestSettlement $settlement): JsonResponse
+    {
+        $this->authorizeSettlement($settlement);
+
+        return response()->json($this->matcher->candidates($settlement));
+    }
+
+    public function createSettlementLink(Request $request, FinRsuVestSettlement $settlement): JsonResponse
+    {
+        $this->authorizeSettlement($settlement);
+        $data = $request->validate([
+            'settlement_allocation_id' => ['nullable', 'integer'],
+            'equity_award_id' => ['nullable', 'integer'],
+            'link_type' => ['required', 'string', Rule::in(FinRsuLink::LINK_TYPES)],
+            'transaction_id' => ['nullable', 'integer'],
+            'account_id' => ['nullable', 'integer'],
+            'lot_id' => ['nullable', 'integer'],
+            'payslip_id' => ['nullable', 'integer'],
+            'confidence' => ['nullable', 'numeric', 'between:0,1'],
+            'confidence_reasons' => ['nullable', 'array'],
+            'status' => ['sometimes', 'string', Rule::in(['suggested', 'confirmed', 'ignored'])],
+            'notes' => ['nullable', 'string'],
+        ]);
+        $this->settlementService->assertLinkTargetsBelongToSettlement((int) Auth::id(), $settlement, $data);
+
+        $link = FinRsuLink::query()->create($data + [
+            'uid' => Auth::id(),
+            'settlement_id' => $settlement->id,
+            'status' => $data['status'] ?? 'suggested',
+        ]);
+
+        return response()->json($link, 201);
+    }
+
+    public function deleteRsuLink(FinRsuLink $link): JsonResponse
+    {
+        if ((int) $link->uid !== (int) Auth::id()) {
+            abort(404);
+        }
+        $link->delete();
+
+        return response()->json(['status' => 'success']);
+    }
+
+    public function transactionRsuLinks(int $transaction): JsonResponse
+    {
+        $lineItem = FinAccountLineItems::query()
+            ->where('t_id', $transaction)
+            ->whereHas('account', fn ($query) => $query->withoutGlobalScopes()->where('acct_owner', Auth::id()))
+            ->firstOrFail();
+
+        return response()->json(FinRsuLink::query()->where('transaction_id', $lineItem->t_id)->with('settlement')->get());
+    }
+
+    public function payslipRsuLinks(int $payslip): JsonResponse
+    {
+        $row = FinPayslips::query()->where('uid', Auth::id())->where('payslip_id', $payslip)->firstOrFail();
+
+        return response()->json(FinRsuLink::query()->where('payslip_id', $row->payslip_id)->with('settlement')->get());
+    }
+
+    public function taxProjection(Request $request): JsonResponse
+    {
+        $year = (int) $request->query('year', now()->year);
+
+        return response()->json($this->taxProjectionService->facts((int) Auth::id(), $year));
     }
 
     public function confirmGenAiImport(ConfirmRsuGenAiImportRequest $request, int $jobId, int $resultId): JsonResponse
@@ -135,7 +209,7 @@ class FinanceRsuController extends Controller
         }
 
         $award = DB::transaction(function () use ($request, $result, $job, $user): FinEquityAwards {
-            $award = $this->upsertAwardFromImport((int) $user->id, $request->validated());
+            $award = $this->awardService->upsert((int) $user->id, $request->validated(), RsuAwardService::PRICE_SOURCE_IMPORTED);
 
             $result->markImported();
             $this->maybeMarkJobImported($job);
@@ -182,40 +256,18 @@ class FinanceRsuController extends Controller
         ]);
     }
 
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function upsertAwardFromImport(int $userId, array $validated): FinEquityAwards
-    {
-        $identity = [
-            'uid' => (string) $userId,
-            'award_id' => (string) $validated['award_id'],
-            'grant_date' => (string) $validated['grant_date'],
-            'vest_date' => (string) $validated['vest_date'],
-            'symbol' => (string) $validated['symbol'],
-        ];
-
-        $award = FinEquityAwards::query()->firstOrNew($identity);
-        $award->share_count = (int) $validated['share_count'];
-
-        if (array_key_exists('grant_price', $validated) && $validated['grant_price'] !== null) {
-            $award->grant_price = $validated['grant_price'];
-        }
-
-        if (array_key_exists('vest_price', $validated) && $validated['vest_price'] !== null) {
-            $award->vest_price = $validated['vest_price'];
-        }
-
-        $award->save();
-
-        return $award;
-    }
-
     private function maybeMarkJobImported(GenAiImportJob $job): void
     {
         $stillPending = $job->results()->where('status', 'pending_review')->exists();
         if (! $stillPending && $job->status !== 'imported') {
             $job->markImported();
+        }
+    }
+
+    private function authorizeSettlement(FinRsuVestSettlement $settlement): void
+    {
+        if ((int) $settlement->uid !== (int) Auth::id()) {
+            abort(404);
         }
     }
 }

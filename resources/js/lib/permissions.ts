@@ -7,13 +7,15 @@ interface AppInitialData {
 function readInitialData(): AppInitialData {
   const node = document.getElementById('app-initial-data')
   if (!node?.textContent) {
-    return { isAdmin: true }
+    // Fail closed: absence of trustworthy initial data means "no permissions",
+    // never implicit admin. The server is the real authorization boundary.
+    return { isAdmin: false, permissions: [] }
   }
 
   try {
     return JSON.parse(node.textContent) as AppInitialData
   } catch {
-    return { isAdmin: true }
+    return { isAdmin: false, permissions: [] }
   }
 }
 

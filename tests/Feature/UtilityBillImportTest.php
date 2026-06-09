@@ -194,6 +194,7 @@ class UtilityBillImportTest extends TestCase
     {
         $owner = User::factory()->create();
         $other = User::factory()->create();
+        $this->grantAllFeatures($other);
         $account = $this->makeAccount($other);
         // Re-auth as the rightful owner so makeJob below uses the right user_id.
         Auth::logout();

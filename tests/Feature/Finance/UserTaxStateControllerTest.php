@@ -72,6 +72,7 @@ class UserTaxStateControllerTest extends TestCase
     public function test_destroy_does_not_affect_other_users(): void
     {
         $other = User::factory()->create();
+        $this->grantAllFeatures($other);
         $this->actingAs($other);
         $this->postJson('/api/finance/user-tax-states', ['tax_year' => 2025, 'state_code' => 'CA']);
 

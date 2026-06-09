@@ -958,6 +958,7 @@ class DocumentIngestionServiceTest extends TestCase
 
         $owner = $this->createUser();
         $other = $this->createUser();
+        $this->grantAllFeatures($other);
         $accountId = $this->createAccount($other->id, 'Brokerage');
         $job = $this->makeFinanceJob($owner);
         $result = $this->makeFinanceResult($job);
@@ -1115,6 +1116,7 @@ class DocumentIngestionServiceTest extends TestCase
 
         $owner = $this->createUser();
         $attacker = $this->createUser();
+        $this->grantAllFeatures($attacker);
         $accountId = $this->createAccount($owner->id, 'Brokerage');
 
         $response = $this->actingAs($owner)->postJson('/api/finance/documents', [
