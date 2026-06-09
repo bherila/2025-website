@@ -44,6 +44,7 @@ export type FormId =
   | 'wks-amt-exemption'
   | 'wks-taxable-ss'
   | 'wks-1116-apportionment'
+  | 'partnership-basis'
 
 /**
  * Canonical list of every {@link FormId}. This is the single source of truth
@@ -91,6 +92,7 @@ export const ALL_FORM_IDS = [
   'wks-amt-exemption',
   'wks-taxable-ss',
   'wks-1116-apportionment',
+  'partnership-basis',
 ] as const satisfies readonly FormId[]
 
 type AssertExhaustive = Exclude<FormId, (typeof ALL_FORM_IDS)[number]> extends never

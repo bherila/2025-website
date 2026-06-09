@@ -38,13 +38,15 @@ import WorksheetAmtExemption from '@/components/finance/worksheets/WorksheetAmtE
 import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
+import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
 import { buildCapitalGainsReportFromTaxDocuments } from '@/lib/finance/capitalGainsReporting'
+import { formatCurrency } from '@/lib/formatCurrency'
 import type { FK1StructuredData } from '@/types/finance/k1-data'
 import type { TaxDocument } from '@/types/finance/tax-document'
-import type { TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
+import type { PartnershipBasisInterestFacts, TaxFactSource, TaxPreviewFacts } from '@/types/generated/tax-preview-facts'
 
 import { useDockActions } from './DockActions'
 import { type DrillTarget, type FormId, type FormRegistry, type FormRegistryEntry, type FormRenderProps, getTaxFormMeta } from './formRegistry'
@@ -696,6 +698,117 @@ function SourceValueOverridesAdapter({ state, onDrill }: FormRenderProps): React
   )
 }
 
+/** Humanises snake_case event/source type labels for display in the basis event table. */
+function humanizeBasisLabel(value: string): string {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+/** Read-only summary row for a single partnership interest inside the dock column. */
+function PartnershipBasisInterestRow({ interest }: { interest: PartnershipBasisInterestFacts }): React.ReactElement {
+  const wks = interest.worksheet
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">{interest.partnershipName}</p>
+            {interest.partnershipEin ? (
+              <p className="text-xs text-muted-foreground">EIN {interest.partnershipEin}</p>
+            ) : null}
+          </div>
+          <Badge variant={interest.reviewStatus === 'locked' ? 'default' : 'outline'} className="shrink-0 text-xs">
+            {humanizeBasisLabel(interest.reviewStatus)}
+          </Badge>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-border text-sm">
+        {(
+          [
+            ['Beginning basis', wks.beginningOutsideBasis],
+            ['Ending basis', wks.endingOutsideBasis],
+            ['Contributions', wks.capitalContributions],
+            ['Distributions', currency(wks.cashDistributions).add(wks.propertyDistributionsBasis).value],
+            ['Income increases', currency(wks.taxableIncomeIncrease).add(wks.taxExemptIncomeIncrease).value],
+            ['Losses / deductions', wks.deductionsLossesDecrease],
+            ['Distribution gain', wks.distributionGain],
+            ['Suspended losses', wks.suspendedLossCarryforward],
+          ] as [string, number][]
+        ).map(([label, value]) => (
+          <div key={label} className="bg-card px-3 py-2">
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className="font-mono text-sm">{formatCurrency(value)}</div>
+          </div>
+        ))}
+      </div>
+      {interest.events.length > 0 ? (
+        <div className="overflow-x-auto border-t border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Event</TableHead>
+                <TableHead className="text-xs">Side</TableHead>
+                <TableHead className="text-right text-xs">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {interest.events.map((event) => (
+                <TableRow key={event.id}>
+                  <TableCell className="py-1 text-xs">{humanizeBasisLabel(event.eventType)}</TableCell>
+                  <TableCell className="py-1 text-xs text-muted-foreground">{humanizeBasisLabel(event.basisSide)}</TableCell>
+                  <TableCell className="py-1 text-right font-mono text-xs">{formatCurrency(event.amount)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function PartnershipBasisAdapter({ state }: FormRenderProps): React.ReactElement {
+  const facts = state.taxFacts?.partnershipBasis
+  if (!facts || facts.interests.length === 0) {
+    return (
+      <StubCard
+        title="Partnership Outside Basis"
+        note="No partnership basis interests found for this year. Initialize a basis record from the Account → Basis tab to populate this panel."
+      />
+    )
+  }
+
+  const totalBeginning = facts.interests.reduce((acc, i) => acc.add(i.worksheet.beginningOutsideBasis), currency(0)).value
+  const totalEnding = facts.interests.reduce((acc, i) => acc.add(i.worksheet.endingOutsideBasis), currency(0)).value
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Partnership Outside Basis</h2>
+        <p className="text-sm text-muted-foreground">
+          Read-only summary from the {state.year} basis rollforward. Use the Account → Basis tab to add events or recompute.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-sm text-muted-foreground">Total beginning basis</div>
+          <div className="mt-1 text-lg font-semibold">{formatCurrency(totalBeginning)}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-sm text-muted-foreground">Total ending basis</div>
+          <div className="mt-1 text-lg font-semibold">{formatCurrency(totalEnding)}</div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {facts.interests.map((interest) => (
+          <PartnershipBasisInterestRow key={interest.interestId} interest={interest} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function withTaxFormMeta(registry: FormRegistry): FormRegistry {
   const entries = Object.entries(registry) as [FormId, FormRegistryEntry][]
   return Object.fromEntries(
@@ -1252,6 +1365,24 @@ const rawFormRegistry: FormRegistry = {
     presentation: 'column',
     component: Worksheet1116Adapter,
     relatedForms: ['form-1116'],
+  },
+  'partnership-basis': {
+    id: 'partnership-basis',
+    label: 'Partnership Outside Basis',
+    shortLabel: 'P/S Basis',
+    keywords: ['partnership', 'basis', 'outside basis', '731', 'k-1'],
+    category: 'Form',
+    presentation: 'column',
+    component: PartnershipBasisAdapter,
+    hasData: (state) => (state.taxFacts?.partnershipBasis?.interests?.length ?? 0) > 0,
+    keyAmounts: (state) => {
+      const interests = state.taxFacts?.partnershipBasis?.interests
+      if (!interests || interests.length === 0) {
+        return null
+      }
+      const totalEnding = interests.reduce((acc, i) => acc.add(i.worksheet.endingOutsideBasis), currency(0)).value
+      return [{ label: 'Ending basis', value: totalEnding }]
+    },
   },
 }
 
