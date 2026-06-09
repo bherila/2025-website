@@ -510,6 +510,8 @@ export type PartnershipBasisFacts = {
 interests: Array<PartnershipBasisInterestFacts>;
 distributionGainSources: Array<TaxFactSource>;
 liquidationGainLossSources: Array<TaxFactSource>;
+propertyDistributionSources: Array<TaxFactSource>;
+form7217RequiredSources: Array<TaxFactSource>;
 form8949Rows: Array<Form8949RowFact>;
 reconciliations: Array<PartnershipBasisReconciliationFacts>;
 year: number;

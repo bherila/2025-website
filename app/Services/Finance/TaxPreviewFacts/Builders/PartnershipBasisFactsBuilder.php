@@ -42,6 +42,8 @@ class PartnershipBasisFactsBuilder
         $interests = [];
         $distributionGainSources = [];
         $liquidationGainLossSources = [];
+        $propertyDistributionSources = [];
+        $form7217RequiredSources = [];
         $form8949Rows = [];
         /** @var array<int, Collection<int, FinPartnershipBasisYear>> $basisYearsByAccount */
         $basisYearsByAccount = [];
@@ -60,16 +62,24 @@ class PartnershipBasisFactsBuilder
             $partnerName = $interest->partnership_name;
             $events = $interest->relationLoaded('basisEvents') ? $interest->basisEvents : collect();
 
-            $gain = (int) $basisYear->distribution_gain_cents;
-            if ($gain > 0) {
-                $dispositionDate = $this->latestDistributionDate($events);
+            foreach ($this->propertyDistributionEvents($events) as $event) {
+                $propertyDistributionSources[] = $this->propertyDistributionSource($basisYear, $interest, $event, TaxFactSourceType::PartnershipPropertyDistribution);
+                if ((int) $basisYear->tax_year >= 2024) {
+                    $form7217RequiredSources[] = $this->propertyDistributionSource($basisYear, $interest, $event, TaxFactSourceType::PartnershipForm7217Required);
+                }
+            }
+
+            foreach ($this->distributionGainAllocations($basisYear, $events) as $allocation) {
+                $dispositionDate = $allocation['disposition_date'];
                 $holdingPeriod = $this->partnershipBasisService->holdingPeriod($interest, (int) $basisYear->tax_year, $events, $dispositionDate);
                 [$routing, $box, $isShortTerm] = $this->dispositionRouting($holdingPeriod);
-                $gainDollars = MoneyMath::fromCents($gain);
+                $gainDollars = MoneyMath::fromCents($allocation['amount_cents']);
+                $sourceId = "partnership-basis-{$basisYear->id}-excess-distribution-gain-{$allocation['source_key']}";
+                $dateLabel = $dispositionDate?->toDateString();
 
                 $distributionGainSources[] = new TaxFactSource(
-                    id: "partnership-basis-{$basisYear->id}-excess-distribution-gain",
-                    label: "{$partnerName} — excess distribution gain",
+                    id: $sourceId,
+                    label: $dateLabel === null ? "{$partnerName} - excess distribution gain" : "{$partnerName} - excess distribution gain ({$dateLabel})",
                     amount: $gainDollars,
                     sourceType: TaxFactSourceType::PartnershipExcessDistributionGain,
                     accountId: $interest->account_id,
@@ -100,7 +110,7 @@ class PartnershipBasisFactsBuilder
                         isSummaryRow: false,
                         accountName: $partnerName,
                         taxDocumentId: null,
-                        sourceTransactionId: "partnership-basis-{$basisYear->id}-excess-distribution-gain",
+                        sourceTransactionId: $sourceId,
                     );
                 }
             }
@@ -134,6 +144,8 @@ class PartnershipBasisFactsBuilder
             interests: $interests,
             distributionGainSources: $distributionGainSources,
             liquidationGainLossSources: $liquidationGainLossSources,
+            propertyDistributionSources: $propertyDistributionSources,
+            form7217RequiredSources: $form7217RequiredSources,
             form8949Rows: $form8949Rows,
             reconciliations: $reconciliations,
         );
@@ -166,34 +178,99 @@ class PartnershipBasisFactsBuilder
     }
 
     /**
-     * Latest dated cash-distribution event in the year, used as the deemed disposition date for
-     * holding-period and Form 8949 sold-date purposes on §731 excess cash-distribution gain. Only
-     * gain-triggering (cash / marketable-securities / liquidation-cash) distributions count —
-     * property distributions reduce basis without creating cash gain, so their dates must not move
-     * the gain's holding period. Null when no qualifying distribution carries a date.
+     * Split the annual distribution gain back into the events that actually exceeded available
+     * outside basis, so each slice uses the correct deemed disposition date and holding period.
      *
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     * @return array<int, array{amount_cents: int, disposition_date: ?CarbonImmutable, source_key: string}>
      */
-    private function latestDistributionDate(Collection $events): ?CarbonImmutable
+    private function distributionGainAllocations(FinPartnershipBasisYear $basisYear, Collection $events): array
     {
-        $distributionTypes = [
-            PartnershipBasisEventType::CashDistribution->value,
-            PartnershipBasisEventType::MarketableSecuritiesDistribution->value,
-            PartnershipBasisEventType::LiquidationDistributionCash->value,
-        ];
+        $availableOutsideBasis = (int) $basisYear->beginning_outside_basis_cents;
+        $allocations = [];
 
-        $latest = null;
         foreach ($events as $event) {
-            if (! in_array($event->event_type, $distributionTypes, true) || $event->event_date === null) {
+            $type = PartnershipBasisEventType::tryFrom((string) $event->event_type);
+            if ($type === null || in_array($type, [PartnershipBasisEventType::BeginningBasis, PartnershipBasisEventType::PriorYearRollforward], true)) {
                 continue;
             }
-            $candidate = CarbonImmutable::parse($event->event_date);
-            if ($latest === null || $candidate->greaterThan($latest)) {
-                $latest = $candidate;
+
+            $amount = abs((int) $event->amount_cents);
+            if ($amount === 0) {
+                continue;
+            }
+
+            switch ($type->basisEffect()) {
+                case PartnershipBasisEventType::BASIS_EFFECT_INCREASE:
+                    $availableOutsideBasis += $amount;
+                    break;
+                case PartnershipBasisEventType::BASIS_EFFECT_DECREASE_GAIN:
+                    $basisReduction = min($availableOutsideBasis, $amount);
+                    $availableOutsideBasis -= $basisReduction;
+                    $gain = $amount - $basisReduction;
+                    if ($gain > 0) {
+                        $allocations[] = [
+                            'amount_cents' => $gain,
+                            'disposition_date' => $event->event_date === null ? null : CarbonImmutable::parse($event->event_date),
+                            'source_key' => (string) $event->id,
+                        ];
+                    }
+                    break;
+                case PartnershipBasisEventType::BASIS_EFFECT_DECREASE_REALLOCATE:
+                case PartnershipBasisEventType::BASIS_EFFECT_DECREASE_SUSPEND:
+                    $availableOutsideBasis -= min($availableOutsideBasis, $amount);
+                    break;
             }
         }
 
-        return $latest;
+        return $allocations;
+    }
+
+    /**
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     * @return Collection<int, FinPartnershipBasisEvent>
+     */
+    private function propertyDistributionEvents(Collection $events): Collection
+    {
+        return $events->filter(fn (FinPartnershipBasisEvent $event): bool => in_array($event->event_type, [
+            PartnershipBasisEventType::PropertyDistributionBasis->value,
+            PartnershipBasisEventType::LiquidationDistributionProperty->value,
+        ], true))->values();
+    }
+
+    private function propertyDistributionSource(
+        FinPartnershipBasisYear $basisYear,
+        FinPartnershipInterest $interest,
+        FinPartnershipBasisEvent $event,
+        TaxFactSourceType $sourceType,
+    ): TaxFactSource {
+        $date = $event->event_date === null ? null : CarbonImmutable::parse($event->event_date)->toDateString();
+        $isForm7217 = $sourceType === TaxFactSourceType::PartnershipForm7217Required;
+        $labelPrefix = $isForm7217 ? 'Form 7217 review required' : 'property distribution';
+        $label = "{$interest->partnership_name} - {$labelPrefix}";
+        if ($date !== null) {
+            $label .= " ({$date})";
+        }
+
+        return new TaxFactSource(
+            id: "partnership-basis-event-{$event->id}-{$sourceType->value}",
+            label: $label,
+            amount: MoneyMath::fromCents(abs((int) $event->amount_cents)),
+            sourceType: $sourceType,
+            taxDocumentId: $event->tax_document_id,
+            taxDocumentAccountId: $event->tax_document_account_id,
+            accountId: $interest->account_id,
+            formType: 'k1',
+            box: $event->k1_box ?? '19',
+            code: $event->k1_code,
+            routingReason: $isForm7217
+                ? 'Property distribution may require Form 7217 support; verify whether an exception applies before filing.'
+                : 'Property distribution reduces or reallocates outside basis without automatic excess cash-distribution gain.',
+            notes: $date === null ? null : "Distribution date: {$date}",
+            isReviewed: false,
+            reviewStatus: (string) ($event->review_status ?: $basisYear->review_status),
+            reviewAction: $isForm7217 ? 'Review Form 7217 filing support' : 'Review property distribution basis allocation',
+        );
     }
 
     private function interestStartDate(FinPartnershipInterest $interest): ?string

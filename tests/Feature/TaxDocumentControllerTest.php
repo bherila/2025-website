@@ -1032,6 +1032,42 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertSame('canonicalized_alias', $doc->parsed_data_warnings[0]['code'] ?? null);
     }
 
+    public function test_update_k1_with_tax_facts_refreshes_partnership_basis_facts(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'K-1 Account');
+        $parsedData = [
+            'schemaVersion' => '2026.1',
+            'formType' => 'K-1-1065',
+            'fields' => [
+                'A' => ['value' => '12-3456789'],
+                'B' => ['value' => 'Immediate Facts LP'],
+                'D' => ['value' => 'false'],
+                '5' => ['value' => '100'],
+            ],
+            'codes' => ['19' => [['code' => 'A', 'value' => '40']]],
+        ];
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'account_id' => $account->acct_id,
+            'is_reviewed' => true,
+            'parsed_data' => $parsedData,
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+        $this->assertSame(40_00, FinPartnershipBasisYear::query()->firstOrFail()->cash_distributions_cents);
+
+        $parsedData['codes']['19'][0]['value'] = '60';
+        $response = $this->actingAs($user)->putJson("/api/finance/tax-documents/{$doc->id}?include_tax_facts=1", [
+            'parsed_data' => $parsedData,
+            'is_reviewed' => true,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('taxFacts.partnershipBasis.interests.0.worksheet.cashDistributions', 60)
+            ->assertJsonPath('taxFacts.partnershipBasis.interests.0.worksheet.endingOutsideBasis', 40);
+        $this->assertSame(60_00, FinPartnershipBasisYear::query()->firstOrFail()->cash_distributions_cents);
+    }
+
     public function test_show_preserves_accessor_transformed_k1_parsed_data(): void
     {
         $user = $this->createUser();

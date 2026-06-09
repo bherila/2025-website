@@ -137,4 +137,6 @@ enum TaxFactSourceType: string
     case EquityCompLongTermCapitalGain = 'equity_comp_long_term_capital_gain';
     case PartnershipExcessDistributionGain = 'partnership_excess_distribution_gain';
     case PartnershipLiquidationGainLoss = 'partnership_liquidation_gain_loss';
+    case PartnershipPropertyDistribution = 'partnership_property_distribution';
+    case PartnershipForm7217Required = 'partnership_form_7217_required';
 }

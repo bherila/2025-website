@@ -98,16 +98,43 @@ class TaxPreviewWorkbookBuilder
         $interests = is_array($facts['interests'] ?? null) ? $facts['interests'] : [];
         $form8949Rows = is_array($facts['form8949Rows'] ?? null) ? $facts['form8949Rows'] : [];
         $reconciliations = is_array($facts['reconciliations'] ?? null) ? $facts['reconciliations'] : [];
+        $propertyDistributionSources = is_array($facts['propertyDistributionSources'] ?? null) ? $facts['propertyDistributionSources'] : [];
+        $form7217RequiredSources = is_array($facts['form7217RequiredSources'] ?? null) ? $facts['form7217RequiredSources'] : [];
 
         return [
             ['name' => 'Partnership Basis Summary', 'rows' => $this->partnershipBasisSummaryRows($interests)],
             ['name' => 'Outside Basis Rollforward', 'rows' => $this->partnershipBasisWorksheetRows($interests)],
             ['name' => 'Inside Basis / Capital Reconciliation', 'rows' => $this->partnershipBasisCapitalRows($interests)],
             ['name' => 'Distribution & Liquidation Analysis', 'rows' => $this->partnershipBasisDistributionRows($interests)],
+            ['name' => 'Form 7217 Property Distributions', 'rows' => $this->partnershipBasisForm7217Rows($propertyDistributionSources, $form7217RequiredSources)],
             ['name' => 'Form 8949 Dispositions', 'rows' => $this->partnershipBasisDispositionRows($form8949Rows)],
             ['name' => 'Transaction & Statement Reconciliation', 'rows' => $this->partnershipBasisReconciliationRows($reconciliations)],
             ['name' => 'Basis Source Lines', 'rows' => $this->partnershipBasisSourceRows($interests)],
         ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $propertyDistributionSources
+     * @param  array<int, mixed>  $form7217RequiredSources
+     * @return array<int, array<string, mixed>>
+     */
+    private function partnershipBasisForm7217Rows(array $propertyDistributionSources, array $form7217RequiredSources): array
+    {
+        $rows = [['description' => 'Form 7217 property distribution review', 'isHeader' => true]];
+
+        foreach ($form7217RequiredSources as $source) {
+            if (is_array($source)) {
+                $rows[] = $this->sourceRow('form7217RequiredSources', $source);
+            }
+        }
+
+        foreach ($propertyDistributionSources as $source) {
+            if (is_array($source)) {
+                $rows[] = $this->sourceRow('propertyDistributionSources', $source);
+            }
+        }
+
+        return $rows;
     }
 
     /**

@@ -195,10 +195,9 @@ class PartnershipBasisService
         }
 
         $hasLiquidation = $this->hasLiquidationEvent($events);
-        $hasSaleExchange = $this->hasSaleExchangeEvent($events);
         $reviewStatus = $this->reviewStatus($events, $distributionGain, $suspendedLoss, $hasLiquidation);
         $liquidationGainLoss = $this->liquidationGainLossCents($events, $availableOutsideBasis, $distributionGain);
-        if ($hasSaleExchange) {
+        if ($hasLiquidation) {
             $availableOutsideBasis = 0;
         }
         $endingInside = $endingTaxCapital;
@@ -788,16 +787,34 @@ class PartnershipBasisService
         //    normalized basis.distributions → Box 19 codes → capital-account withdrawals. ──
         $recordedDistribution = false;
         if ($normalizedDistributions !== []) {
+            $handledOverrideCodes = [];
             foreach ($normalizedDistributions as $index => $distribution) {
                 if (! is_array($distribution)) {
                     continue;
                 }
+                $code = strtoupper(trim((string) ($distribution['code'] ?? 'A')));
+                $code = $code !== '' ? $code : 'A';
+                [$type, $label] = $this->distributionTypeForCode($code);
+
+                $override = $this->sourceOverrideCents($data, sprintf('code:19:%s', $code));
+                if ($override !== null) {
+                    if (isset($handledOverrideCodes[$code])) {
+                        continue;
+                    }
+                    $handledOverrideCodes[$code] = true;
+                    $recordedDistribution = true;
+                    if ($override !== 0) {
+                        $push($type, 'k1_code', "codes.19.{$code}.override", "{$label} (reviewed override)", $override, '19', $code, $reviewStatus);
+                    }
+
+                    continue;
+                }
+
                 $cents = $this->moneyToCents($distribution['partnershipAdjustedBasis'] ?? null) ?? $this->moneyToCents($distribution['amount'] ?? null);
                 if ($cents === null || $cents === 0) {
                     continue;
                 }
-                [$type, $label] = $this->distributionTypeForCode((string) ($distribution['code'] ?? 'A'));
-                $push($type, 'k1_code', "basis.distributions.{$index}", $label, $cents, '19', (string) ($distribution['code'] ?? ''), $reviewStatus);
+                $push($type, 'k1_code', "basis.distributions.{$index}", $label, $cents, '19', $code, $reviewStatus);
                 $recordedDistribution = true;
             }
         }
@@ -808,9 +825,9 @@ class PartnershipBasisService
 
                 $override = $this->sourceOverrideCents($data, sprintf('code:19:%s', $code));
                 if ($override !== null) {
+                    $recordedDistribution = true;
                     if ($override !== 0) {
                         $push($type, 'k1_code', "codes.19.{$code}.override", $label, $override, '19', $code !== '' ? $code : null, $reviewStatus);
-                        $recordedDistribution = true;
                     }
 
                     continue;
@@ -1191,12 +1208,6 @@ class PartnershipBasisService
             PartnershipBasisEventType::LiquidationDistributionProperty->value,
             PartnershipBasisEventType::SaleExchange->value,
         ], true));
-    }
-
-    /** @param Collection<int, FinPartnershipBasisEvent> $events */
-    private function hasSaleExchangeEvent(Collection $events): bool
-    {
-        return $events->contains(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::SaleExchange->value);
     }
 
     /** @param Collection<int, FinPartnershipBasisEvent> $events */

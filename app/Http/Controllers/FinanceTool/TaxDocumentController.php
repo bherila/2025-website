@@ -360,6 +360,7 @@ class TaxDocumentController extends Controller
 
         $link->save();
         $this->forgetReconciliationSummary($doc);
+        $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
 
         $responseLink = $link->load('account:acct_id,acct_name,acct_number');
 
@@ -601,6 +602,7 @@ class TaxDocumentController extends Controller
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+        $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
 
         return $this->jsonWithOptionalTaxFacts(
             $request,
@@ -797,6 +799,7 @@ class TaxDocumentController extends Controller
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+        $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
 
         return $this->jsonWithOptionalTaxFacts(
             $request,
@@ -816,6 +819,21 @@ class TaxDocumentController extends Controller
             $payloadKey => $payload,
             'taxFacts' => $this->taxPreviewFactsService->arrayForYear((int) Auth::id(), $year),
         ]);
+    }
+
+    private function syncPartnershipBasisForOptionalTaxFacts(Request $request, FileForTaxDocument $doc): void
+    {
+        if (! $request->boolean('include_tax_facts')) {
+            return;
+        }
+
+        $doc->loadMissing(['accountLinks.account']);
+        $hasK1Link = $doc->accountLinks->contains(fn ($link): bool => $link instanceof TaxDocumentAccount && $link->form_type === 'k1');
+        if ($doc->form_type !== 'k1' && ! $hasK1Link) {
+            return;
+        }
+
+        $this->partnershipBasisService->recomputeForUserYear((int) Auth::id(), (int) $doc->tax_year, [$doc]);
     }
 
     /**

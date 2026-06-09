@@ -212,6 +212,86 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(20.0, $facts['scheduleD']['line3GainLoss']);
     }
 
+    public function test_excess_distribution_gain_splits_by_gain_triggering_distribution_date(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Split Gain Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Split Gain LP',
+            'normalized_partnership_name' => 'split gain lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2023-07-01',
+        ]);
+
+        $this->datedEvent($user->id, $interest->id, 2024, 'beginning_basis', 50_00, null);
+        $this->datedEvent($user->id, $interest->id, 2024, 'cash_distribution', 80_00, '2024-06-01');
+        $this->datedEvent($user->id, $interest->id, 2024, 'cash_distribution', 20_00, '2024-08-01');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $this->assertSame(30.0, $facts['scheduleD']['line3GainLoss']);
+        $this->assertSame(20.0, $facts['scheduleD']['line10GainLoss']);
+
+        $sources = collect($facts['partnershipBasis']['distributionGainSources'])
+            ->where('sourceType', 'partnership_excess_distribution_gain')
+            ->values();
+        $this->assertCount(2, $sources);
+        $this->assertSame(30.0, $sources[0]['amount']);
+        $this->assertSame('schedule_d_line_3', $sources[0]['routing']);
+        $this->assertSame(20.0, $sources[1]['amount']);
+        $this->assertSame('schedule_d_line_10', $sources[1]['routing']);
+
+        $rows = collect($facts['form8949']['rows'])
+            ->where('accountName', 'Split Gain LP')
+            ->values();
+        $this->assertCount(2, $rows);
+        $this->assertSame('C', $rows[0]['form8949Box']);
+        $this->assertSame('2024-06-01', $rows[0]['dateSold']);
+        $this->assertSame(30.0, $rows[0]['gainOrLoss']);
+        $this->assertSame('F', $rows[1]['form8949Box']);
+        $this->assertSame('2024-08-01', $rows[1]['dateSold']);
+        $this->assertSame(20.0, $rows[1]['gainOrLoss']);
+    }
+
+    public function test_property_distribution_emits_form7217_sources_and_workbook_rows(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Property Distribution Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Property Distribution LP',
+            'normalized_partnership_name' => 'property distribution lp',
+            'form_type' => 'k1_1065',
+        ]);
+
+        $this->datedEvent($user->id, $interest->id, 2024, 'beginning_basis', 100_00, null);
+        $this->datedEvent($user->id, $interest->id, 2024, 'property_distribution_basis', 30_00, '2024-09-15');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $propertySources = $facts['partnershipBasis']['propertyDistributionSources'];
+        $this->assertCount(1, $propertySources);
+        $this->assertSame('partnership_property_distribution', $propertySources[0]['sourceType']);
+        $this->assertSame(30.0, $propertySources[0]['amount']);
+
+        $form7217Sources = $facts['partnershipBasis']['form7217RequiredSources'];
+        $this->assertCount(1, $form7217Sources);
+        $this->assertSame('partnership_form_7217_required', $form7217Sources[0]['sourceType']);
+        $this->assertSame(30.0, $form7217Sources[0]['amount']);
+
+        $workbook = app(TaxPreviewWorkbookBuilder::class)->buildForUserYear($user->id, 2024);
+        $sheet = collect($workbook['sheets'])->firstWhere('name', 'Form 7217 Property Distributions');
+        $this->assertNotNull($sheet);
+        $this->assertTrue(collect($sheet['rows'])->contains(fn (array $row): bool => ($row['line'] ?? null) === 'form7217RequiredSources' && ($row['amount'] ?? null) === 30.0));
+    }
+
     public function test_update_interest_endpoint_sets_holding_period_inputs(): void
     {
         $user = User::factory()->create();
@@ -474,6 +554,7 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertContains('Outside Basis Rollforward', $names);
         $this->assertContains('Inside Basis / Capital Reconciliation', $names);
         $this->assertContains('Distribution & Liquidation Analysis', $names);
+        $this->assertContains('Form 7217 Property Distributions', $names);
         $this->assertContains('Form 8949 Dispositions', $names);
         $this->assertContains('Transaction & Statement Reconciliation', $names);
         $this->assertContains('Basis Source Lines', $names);

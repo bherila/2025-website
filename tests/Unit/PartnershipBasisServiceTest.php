@@ -273,9 +273,13 @@ class PartnershipBasisServiceTest extends TestCase
         $this->manualEvent($interest, 2024, 'liquidation_distribution_property', 30_00);
 
         $basisYear = $this->service->recomputeInterestYear($interest, 2024);
-        $this->assertSame(30_00, $basisYear->ending_outside_basis_cents);
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents);
         $this->assertSame(-30_00, $basisYear->liquidation_gain_loss_cents);
         $this->assertSame('needs_review', $basisYear->review_status);
+
+        $nextYear = $this->service->recomputeInterestYear($interest, 2025);
+        $this->assertSame(0, $nextYear->beginning_outside_basis_cents);
+        $this->assertSame(0, $nextYear->ending_outside_basis_cents);
     }
 
     public function test_basis_limited_losses_are_suspended(): void
@@ -772,6 +776,23 @@ class PartnershipBasisServiceTest extends TestCase
 
         $this->assertSame(40_00, $basisYear->deductions_losses_decrease_cents);
         $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_box19_override_is_applied_to_normalized_distribution(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Override Distribution LP', ['5' => '100'], [], [
+            'distributions' => [['code' => 'A', 'amount' => '40']],
+        ], null, [
+            'code:19:A' => ['value' => '60'],
+        ]);
+
+        $this->assertSame(60_00, $basisYear->cash_distributions_cents);
+        $this->assertSame(40_00, $basisYear->ending_outside_basis_cents);
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $basisYear->partnership_interest_id,
+            'source_path' => 'codes.19.A.override',
+            'amount_cents' => 60_00,
+        ]);
     }
 
     public function test_manual_interest_merges_with_later_k1_by_name(): void
