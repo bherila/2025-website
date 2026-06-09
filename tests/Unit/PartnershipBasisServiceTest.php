@@ -247,6 +247,24 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(150_00, (int) $rollforwardEvents->first()->amount_cents);
     }
 
+    public function test_reviewed_prior_year_rollforward_preserves_reviewed_status(): void
+    {
+        $interest = $this->interest('Reviewed Carryforward LP');
+        $this->manualEvent($interest, 2023, 'beginning_basis', 100_00);
+        $priorYear = $this->service->recomputeInterestYear($interest, 2023);
+        $this->assertSame('reviewed', $priorYear->review_status);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame('reviewed', $basisYear->review_status);
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2024,
+            'event_type' => 'prior_year_rollforward',
+            'review_status' => 'reviewed',
+        ]);
+    }
+
     public function test_liquidation_with_cash_and_property_distributions_computes_liquidation_loss(): void
     {
         $interest = $this->interest('Liquidation LP');
@@ -289,6 +307,32 @@ class PartnershipBasisServiceTest extends TestCase
             ->where('event_type', 'cash_distribution')
             ->get();
         $this->assertCount(2, $distributions, 'each manual distribution is a distinct row');
+    }
+
+    public function test_created_manual_event_refreshes_downstream_years(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Manual Downstream LP',
+            'initial_cash_contribution_cents' => 100_00,
+            'initialization_review_status' => 'reviewed',
+        ]);
+        $interest = FinPartnershipInterest::query()->where('partnership_name', 'Manual Downstream LP')->firstOrFail();
+        $this->service->recomputeInterestYear($interest, 2025);
+        $this->assertSame(100_00, $this->basisYearForInterest($interest, 2025)->beginning_outside_basis_cents);
+
+        $this->service->createManualEvent($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_interest_id' => $interest->id,
+            'event_type' => 'taxable_income',
+            'amount_cents' => 50_00,
+            'review_status' => 'reviewed',
+        ]);
+
+        $refreshed = $this->basisYearForInterest($interest, 2025);
+        $this->assertSame(150_00, $refreshed->beginning_outside_basis_cents);
+        $this->assertSame(150_00, $refreshed->ending_outside_basis_cents);
+        $this->assertFalse($refreshed->is_stale);
     }
 
     public function test_locked_year_rejects_new_manual_events(): void
@@ -767,7 +811,12 @@ class PartnershipBasisServiceTest extends TestCase
 
         // Proceeds 150 − basis 100 = 50 gain, not a −100 loss from ignoring the sale amount.
         $this->assertSame(50_00, $basisYear->liquidation_gain_loss_cents);
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents);
         $this->assertSame('needs_review', $basisYear->review_status);
+
+        $nextYear = $this->service->recomputeInterestYear($interest, 2025);
+        $this->assertSame(0, $nextYear->beginning_outside_basis_cents);
+        $this->assertSame(0, $nextYear->ending_outside_basis_cents);
     }
 
     public function test_sale_exchange_below_basis_produces_loss(): void
@@ -810,6 +859,21 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->beginning_outside_basis_cents);
         $this->assertSame(150_00, $this->basisYearForInterest($interest, 2026)->ending_outside_basis_cents);
         $this->assertFalse($this->basisYearForInterest($interest, 2026)->is_stale);
+    }
+
+    public function test_recompute_interest_year_range_includes_destination_event_year_without_basis_row(): void
+    {
+        $interest = $this->interest('Destination Span LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        $this->service->recomputeInterestYear($interest, 2024);
+        $this->service->recomputeInterestYear($interest, 2025);
+        $this->manualEvent($interest, 2026, 'taxable_income', 25_00);
+
+        $this->service->recomputeInterestYearRange($interest, 2024, 2026);
+
+        $basisYear = $this->basisYearForInterest($interest, 2026);
+        $this->assertSame(100_00, $basisYear->beginning_outside_basis_cents);
+        $this->assertSame(125_00, $basisYear->ending_outside_basis_cents);
     }
 
     /**

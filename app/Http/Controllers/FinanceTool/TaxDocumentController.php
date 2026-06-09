@@ -12,6 +12,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use App\Services\Finance\Broker1099ParsedDataShapeService;
 use App\Services\Finance\CapitalGains\ReconciliationSummaryService;
+use App\Services\Finance\PartnershipBasisService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
@@ -39,6 +40,8 @@ class TaxDocumentController extends Controller
 
     protected Broker1099ParsedDataShapeService $broker1099ShapeService;
 
+    protected PartnershipBasisService $partnershipBasisService;
+
     protected TaxPreviewFactsService $taxPreviewFactsService;
 
     public function __construct(
@@ -47,6 +50,7 @@ class TaxDocumentController extends Controller
         TaxDocumentCreationService $creationService,
         TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
         Broker1099ParsedDataShapeService $broker1099ShapeService,
+        PartnershipBasisService $partnershipBasisService,
         TaxPreviewFactsService $taxPreviewFactsService,
     ) {
         $this->fileService = $fileService;
@@ -54,6 +58,7 @@ class TaxDocumentController extends Controller
         $this->creationService = $creationService;
         $this->parsedDataNormalizer = $parsedDataNormalizer;
         $this->broker1099ShapeService = $broker1099ShapeService;
+        $this->partnershipBasisService = $partnershipBasisService;
         $this->taxPreviewFactsService = $taxPreviewFactsService;
     }
 
@@ -377,7 +382,10 @@ class TaxDocumentController extends Controller
 
         $deleteDoc = false;
 
+        $basisRanges = $this->partnershipBasisService->documentBasisRecomputeRanges($doc, $link->id);
+
         DB::transaction(function () use ($doc, $link, &$deleteDoc): void {
+            $this->partnershipBasisService->deleteDocumentBasisEvents($doc, $link->id);
             $link->delete();
 
             $remaining = TaxDocumentAccount::where('document_id', $doc->document_id)->count();
@@ -394,6 +402,7 @@ class TaxDocumentController extends Controller
             $this->fileService->deleteFile($doc->s3_path);
         }
         $this->forgetReconciliationSummary($doc);
+        $this->partnershipBasisService->recomputeDocumentBasisRanges($basisRanges);
 
         return response()->json(['success' => true]);
     }
@@ -536,8 +545,11 @@ class TaxDocumentController extends Controller
             ->where('user_id', Auth::id())
             ->firstOrFail();
 
-        // Deletes account links via DB cascade; booted() event queues S3 cleanup.
+        $basisRanges = $this->partnershipBasisService->documentBasisRecomputeRanges($doc);
+
+        // Deletes account links and K-1 basis source events via DB cascade; booted() event queues S3 cleanup.
         $this->fileService->deleteFileRecord($doc);
+        $this->partnershipBasisService->recomputeDocumentBasisRanges($basisRanges);
 
         return response()->json(['success' => true]);
     }

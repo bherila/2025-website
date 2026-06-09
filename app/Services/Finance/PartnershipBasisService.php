@@ -122,7 +122,7 @@ class PartnershipBasisService
                 'event_type' => PartnershipBasisEventType::PriorYearRollforward->value,
                 'amount_cents' => $prior->ending_outside_basis_cents,
                 'source_label' => sprintf('%d beginning outside basis from %d ending outside basis', $year, $year - 1),
-                'review_status' => $prior->review_status === 'locked' ? 'reviewed' : 'needs_review',
+                'review_status' => in_array($prior->review_status, ['reviewed', 'locked'], true) ? 'reviewed' : 'needs_review',
                 'metadata' => ['prior_basis_year_id' => $prior->id],
             ]);
         }
@@ -194,10 +194,14 @@ class PartnershipBasisService
             $this->deleteSuspendedLossReleaseEvent($interest, $year);
         }
 
-        $endingInside = $endingTaxCapital;
         $hasLiquidation = $this->hasLiquidationEvent($events);
+        $hasSaleExchange = $this->hasSaleExchangeEvent($events);
         $reviewStatus = $this->reviewStatus($events, $distributionGain, $suspendedLoss, $hasLiquidation);
         $liquidationGainLoss = $this->liquidationGainLossCents($events, $availableOutsideBasis, $distributionGain);
+        if ($hasSaleExchange) {
+            $availableOutsideBasis = 0;
+        }
+        $endingInside = $endingTaxCapital;
 
         $values = array_merge($totals, [
             'user_id' => $interest->user_id,
@@ -386,7 +390,7 @@ class PartnershipBasisService
             'account_id' => $account->acct_id,
         ]));
 
-        $this->recomputeInterestYear($interest, $year);
+        $this->recomputeInterestYearRange($interest, $year, $year);
 
         return $event;
     }
@@ -438,16 +442,69 @@ class PartnershipBasisService
      * across a gap requires re-walking the chain in order; intervening years feed the next year's
      * beginning basis, and locked years are skipped (left frozen) by recomputeInterestYear().
      */
-    public function recomputeInterestYearRange(FinPartnershipInterest $interest, int $fromYear): void
+    public function recomputeInterestYearRange(FinPartnershipInterest $interest, int $fromYear, ?int $throughYear = null): void
     {
-        $maxYear = (int) FinPartnershipBasisYear::query()
+        $maxBasisYear = (int) FinPartnershipBasisYear::query()
             ->where('user_id', $interest->user_id)
             ->where('partnership_interest_id', $interest->id)
             ->max('tax_year');
 
-        for ($currentYear = $fromYear; $currentYear <= max($fromYear, $maxYear); $currentYear++) {
+        $maxEventYear = (int) FinPartnershipBasisEvent::query()
+            ->where('user_id', $interest->user_id)
+            ->where('partnership_interest_id', $interest->id)
+            ->max('tax_year');
+
+        $endYear = max($fromYear, $throughYear ?? 0, $maxBasisYear, $maxEventYear);
+
+        for ($currentYear = $fromYear; $currentYear <= $endYear; $currentYear++) {
             $this->recomputeInterestYear($interest, $currentYear);
         }
+    }
+
+    /**
+     * @return Collection<int, array{interest: FinPartnershipInterest, from_year: int}>
+     */
+    public function documentBasisRecomputeRanges(FileForTaxDocument $document, ?int $taxDocumentAccountId = null): Collection
+    {
+        return FinPartnershipBasisEvent::query()
+            ->with('partnershipInterest')
+            ->where('user_id', $document->user_id)
+            ->where('tax_document_id', $document->id)
+            ->when($taxDocumentAccountId !== null, fn ($query) => $query->where('tax_document_account_id', $taxDocumentAccountId))
+            ->get()
+            ->groupBy('partnership_interest_id')
+            ->map(function (Collection $events): ?array {
+                $event = $events->first();
+                if (! $event instanceof FinPartnershipBasisEvent || ! $event->partnershipInterest instanceof FinPartnershipInterest) {
+                    return null;
+                }
+
+                return [
+                    'interest' => $event->partnershipInterest,
+                    'from_year' => (int) $events->min('tax_year'),
+                ];
+            })
+            ->filter()
+            ->values();
+    }
+
+    public function deleteDocumentBasisEvents(FileForTaxDocument $document, ?int $taxDocumentAccountId = null): void
+    {
+        FinPartnershipBasisEvent::query()
+            ->where('user_id', $document->user_id)
+            ->where('tax_document_id', $document->id)
+            ->when($taxDocumentAccountId !== null, fn ($query) => $query->where('tax_document_account_id', $taxDocumentAccountId))
+            ->delete();
+    }
+
+    /**
+     * @param  Collection<int, array{interest: FinPartnershipInterest, from_year: int}>  $ranges
+     */
+    public function recomputeDocumentBasisRanges(Collection $ranges): void
+    {
+        $ranges->each(function (array $range): void {
+            $this->recomputeInterestYearRange($range['interest'], $range['from_year']);
+        });
     }
 
     /**
@@ -1134,6 +1191,12 @@ class PartnershipBasisService
             PartnershipBasisEventType::LiquidationDistributionProperty->value,
             PartnershipBasisEventType::SaleExchange->value,
         ], true));
+    }
+
+    /** @param Collection<int, FinPartnershipBasisEvent> $events */
+    private function hasSaleExchangeEvent(Collection $events): bool
+    {
+        return $events->contains(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::SaleExchange->value);
     }
 
     /** @param Collection<int, FinPartnershipBasisEvent> $events */

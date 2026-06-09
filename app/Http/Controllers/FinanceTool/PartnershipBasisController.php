@@ -103,7 +103,7 @@ class PartnershipBasisController extends Controller
         // Recompute the whole rollforward from the earliest affected year through the interest's
         // latest year. A moved event no longer counts in the year it left, and every downstream
         // year — including intervening ones — reads a refreshed carryforward instead of a stale one.
-        $this->partnershipBasisService->recomputeInterestYearRange($interest, min($originalYear, $newYear));
+        $this->partnershipBasisService->recomputeInterestYearRange($interest, min($originalYear, $newYear), max($originalYear, $newYear));
 
         return response()->json($this->partnershipBasisService->eventToArray($basisEvent->refresh()));
     }

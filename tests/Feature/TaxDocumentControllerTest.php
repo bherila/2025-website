@@ -7,9 +7,11 @@ use App\GenAiProcessor\Models\GenAiImportJob;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEmploymentEntity;
+use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use App\Services\Finance\DocumentIngestionService;
+use App\Services\Finance\PartnershipBasisService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -802,6 +804,43 @@ class TaxDocumentControllerTest extends TestCase
         $this->assertDatabaseMissing('fin_tax_documents', ['id' => $doc->id]);
     }
 
+    public function test_destroy_last_k1_account_link_recomputes_partnership_basis_year(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'K1 Link Account');
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'account_id' => $account->acct_id,
+            's3_path' => '',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'schemaVersion' => '2026.1',
+                'formType' => 'K-1-1065',
+                'fields' => [
+                    'A' => ['value' => '12-3456789'],
+                    'B' => ['value' => 'Link Delete LP'],
+                    'D' => ['value' => 'false'],
+                    '5' => ['value' => '100'],
+                ],
+                'codes' => [],
+                'basis' => [],
+            ],
+        ]);
+        $link = TaxDocumentAccount::createLink($doc->id, $account->acct_id, 'k1', 2024, isReviewed: true);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+        $basisYear = FinPartnershipBasisYear::query()->where('user_id', $user->id)->where('tax_year', 2024)->firstOrFail();
+        $this->assertSame(100_00, $basisYear->ending_outside_basis_cents);
+
+        $response = $this->actingAs($user)->deleteJson("/api/finance/tax-documents/{$doc->id}/accounts/{$link->id}");
+
+        $response->assertOk();
+        $this->assertDatabaseMissing('fin_tax_documents', ['id' => $doc->id]);
+        $this->assertDatabaseMissing('fin_partnership_basis_events', ['tax_document_id' => $doc->id]);
+        $freshBasisYear = $basisYear->fresh();
+        $this->assertInstanceOf(FinPartnershipBasisYear::class, $freshBasisYear);
+        $this->assertSame(0, $freshBasisYear->ending_outside_basis_cents);
+    }
+
     public function test_destroy_account_link_keeps_parent_when_other_links_remain(): void
     {
         $user = $this->createUser();
@@ -822,6 +861,43 @@ class TaxDocumentControllerTest extends TestCase
 
         $this->assertDatabaseHas('fin_tax_documents', ['id' => $doc->id]);
         $this->assertDatabaseMissing('fin_document_accounts', ['id' => $link1->id]);
+    }
+
+    public function test_destroy_k1_document_recomputes_partnership_basis_year(): void
+    {
+        $user = $this->createUser();
+        $account = $this->createFinAccount($user->id, 'K1 Document Account');
+        $doc = $this->createTaxDocument($user->id, [
+            'form_type' => 'k1',
+            'account_id' => $account->acct_id,
+            's3_path' => '',
+            'is_reviewed' => true,
+            'parsed_data' => [
+                'schemaVersion' => '2026.1',
+                'formType' => 'K-1-1065',
+                'fields' => [
+                    'A' => ['value' => '98-7654321'],
+                    'B' => ['value' => 'Document Delete LP'],
+                    'D' => ['value' => 'false'],
+                    '5' => ['value' => '125'],
+                ],
+                'codes' => [],
+                'basis' => [],
+            ],
+        ]);
+        TaxDocumentAccount::createLink($doc->id, $account->acct_id, 'k1', 2024, isReviewed: true);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+        $basisYear = FinPartnershipBasisYear::query()->where('user_id', $user->id)->where('tax_year', 2024)->firstOrFail();
+        $this->assertSame(125_00, $basisYear->ending_outside_basis_cents);
+
+        $response = $this->actingAs($user)->deleteJson("/api/finance/tax-documents/{$doc->id}");
+
+        $response->assertOk();
+        $this->assertDatabaseMissing('fin_tax_documents', ['id' => $doc->id]);
+        $this->assertDatabaseMissing('fin_partnership_basis_events', ['tax_document_id' => $doc->id]);
+        $freshBasisYear = $basisYear->fresh();
+        $this->assertInstanceOf(FinPartnershipBasisYear::class, $freshBasisYear);
+        $this->assertSame(0, $freshBasisYear->ending_outside_basis_cents);
     }
 
     public function test_confirm_account_links_replaces_existing_links(): void
