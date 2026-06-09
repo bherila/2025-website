@@ -14,6 +14,27 @@ class IrsReturnPdfBuilder
 {
     private const int FORM_8949_ROWS_PER_PAGE = 11;
 
+    /**
+     * Identity/PII profile fields that are suppressed from field resolution unless
+     * the request explicitly opts in. Non-PII profile fields (filing status and the
+     * digital-assets answer) are always rendered.
+     *
+     * @var array<int, string>
+     */
+    private const array PII_PROFILE_FIELDS = [
+        'taxpayer_first_name',
+        'taxpayer_last_name',
+        'taxpayer_ssn',
+        'spouse_first_name',
+        'spouse_last_name',
+        'spouse_ssn',
+        'address_line1',
+        'address_line2',
+        'city',
+        'state',
+        'postal_code',
+    ];
+
     public function __construct(
         private readonly TaxPreviewFactsService $taxPreviewFactsService,
         private readonly IrsPdfTemplateRepository $templates,
@@ -51,7 +72,7 @@ class IrsReturnPdfBuilder
 
         $warnings = $readiness->warnings;
         $formIds = $this->selectedFormIds($options, $readiness->requiredForms, $facts);
-        $profileForFields = $options->includeProfilePii ? $profile : null;
+        $profileForFields = $this->profileForFields($profile, $options->includeProfilePii);
 
         if ($formIds === []) {
             throw new TaxReturnPdfUnavailableException(['Select at least one supported IRS PDF form to export.'], $warnings);
@@ -83,14 +104,22 @@ class IrsReturnPdfBuilder
 
         $recommended = TaxReturnPdfOptions::normalizeFormIds($requiredForms);
 
-        if ($this->form8949Instances($facts) === []) {
-            $recommended = array_values(array_filter(
-                $recommended,
-                static fn (string $formId): bool => $formId !== 'form-8949',
-            ));
+        return $recommended === [] ? ['form-1040'] : $recommended;
+    }
+
+    private function profileForFields(?FinTaxReturnProfile $profile, bool $includeProfilePii): ?FinTaxReturnProfile
+    {
+        if (! $profile instanceof FinTaxReturnProfile || $includeProfilePii) {
+            return $profile;
         }
 
-        return $recommended === [] ? ['form-1040'] : $recommended;
+        $redacted = clone $profile;
+
+        foreach (self::PII_PROFILE_FIELDS as $field) {
+            $redacted->setAttribute($field, null);
+        }
+
+        return $redacted;
     }
 
     /**

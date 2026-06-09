@@ -62,6 +62,33 @@ class IrsReturnReadinessServiceTest extends TestCase
         ));
     }
 
+    public function test_selection_export_warns_when_an_unsupported_dependent_form_is_required(): void
+    {
+        $user = User::factory()->create();
+        $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
+
+        $readiness = app(IrsReturnReadinessService::class)->forRequest(
+            user: $user,
+            year: 2025,
+            scope: 'selection',
+            formId: null,
+            mode: 'editable',
+            profile: $profile,
+            facts: [
+                'form1040' => ['line8' => 100],
+                'scheduleC' => ['netProfitRoutedToSchedule1' => 100],
+            ],
+            selectedFormIds: ['form-1040', 'schedule-1'],
+        );
+
+        $this->assertTrue($readiness->isReady());
+        $this->assertContains('schedule-c', $readiness->unsupportedForms);
+        $this->assertNotEmpty(array_filter(
+            $readiness->warnings,
+            static fn (string $warning): bool => str_contains($warning, 'schedule-c appears required'),
+        ));
+    }
+
     public function test_form_8949_rows_without_supported_boxes_warn(): void
     {
         $user = User::factory()->create();

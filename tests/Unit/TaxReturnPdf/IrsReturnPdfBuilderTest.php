@@ -84,6 +84,118 @@ class IrsReturnPdfBuilderTest extends TestCase
         $this->assertSame(['form-1040', 'schedule-1', 'schedule-3', 'schedule-d', 'form-8949'], $result->formIds);
     }
 
+    public function test_pii_off_blanks_identity_fields_but_keeps_filing_status_and_digital_assets(): void
+    {
+        $user = User::factory()->create();
+        FinTaxReturnProfile::factory()->for($user, 'user')->create([
+            'tax_year' => 2025,
+            'filing_status' => 'single',
+            'taxpayer_first_name' => 'Taxpayer',
+            'taxpayer_last_name' => 'Example',
+            'taxpayer_ssn' => '123-45-6789',
+            'digital_assets_answer' => 'no',
+        ]);
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn(['form1040' => []]);
+        });
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('supportsEditableOutput')->once()->andReturn(true);
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms): bool {
+                    $fieldValues = $forms[0]['fieldValues'];
+
+                    $this->assertNull($fieldValues['f1_14[0]'] ?? null, 'taxpayer first name must be blank when PII is off');
+                    $this->assertNull($fieldValues['f1_16[0]'] ?? null, 'taxpayer SSN must be blank when PII is off');
+                    $this->assertSame('1', $fieldValues['c1_8[0]'] ?? null, 'single filing status must still render');
+                    $this->assertSame('2', $fieldValues['c1_10[1]'] ?? null, 'digital-assets answer must still render');
+
+                    return true;
+                })
+                ->andReturn('%PDF-1.4');
+        });
+
+        app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'editable', 'form-1040', 'form-1040.pdf', includeProfilePii: false),
+        );
+    }
+
+    public function test_pii_on_renders_identity_fields(): void
+    {
+        $user = User::factory()->create();
+        FinTaxReturnProfile::factory()->for($user, 'user')->create([
+            'tax_year' => 2025,
+            'filing_status' => 'single',
+            'taxpayer_first_name' => 'Taxpayer',
+            'taxpayer_last_name' => 'Example',
+            'taxpayer_ssn' => '123-45-6789',
+            'digital_assets_answer' => 'no',
+        ]);
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn(['form1040' => []]);
+        });
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('supportsEditableOutput')->once()->andReturn(true);
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms): bool {
+                    $this->assertSame('Taxpayer', $forms[0]['fieldValues']['f1_14[0]'] ?? null);
+
+                    return true;
+                })
+                ->andReturn('%PDF-1.4');
+        });
+
+        app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'form', 'editable', 'form-1040', 'form-1040.pdf', includeProfilePii: true),
+        );
+    }
+
+    public function test_return_packet_includes_blank_form_8949_when_required_without_detail_rows(): void
+    {
+        $user = User::factory()->create();
+        FinTaxReturnProfile::factory()->for($user, 'user')->create(['tax_year' => 2025]);
+        $this->mock(TaxPreviewFactsService::class, function (MockInterface $mock) use ($user): void {
+            $mock->shouldReceive('arrayForYear')
+                ->once()
+                ->with((int) $user->id, 2025)
+                ->andReturn([
+                    'form1040' => ['line7' => 60.0],
+                    'scheduleD' => [
+                        'line1bGainLoss' => 25.0,
+                        'line16Combined' => 25.0,
+                    ],
+                    'form8949' => ['rowCount' => 0, 'rows' => []],
+                ]);
+        });
+        $this->mock(IrsAcroFormFillEngine::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('supportsEditableOutput')->once()->andReturn(true);
+            $mock->shouldReceive('fillForms')
+                ->once()
+                ->withArgs(function (array $forms): bool {
+                    $this->assertContains('form-8949', array_column($forms, 'formId'));
+
+                    return true;
+                })
+                ->andReturn('%PDF-1.4');
+        });
+
+        $result = app(IrsReturnPdfBuilder::class)->buildResultForUser(
+            $user,
+            new TaxReturnPdfOptions(2025, 'return', 'editable', null, 'packet.pdf'),
+        );
+
+        $this->assertContains('form-8949', $result->formIds);
+    }
+
     public function test_schedule_d_part_iii_lines_18_and_19_are_filled_from_line_12_sources(): void
     {
         $user = User::factory()->create();

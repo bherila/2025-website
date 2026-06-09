@@ -41,7 +41,7 @@ class IrsReturnReadinessService
     ): IrsReturnReadinessResult {
         $errors = [];
         $warnings = [];
-        $unsupportedForms = $scope === 'return' ? $this->formSelector->unsupportedRequiredForms($facts) : [];
+        $unsupportedForms = in_array($scope, ['return', 'selection'], true) ? $this->formSelector->unsupportedRequiredForms($facts) : [];
         $requiredForms = $scope === 'return' ? $this->formSelector->requiredForms($facts) : $this->requestedForms($scope, $formId, $selectedFormIds);
 
         if ($requiredForms === []) {

@@ -94,10 +94,17 @@ class TaxReturnPdfExportRequest extends FormRequest
             }
         }
 
-        return array_values(array_filter(
+        $known = array_values(array_filter(
             self::FORM_IDS,
             static fn (string $formId): bool => in_array($formId, $requested, true),
         ));
+
+        // Preserve any unsupported ids (in canonical order, known first) so the
+        // `formIds.*` Rule::in validation can reject them instead of silently
+        // dropping part of the caller's selection.
+        $unknown = array_values(array_diff(array_unique($requested), self::FORM_IDS));
+
+        return array_merge($known, $unknown);
     }
 
     private function normalizeString(mixed $value): ?string

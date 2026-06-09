@@ -46,6 +46,21 @@ class TaxReturnPdfExportControllerTest extends TestCase
         $response->assertJsonValidationErrors(['formId']);
     }
 
+    public function test_selection_with_unsupported_form_id_is_rejected_instead_of_silently_dropped(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson('/finance/tax-preview/export-pdf', [
+            'year' => 2025,
+            'scope' => 'selection',
+            'formIds' => ['form-1040', 'schedule-c'],
+            'mode' => 'editable',
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['formIds.1']);
+    }
+
     public function test_supported_schedule_form_id_is_accepted(): void
     {
         $user = User::factory()->create();
