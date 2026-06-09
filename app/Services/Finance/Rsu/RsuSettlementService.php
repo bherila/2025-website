@@ -152,6 +152,8 @@ class RsuSettlementService
             $award = FinEquityAwards::query()
                 ->where('uid', $userId)
                 ->where('id', $data['equity_award_id'])
+                ->whereDate('vest_date', $settlement->vest_date)
+                ->where('symbol', $settlement->symbol)
                 ->firstOrFail();
 
             if ($allocation instanceof FinRsuVestSettlementAllocation && (int) $allocation->equity_award_id !== (int) $award->id) {

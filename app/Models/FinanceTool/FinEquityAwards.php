@@ -40,6 +40,11 @@ class FinEquityAwards extends Model
         ];
     }
 
+    public function getShareCountAttribute(null|float|string $value): ?float
+    {
+        return $value === null ? null : (float) $value;
+    }
+
     /** @return HasMany<FinRsuVestSettlementAllocation, $this> */
     public function settlementAllocations(): HasMany
     {

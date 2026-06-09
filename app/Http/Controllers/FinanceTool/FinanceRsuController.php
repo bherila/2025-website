@@ -90,7 +90,7 @@ class FinanceRsuController extends Controller
     public function confirmSettlement(Request $request, FinRsuVestSettlement $settlement): JsonResponse
     {
         $this->authorizeSettlement($settlement);
-        $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, $request->all() + ['settlement_id' => $settlement->id]);
+        $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, ['settlement_id' => $settlement->id] + $request->all());
 
         return response()->json($confirmed->load(['allocations.award', 'links']));
     }
@@ -98,7 +98,7 @@ class FinanceRsuController extends Controller
     public function updateSettlement(Request $request, FinRsuVestSettlement $settlement): JsonResponse
     {
         $this->authorizeSettlement($settlement);
-        $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, $request->all() + ['settlement_id' => $settlement->id]);
+        $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, ['settlement_id' => $settlement->id] + $request->all());
 
         return response()->json($confirmed->load(['allocations.award', 'links']));
     }
@@ -137,7 +137,7 @@ class FinanceRsuController extends Controller
             'payslip_id' => ['nullable', 'integer'],
             'confidence' => ['nullable', 'numeric', 'between:0,1'],
             'confidence_reasons' => ['nullable', 'array'],
-            'status' => ['nullable', 'string', Rule::in(['suggested', 'confirmed', 'ignored'])],
+            'status' => ['sometimes', 'string', Rule::in(['suggested', 'confirmed', 'ignored'])],
             'notes' => ['nullable', 'string'],
         ]);
         $this->settlementService->assertLinkTargetsBelongToSettlement((int) Auth::id(), $settlement, $data);

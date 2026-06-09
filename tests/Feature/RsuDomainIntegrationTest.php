@@ -31,7 +31,7 @@ class RsuDomainIntegrationTest extends TestCase
 
         $award = FinEquityAwards::query()->firstOrFail();
         $this->assertSame('META', $award->symbol);
-        $this->assertSame('10.125000', $award->share_count);
+        $this->assertSame(10.125, $award->share_count);
         $this->assertNull($award->grant_price);
         $this->assertSame('123.456789', $award->vest_price);
         $this->assertSame('manual', $award->vest_price_source);
@@ -45,7 +45,7 @@ class RsuDomainIntegrationTest extends TestCase
         ]])->assertOk();
 
         $award->refresh();
-        $this->assertSame('11.500000', $award->share_count);
+        $this->assertSame(11.5, $award->share_count);
         $this->assertSame('123.456789', $award->vest_price);
 
         $this->actingAs($user)->postJson('/api/rsu', [[
@@ -74,6 +74,68 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertSame(2, FinEquityAwards::query()->count());
         $this->actingAs($otherUser)->deleteJson("/api/rsu/{$award->id}")->assertNotFound();
         $this->assertNotNull($award->refresh());
+    }
+
+    public function test_settlement_link_status_null_is_rejected(): void
+    {
+        $user = User::factory()->create();
+        $settlement = FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'META',
+            'gross_shares' => 10,
+            'gross_income' => 1000,
+            'status' => 'confirmed',
+        ]);
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlement->id}/links", [
+            'link_type' => 'tax_lot',
+            'status' => null,
+        ])->assertUnprocessable();
+    }
+
+    public function test_settlement_confirmation_uses_route_settlement_for_updates(): void
+    {
+        $user = User::factory()->create();
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-ROUTE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $target = FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'META',
+            'gross_shares' => 0,
+            'gross_income' => 0,
+            'status' => 'suggested',
+        ]);
+        $other = FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'TSLA',
+            'gross_shares' => 20,
+            'gross_income' => 2000,
+            'status' => 'suggested',
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/rsu/settlements/{$target->id}/confirm", [
+            'settlement_id' => $other->id,
+        ])->assertOk();
+
+        $target->refresh();
+        $other->refresh();
+
+        $this->assertSame($target->id, $response->json('id'));
+        $this->assertSame('confirmed', $target->status);
+        $this->assertSame('suggested', $other->status);
+        $this->assertSame('2000.0000', $other->gross_income);
     }
 
     public function test_manual_rsu_validation_errors_return_unprocessable_entity(): void
@@ -269,6 +331,16 @@ class RsuDomainIntegrationTest extends TestCase
             'vest_price' => 100,
             'vest_price_source' => 'manual',
         ]);
+        $wrongDateAward = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-WRONG',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-07-01',
+            'share_count' => 2,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
         $otherAward = FinEquityAwards::query()->create([
             'uid' => $other->id,
             'award_id' => 'RSU-7',
@@ -339,9 +411,32 @@ class RsuDomainIntegrationTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlement->id}/links", [
             'link_type' => 'tax_lot',
+            'equity_award_id' => $wrongDateAward->id,
+        ])->assertNotFound();
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlement->id}/links", [
+            'link_type' => 'tax_lot',
             'settlement_allocation_id' => $allocation->id,
             'equity_award_id' => $secondAward->id,
         ])->assertUnprocessable();
+    }
+
+    public function test_get_rsu_data_serializes_share_count_as_number(): void
+    {
+        $user = User::factory()->create();
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-SERIAL',
+            'grant_date' => '2026-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10.125,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/rsu')->assertOk();
+        $this->assertSame(10.125, $response->json('0.share_count'));
     }
 
     public function test_deleting_settled_award_reconciles_settlement_totals(): void
