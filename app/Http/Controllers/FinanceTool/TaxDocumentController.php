@@ -326,6 +326,9 @@ class TaxDocumentController extends Controller
         $link = TaxDocumentAccount::where('id', $linkId)
             ->where('document_id', $doc->document_id)
             ->firstOrFail();
+        $basisRanges = $link->form_type === 'k1'
+            ? $this->partnershipBasisService->documentBasisRecomputeRanges($doc, $link->id)
+            : collect();
 
         $request->validate([
             'account_id' => 'nullable|integer|min:1',
@@ -360,7 +363,15 @@ class TaxDocumentController extends Controller
 
         $link->save();
         $this->forgetReconciliationSummary($doc);
-        $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
+        if ($link->form_type === 'k1') {
+            $freshDoc = $doc->fresh(['accountLinks.account']);
+            if ($freshDoc instanceof FileForTaxDocument) {
+                $this->syncPartnershipBasisForTaxDocument($freshDoc);
+                $this->partnershipBasisService->recomputeDocumentBasisRanges($basisRanges);
+            }
+        } else {
+            $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
+        }
 
         $responseLink = $link->load('account:acct_id,acct_name,acct_number');
 
@@ -827,13 +838,26 @@ class TaxDocumentController extends Controller
             return;
         }
 
+        $this->syncPartnershipBasisForTaxDocument($doc);
+    }
+
+    private function syncPartnershipBasisForTaxDocument(FileForTaxDocument $doc): void
+    {
         $doc->loadMissing(['accountLinks.account']);
         $hasK1Link = $doc->accountLinks->contains(fn ($link): bool => $link instanceof TaxDocumentAccount && $link->form_type === 'k1');
         if ($doc->form_type !== 'k1' && ! $hasK1Link) {
             return;
         }
 
-        $this->partnershipBasisService->recomputeForUserYear((int) Auth::id(), (int) $doc->tax_year, [$doc]);
+        $years = collect([(int) $doc->tax_year])
+            ->merge($doc->accountLinks
+                ->filter(fn ($link): bool => $link instanceof TaxDocumentAccount && $link->form_type === 'k1')
+                ->map(fn (TaxDocumentAccount $link): int => (int) ($link->tax_year ?? $doc->tax_year)))
+            ->filter(fn (int $year): bool => $year > 0)
+            ->unique()
+            ->values();
+
+        $years->each(fn (int $year) => $this->partnershipBasisService->recomputeForUserYear((int) Auth::id(), $year, [$doc]));
     }
 
     /**

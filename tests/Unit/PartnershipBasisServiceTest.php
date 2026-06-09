@@ -95,6 +95,39 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(150_00, $basisYear->property_distributions_basis_cents);
     }
 
+    public function test_current_box19_distribution_codes_route_to_property_and_liability_types(): void
+    {
+        $basisYear = $this->basisFromK1(2024, 'Current Box19 LP', [], [
+            '19' => [
+                ['code' => 'C', 'value' => '30'],
+                ['code' => 'G', 'value' => '20'],
+                ['code' => 'D', 'value' => '40'],
+            ],
+        ], [
+            'outsideBasisWorksheet' => ['beginningBasis' => 100],
+            'liabilities' => ['beginningRecourse' => 100, 'endingRecourse' => 60],
+        ]);
+
+        $this->assertSame(50_00, $basisYear->property_distributions_basis_cents);
+        $this->assertSame(40_00, $basisYear->liability_decrease_cents);
+        $this->assertSame(0, $basisYear->distribution_gain_cents);
+        $this->assertSame(10_00, $basisYear->ending_outside_basis_cents);
+
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $basisYear->partnership_interest_id,
+            'k1_box' => '19',
+            'k1_code' => 'D',
+            'event_type' => 'deemed_distribution_liability_decrease',
+            'amount_cents' => 40_00,
+        ]);
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $basisYear->partnership_interest_id,
+            'source_path' => 'basis.liabilities',
+            'event_type' => 'memorandum',
+            'amount_cents' => 0,
+        ]);
+    }
+
     public function test_box19_distribution_counted_once_when_present_in_normalized_and_codes(): void
     {
         // Same distribution supplied via normalized basis.distributions AND Box 19 codes must
@@ -413,6 +446,33 @@ class PartnershipBasisServiceTest extends TestCase
             'event_type' => 'suspended_loss_released',
             'amount_cents' => 100_00,
             'source_type' => 'carryforward',
+        ]);
+    }
+
+    public function test_suspended_loss_release_source_status_keeps_year_needing_review(): void
+    {
+        $interest = $this->interest('Suspended Release Review LP');
+        FinPartnershipBasisEvent::create([
+            'user_id' => $this->user->id,
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2023,
+            'event_type' => 'deductible_loss',
+            'amount_cents' => 100_00,
+            'source_type' => 'manual',
+            'review_status' => 'needs_review',
+        ]);
+        $this->service->recomputeInterestYear($interest, 2023);
+
+        $this->manualEvent($interest, 2024, 'capital_contribution_cash', 100_00);
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        $this->assertSame(0, $basisYear->suspended_loss_carryforward_cents);
+        $this->assertSame('needs_review', $basisYear->review_status);
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2024,
+            'event_type' => 'suspended_loss_released',
+            'review_status' => 'needs_review',
         ]);
     }
 
@@ -820,6 +880,30 @@ class PartnershipBasisServiceTest extends TestCase
         $interest = FinPartnershipInterest::query()->where('partnership_name', 'Merge LP')->firstOrFail();
         $this->assertSame('123456789', $interest->partnership_ein);
         $this->assertSame(150_00, $this->basisYearForInterest($interest, 2024)->ending_outside_basis_cents);
+    }
+
+    public function test_initialize_account_refreshes_existing_downstream_years(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Initialize Range LP',
+            'initial_cash_contribution_cents' => 100_00,
+            'initialization_review_status' => 'reviewed',
+        ]);
+        $interest = FinPartnershipInterest::query()->where('partnership_name', 'Initialize Range LP')->firstOrFail();
+        $this->service->recomputeInterestYear($interest, 2025);
+        $this->assertSame(100_00, $this->basisYearForInterest($interest, 2025)->ending_outside_basis_cents);
+
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Initialize Range LP',
+            'initial_cash_contribution_cents' => 150_00,
+            'initialization_review_status' => 'reviewed',
+        ]);
+
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->beginning_outside_basis_cents);
+        $this->assertSame(150_00, $this->basisYearForInterest($interest, 2025)->ending_outside_basis_cents);
+        $this->assertFalse($this->basisYearForInterest($interest, 2025)->is_stale);
     }
 
     public function test_sale_exchange_proceeds_produce_disposition_gain(): void

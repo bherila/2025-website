@@ -54,8 +54,15 @@ class PartnershipBasisService
             FileForTaxDocument::query()
                 ->with(['accountLinks.account'])
                 ->where('user_id', $userId)
-                ->where('tax_year', $year)
-                ->where('form_type', 'k1')
+                ->where(function ($query) use ($year): void {
+                    $query->where(function ($documents) use ($year): void {
+                        $documents->where('tax_year', $year)
+                            ->where('form_type', 'k1');
+                    })->orWhereHas('accountLinks', function ($links) use ($year): void {
+                        $links->where('tax_year', $year)
+                            ->where('form_type', 'k1');
+                    });
+                })
                 ->get()
                 ->each(fn (FileForTaxDocument $document): ?FinPartnershipInterest => $this->syncK1Document($document, $userId, $year));
         }
@@ -127,13 +134,7 @@ class PartnershipBasisService
             ]);
         }
 
-        $events = FinPartnershipBasisEvent::query()
-            ->where('user_id', $interest->user_id)
-            ->where('partnership_interest_id', $interest->id)
-            ->where('tax_year', $year)
-            ->orderBy('event_order')
-            ->orderBy('id')
-            ->get();
+        $events = $this->basisEventsForInterestYear($interest, $year);
 
         $beginningOutside = $this->beginningOutsideBasisCents($events, $prior);
         $beginningTaxCapital = $this->capitalBeginningCents($events, 'initial_tax_basis_capital', $prior instanceof FinPartnershipBasisYear ? (int) $prior->ending_tax_basis_capital_cents : 0);
@@ -193,6 +194,7 @@ class PartnershipBasisService
         } else {
             $this->deleteSuspendedLossReleaseEvent($interest, $year);
         }
+        $events = $this->basisEventsForInterestYear($interest, $year);
 
         $hasLiquidation = $this->hasLiquidationEvent($events);
         $reviewStatus = $this->reviewStatus($events, $distributionGain, $suspendedLoss, $hasLiquidation);
@@ -367,7 +369,16 @@ class PartnershipBasisService
             ]);
         }
 
-        return $this->recomputeInterestYear($interest, $year);
+        $this->recomputeInterestYearRange($interest, $year, $year);
+
+        /** @var FinPartnershipBasisYear $basisYear */
+        $basisYear = FinPartnershipBasisYear::query()
+            ->where('user_id', $interest->user_id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->firstOrFail();
+
+        return $basisYear;
     }
 
     /**
@@ -608,19 +619,51 @@ class PartnershipBasisService
 
     private function syncK1Document(FileForTaxDocument $document, int $userId, int $year): ?FinPartnershipInterest
     {
-        $data = is_array($document->parsed_data) ? $document->parsed_data : [];
+        $document->loadMissing(['accountLinks.account']);
+        $parentData = is_array($document->parsed_data) ? $document->parsed_data : [];
+        $k1Links = $document->accountLinks->filter(fn ($link): bool => $link instanceof TaxDocumentAccount && $link->form_type === 'k1' && (int) $link->tax_year === $year);
+
+        if ($document->form_type === 'k1') {
+            return $this->syncK1Payload($document, $userId, $year, $parentData, $k1Links->first());
+        }
+
+        if ($k1Links->isEmpty()) {
+            $this->pruneDocumentK1Events($userId, $document, $year);
+
+            return null;
+        }
+
+        $syncedInterest = null;
+        foreach ($k1Links as $link) {
+            $data = $this->k1PayloadForLink($parentData, $link);
+            if ($data === null) {
+                $this->pruneDocumentK1Events($userId, $document, $year, linkId: $link->id, scopeToLink: true);
+
+                continue;
+            }
+
+            $syncedInterest = $this->syncK1Payload($document, $userId, $year, $data, $link);
+        }
+
+        return $syncedInterest;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function syncK1Payload(FileForTaxDocument $document, int $userId, int $year, array $data, ?TaxDocumentAccount $link): ?FinPartnershipInterest
+    {
         if (K1LegacyTransformer::isLegacy($data)) {
             $data = K1LegacyTransformer::transform($data);
         }
 
         $formType = $this->mapFormType((string) ($data['formType'] ?? 'K-1-1065'));
         if ($formType !== 'k1_1065') {
-            $this->pruneDocumentK1Events($userId, $document, $year);
+            $this->pruneDocumentK1Events($userId, $document, $year, linkId: $link?->id, scopeToLink: true);
 
             return null;
         }
 
-        $link = $document->accountLinks->first(fn ($candidate): bool => $candidate instanceof TaxDocumentAccount && (int) $candidate->tax_year === $year);
         $accountId = $link instanceof TaxDocumentAccount ? $link->account_id : $document->account_id;
         $interest = $this->findOrCreateInterest(
             $userId,
@@ -645,6 +688,87 @@ class PartnershipBasisService
         $this->syncK1Events($interest, $document, $link instanceof TaxDocumentAccount ? $link : null, $year, $sourceEvents);
 
         return $interest;
+    }
+
+    /**
+     * @param  array<mixed>  $parentData
+     * @return array<string, mixed>|null
+     */
+    private function k1PayloadForLink(array $parentData, TaxDocumentAccount $link): ?array
+    {
+        $entries = $this->containerEntries($parentData);
+        $candidates = array_values(array_filter($entries, function (array $entry): bool {
+            $entryFormType = (string) ($entry['form_type'] ?? $entry['formType'] ?? '');
+            $payload = is_array($entry['parsed_data'] ?? null) ? $entry['parsed_data'] : [];
+            $payloadFormType = (string) ($payload['formType'] ?? '');
+
+            return $entryFormType === 'k1' || $this->mapFormType($payloadFormType) === 'k1_1065';
+        }));
+
+        $entry = null;
+        if (count($candidates) === 1) {
+            $entry = $candidates[0];
+        }
+
+        if ($entry === null && $link->ai_identifier !== null) {
+            $entry = $this->singleMatchingEntry($candidates, 'account_identifier', $link->ai_identifier);
+        }
+
+        if ($entry === null && $link->ai_account_name !== null) {
+            $entry = $this->singleMatchingEntry($candidates, 'account_name', $link->ai_account_name);
+        }
+
+        if (! is_array($entry)) {
+            return null;
+        }
+
+        $payload = $entry['parsed_data'] ?? $entry;
+
+        return is_array($payload) && ! array_is_list($payload) ? $payload : null;
+    }
+
+    /**
+     * @param  array<mixed>  $parentData
+     * @return array<int, array<string, mixed>>
+     */
+    private function containerEntries(array $parentData): array
+    {
+        if (array_is_list($parentData)) {
+            return $this->arrayEntries($parentData);
+        }
+
+        if (isset($parentData['accounts']) && is_array($parentData['accounts']) && array_is_list($parentData['accounts'])) {
+            return $this->arrayEntries($parentData['accounts']);
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<mixed>  $entries
+     * @return array<int, array<string, mixed>>
+     */
+    private function arrayEntries(array $entries): array
+    {
+        $arrayEntries = [];
+        foreach ($entries as $entry) {
+            if (is_array($entry) && ! array_is_list($entry)) {
+                $arrayEntries[] = $entry;
+            }
+        }
+
+        return $arrayEntries;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $entries
+     * @return array<string, mixed>|null
+     */
+    private function singleMatchingEntry(array $entries, string $key, string $value): ?array
+    {
+        $matches = array_values(array_filter($entries, fn (array $entry): bool => ($entry[$key] ?? null) === $value));
+
+        return count($matches) === 1 ? $matches[0] : null;
     }
 
     private function findOrCreateInterest(int $userId, ?int $accountId, ?string $ein, string $name, string $formType, ?FileForTaxDocument $document, ?TaxDocumentAccount $link, ?bool $isPtp = null): FinPartnershipInterest
@@ -897,7 +1021,7 @@ class PartnershipBasisService
         }
 
         // ── Liabilities: net share change is a deemed contribution/distribution ──
-        $this->collectK1LiabilityEvent($basis, $reviewStatus, $push);
+        $this->collectK1LiabilityEvent($data, $basis, $reviewStatus, $push);
 
         return array_values($events);
     }
@@ -996,18 +1120,18 @@ class PartnershipBasisService
     private function distributionTypeForCode(string $code): array
     {
         return match (strtoupper(trim($code))) {
-            'B' => [PartnershipBasisEventType::PropertyDistributionBasis, 'K-1 Box 19B property distribution'],
-            // 19C is guaranteed payments distributed — not a basis distribution.
-            'C' => [PartnershipBasisEventType::Memorandum, 'K-1 Box 19C guaranteed payments (no outside-basis effect)'],
+            'B', 'C', 'G' => [PartnershipBasisEventType::PropertyDistributionBasis, sprintf('K-1 Box 19%s property distribution', strtoupper(trim($code)))],
+            'D', 'E' => [PartnershipBasisEventType::DeemedDistributionLiabilityDecrease, sprintf('K-1 Box 19%s deemed liability distribution', strtoupper(trim($code)))],
             default => [PartnershipBasisEventType::CashDistribution, 'K-1 Box 19A cash distribution'],
         };
     }
 
     /**
+     * @param  array<string, mixed>  $data
      * @param  array<string, mixed>  $basis
      * @param  callable(PartnershipBasisEventType, string, string, string, int, ?string, ?string, string, array<string, mixed>=): void  $push
      */
-    private function collectK1LiabilityEvent(array $basis, string $reviewStatus, callable $push): void
+    private function collectK1LiabilityEvent(array $data, array $basis, string $reviewStatus, callable $push): void
     {
         $liabilities = is_array($basis['liabilities'] ?? null) ? $basis['liabilities'] : [];
         $beginningRecourse = $this->moneyToCents($liabilities['beginningRecourse'] ?? null) ?? 0;
@@ -1043,6 +1167,22 @@ class PartnershipBasisService
             return;
         }
 
+        if ($netLiabilityChange < 0 && $this->hasExplicitBox19LiabilityDistribution($data)) {
+            $push(
+                PartnershipBasisEventType::Memorandum,
+                'k1_field',
+                'basis.liabilities',
+                'K-1 liability share balances (decrease reported separately on Box 19)',
+                0,
+                null,
+                null,
+                $reviewStatus,
+                array_merge($metadata, ['basis_effect_reported_by_box_19' => true]),
+            );
+
+            return;
+        }
+
         $push(
             $netLiabilityChange > 0 ? PartnershipBasisEventType::LiabilityIncrease : PartnershipBasisEventType::LiabilityDecrease,
             'k1_field',
@@ -1054,6 +1194,30 @@ class PartnershipBasisService
             $reviewStatus,
             $metadata,
         );
+    }
+
+    /** @param array<string, mixed> $data */
+    private function hasExplicitBox19LiabilityDistribution(array $data): bool
+    {
+        if ($this->sourceOverrideCents($data, 'code:19:D') !== null || $this->sourceOverrideCents($data, 'code:19:E') !== null) {
+            return true;
+        }
+
+        foreach (array_keys($this->groupCodeItems($data, '19')) as $code) {
+            if (in_array($code, ['D', 'E'], true)) {
+                return true;
+            }
+        }
+
+        $basis = is_array($data['basis'] ?? null) ? $data['basis'] : [];
+        $distributions = is_array($basis['distributions'] ?? null) ? $basis['distributions'] : [];
+        foreach ($distributions as $distribution) {
+            if (is_array($distribution) && in_array(strtoupper(trim((string) ($distribution['code'] ?? ''))), ['D', 'E'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1077,21 +1241,42 @@ class PartnershipBasisService
             $keptIds[] = $event->id;
         }
 
-        $this->pruneDocumentK1Events($interest->user_id, $document, $year, $keptIds);
+        $this->pruneDocumentK1Events($interest->user_id, $document, $year, $keptIds, $link?->id, true);
     }
 
     /**
      * @param  int[]  $keptIds
      */
-    private function pruneDocumentK1Events(int $userId, FileForTaxDocument $document, int $year, array $keptIds = []): void
+    private function pruneDocumentK1Events(int $userId, FileForTaxDocument $document, int $year, array $keptIds = [], ?int $linkId = null, bool $scopeToLink = false): void
     {
         FinPartnershipBasisEvent::query()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
             ->where('tax_document_id', $document->id)
             ->whereIn('source_type', ['k1_field', 'k1_code'])
+            ->when($scopeToLink, function ($query) use ($linkId): void {
+                if ($linkId === null) {
+                    $query->whereNull('tax_document_account_id');
+
+                    return;
+                }
+
+                $query->where('tax_document_account_id', $linkId);
+            })
             ->when($keptIds !== [], fn ($query) => $query->whereNotIn('id', $keptIds))
             ->delete();
+    }
+
+    /** @return Collection<int, FinPartnershipBasisEvent> */
+    private function basisEventsForInterestYear(FinPartnershipInterest $interest, int $year): Collection
+    {
+        return FinPartnershipBasisEvent::query()
+            ->where('user_id', $interest->user_id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->orderBy('event_order')
+            ->orderBy('id')
+            ->get();
     }
 
     /**
