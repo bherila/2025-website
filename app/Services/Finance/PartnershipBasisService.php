@@ -425,7 +425,7 @@ class PartnershipBasisService
             ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
             ->get();
 
-        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'locked', 'locked_at' => now()]));
+        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'locked', 'locked_at' => now(), 'locked_by_user_id' => $userId]));
 
         return $basisYears;
     }
@@ -437,7 +437,7 @@ class PartnershipBasisService
      *
      * @return EloquentCollection<int, FinPartnershipBasisYear>
      */
-    public function unlockAccountYear(FinAccounts $account, int $userId, int $year): EloquentCollection
+    public function unlockAccountYear(FinAccounts $account, int $userId, int $year, string $reason, ?string $amendmentReason = null, ?int $amendedSourceDocumentId = null): EloquentCollection
     {
         $basisYears = FinPartnershipBasisYear::query()
             ->with('partnershipInterest')
@@ -447,7 +447,15 @@ class PartnershipBasisService
             ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
             ->get();
 
-        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update(['review_status' => 'needs_review', 'locked_at' => null]));
+        $basisYears->each(fn (FinPartnershipBasisYear $basisYear): bool => $basisYear->update([
+            'review_status' => 'needs_review',
+            'locked_at' => null,
+            'unlocked_at' => now(),
+            'unlocked_by_user_id' => $userId,
+            'unlock_reason' => $reason,
+            'amendment_reason' => $amendmentReason,
+            'amended_source_document_id' => $amendedSourceDocumentId,
+        ]));
 
         $basisYears->pluck('partnershipInterest')
             ->filter(fn ($interest): bool => $interest instanceof FinPartnershipInterest)
@@ -592,6 +600,12 @@ class PartnershipBasisService
             'reviewStatus' => $basisYear->review_status,
             'isStale' => (bool) $basisYear->is_stale,
             'lockedAt' => $basisYear->locked_at,
+            'lockedByUserId' => $basisYear->locked_by_user_id,
+            'unlockedAt' => $basisYear->unlocked_at,
+            'unlockedByUserId' => $basisYear->unlocked_by_user_id,
+            'unlockReason' => $basisYear->unlock_reason,
+            'amendmentReason' => $basisYear->amendment_reason,
+            'amendedSourceDocumentId' => $basisYear->amended_source_document_id,
             'events' => $events->map(fn (FinPartnershipBasisEvent $event): array => $this->eventToArray($event))->values()->all(),
         ];
     }
