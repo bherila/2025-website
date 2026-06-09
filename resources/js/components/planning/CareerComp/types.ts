@@ -120,6 +120,14 @@ export const transitionOverrideSchema = z
   })
   .prefault({})
 
+export const rsuSourceSchema = z.object({
+  mode: z.literal('snapshot'),
+  capturedAt: z.string(),
+  source: z.literal('fin_equity_awards'),
+  sourceAwardRowIds: z.array(z.number()),
+  sourceHash: z.string(),
+})
+
 export const rsuVestingEventSchema = z.object({
   vestDate: z.string(),
   shareCount: z.number(),
@@ -136,6 +144,10 @@ export const rsuGrantSchema = z.object({
   grantDate: z.string(),
   vestingStartDate: z.string().nullish(),
   shareCount: z.number().nullish(),
+  sourceAwardId: z.string().nullish(),
+  sourceAwardRowIds: z.array(z.number()).default([]),
+  symbol: z.string().nullish(),
+  rsuSource: rsuSourceSchema.nullish(),
   grantValue: z.number().nullish(),
   grantPrice: z.number().nullish(),
   cliffMonths: z.number(),

@@ -7,7 +7,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
-use InvalidArgumentException;
 
 class RsuAwardService
 {
@@ -93,11 +92,7 @@ class RsuAwardService
             'vest_price_source' => ['sometimes', 'nullable', Rule::in($this->sourceValues())],
         ]);
 
-        if ($validator->fails()) {
-            throw new InvalidArgumentException($validator->errors()->toJson());
-        }
-
-        $validated = $validator->validated();
+        $validated = $validator->validate();
         $validated['grant_date'] = Carbon::parse($validated['grant_date'])->format('Y-m-d');
         $validated['vest_date'] = Carbon::parse($validated['vest_date'])->format('Y-m-d');
 

@@ -7,8 +7,6 @@ use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FinanceTool\ConfirmRsuGenAiImportRequest;
 use App\Models\FinanceTool\FinAccountLineItems;
-use App\Models\FinanceTool\FinAccountLot;
-use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEquityAwards;
 use App\Models\FinanceTool\FinPayslips;
 use App\Models\FinanceTool\FinRsuLink;
@@ -40,6 +38,8 @@ class FinanceRsuController extends Controller
     public function getRsuData(Request $request): JsonResponse
     {
         $userId = (int) Auth::id();
+        $this->backfillService->backfillMissingVestPrices($userId);
+
         $awards = FinEquityAwards::query()
             ->where('uid', $userId)
             ->with(['settlementAllocations.settlement', 'rsuLinks'])
@@ -140,7 +140,7 @@ class FinanceRsuController extends Controller
             'status' => ['nullable', 'string', Rule::in(['suggested', 'confirmed', 'ignored'])],
             'notes' => ['nullable', 'string'],
         ]);
-        $this->assertLinkTargetsBelongToUser((int) Auth::id(), $data);
+        $this->settlementService->assertLinkTargetsBelongToSettlement((int) Auth::id(), $settlement, $data);
 
         $link = FinRsuLink::query()->create($data + [
             'uid' => Auth::id(),
@@ -268,23 +268,6 @@ class FinanceRsuController extends Controller
     {
         if ((int) $settlement->uid !== (int) Auth::id()) {
             abort(404);
-        }
-    }
-
-    /** @param array<string, mixed> $data */
-    private function assertLinkTargetsBelongToUser(int $userId, array $data): void
-    {
-        if (($data['transaction_id'] ?? null) !== null) {
-            FinAccountLineItems::query()->where('t_id', $data['transaction_id'])->whereHas('account', fn ($query) => $query->withoutGlobalScopes()->where('acct_owner', $userId))->firstOrFail();
-        }
-        if (($data['account_id'] ?? null) !== null) {
-            FinAccounts::query()->withoutGlobalScopes()->where('acct_owner', $userId)->where('acct_id', $data['account_id'])->firstOrFail();
-        }
-        if (($data['lot_id'] ?? null) !== null) {
-            FinAccountLot::query()->where('lot_id', $data['lot_id'])->whereHas('account', fn ($query) => $query->withoutGlobalScopes()->where('acct_owner', $userId))->firstOrFail();
-        }
-        if (($data['payslip_id'] ?? null) !== null) {
-            FinPayslips::query()->where('uid', $userId)->where('payslip_id', $data['payslip_id'])->firstOrFail();
         }
     }
 }

@@ -28,7 +28,7 @@ const RsuAwardDraftSchema = z.object({
   symbol: z.string()
     .trim()
     .transform((value) => value.toUpperCase())
-    .pipe(z.string().min(1, 'Symbol is required').max(4, 'Symbol must be 4 characters or fewer').regex(/^[A-Z0-9.]+$/, 'Symbol can only contain letters, numbers, and periods')),
+    .pipe(z.string().min(1, 'Symbol is required').max(16, 'Symbol must be 16 characters or fewer').regex(/^[A-Z0-9.]+$/, 'Symbol can only contain letters, numbers, and periods')),
   grant_price: optionalPriceSchema,
   vest_price: optionalPriceSchema,
 })

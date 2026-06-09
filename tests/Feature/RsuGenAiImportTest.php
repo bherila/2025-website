@@ -149,7 +149,7 @@ class RsuGenAiImportTest extends TestCase
                 'award_id' => '',
                 'grant_date' => '01/15/2026',
                 'share_count' => -1,
-                'symbol' => 'BRK.B',
+                'symbol' => 'BAD$SYMBOL',
             ]),
         );
 

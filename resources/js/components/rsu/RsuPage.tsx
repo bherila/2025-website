@@ -137,7 +137,7 @@ export default function RsuPage() {
           <Card className="mb-8">
             <div className="p-6">
               <h3 className="text-xl font-semibold mb-4">Per award</h3>
-              <RsuByAward rsu={rsu} hideFullyVested={filter === 'unvested'} />
+              <RsuByAward rsu={filteredRsu} hideFullyVested={filter === 'unvested'} />
             </div>
           </Card>
         </TabsContent>

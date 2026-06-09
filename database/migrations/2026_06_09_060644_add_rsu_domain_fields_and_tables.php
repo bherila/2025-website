@@ -10,6 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         $this->makeShareCountDecimal();
+        $this->widenSymbolColumn();
 
         Schema::table('fin_equity_awards', function (Blueprint $table): void {
             if (! Schema::hasColumn('fin_equity_awards', 'vest_price_source')) {
@@ -123,6 +124,15 @@ return new class extends Migration
                 }
             }
         });
+    }
+
+    private function widenSymbolColumn(): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
+        DB::statement('ALTER TABLE fin_equity_awards MODIFY symbol VARCHAR(16) NOT NULL');
     }
 
     private function makeShareCountDecimal(): void
