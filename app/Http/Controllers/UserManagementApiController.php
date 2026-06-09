@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\ClientManagement\ClientCompany;
 use App\Models\User;
+use App\Models\UserFeaturePermission;
+use App\Support\Access\FeatureRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -25,7 +27,7 @@ class UserManagementApiController extends Controller
     {
         Gate::authorize('admin');
 
-        $users = User::with('clientCompanies')
+        $users = User::with(['clientCompanies', 'featurePermissions'])
             ->orderBy('name')
             ->get()
             ->map(function ($user) {
@@ -34,6 +36,8 @@ class UserManagementApiController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'roles' => $user->getRoles(),
+                    'direct_permissions' => $user->directFeaturePermissions(),
+                    'effective_permissions' => $user->effectiveFeaturePermissions(),
                     'can_login_as_client' => ! $user->hasRole('admin') && $user->canLogin() && $user->clientCompanies->isNotEmpty(),
                     'client_companies' => $user->clientCompanies->map(fn (ClientCompany $c) => [
                         'id' => $c->id,
@@ -48,6 +52,57 @@ class UserManagementApiController extends Controller
         return response()->json([
             'users' => $users,
             'available_roles' => self::AVAILABLE_ROLES,
+        ]);
+    }
+
+    public function featurePermissions(FeatureRegistry $registry): JsonResponse
+    {
+        Gate::authorize('admin');
+
+        return response()->json([
+            'permissions' => $registry->grouped(),
+        ]);
+    }
+
+    public function updateFeaturePermissions(Request $request, FeatureRegistry $registry, int $id): JsonResponse
+    {
+        Gate::authorize('admin');
+
+        $validated = $request->validate([
+            'permissions' => ['required', 'array'],
+            'permissions.*' => ['string', 'max:128'],
+        ]);
+
+        $permissions = array_values(array_unique($validated['permissions']));
+        $validPermissions = $registry->keys();
+        $invalidPermissions = array_values(array_diff($permissions, $validPermissions));
+
+        if ($invalidPermissions !== []) {
+            return response()->json([
+                'message' => 'Invalid feature permissions.',
+                'invalid_permissions' => $invalidPermissions,
+            ], 422);
+        }
+
+        $user = User::findOrFail($id);
+        $grantorId = $request->user()?->id;
+
+        UserFeaturePermission::query()->where('user_id', $user->id)->delete();
+
+        foreach ($permissions as $permission) {
+            UserFeaturePermission::query()->create([
+                'user_id' => $user->id,
+                'permission' => $permission,
+                'granted_by_user_id' => $grantorId,
+            ]);
+        }
+
+        $user->refresh();
+
+        return response()->json([
+            'success' => true,
+            'direct_permissions' => $user->directFeaturePermissions(),
+            'effective_permissions' => $user->effectiveFeaturePermissions(),
         ]);
     }
 

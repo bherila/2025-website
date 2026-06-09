@@ -443,6 +443,7 @@ class FeeAnalyticsServiceTest extends TestCase
     {
         $user = User::factory()->create();
         $otherUser = User::factory()->create();
+        $this->grantAllFeatures($otherUser);
         $account = $this->createAccount($user, ['expected_fee_flat' => 120]);
         $this->createLineItem($account, ['t_type' => 'Fee', 't_amt' => -40]);
 

@@ -13,6 +13,7 @@
         'appUrl' => config('app.url', ''),
         'authenticated' => auth()->check(),
         'isAdmin' => auth()->check() && auth()->user()->hasRole('admin'),
+        'permissions' => auth()->check() ? auth()->user()->effectiveFeaturePermissions() : [],
         'clientCompanies' => auth()->check() ? auth()->user()->clientCompanies()->select('client_companies.id', 'company_name', 'slug')->get() : [],
         'currentUser' => auth()->user() ? [
           'id' => auth()->id(),

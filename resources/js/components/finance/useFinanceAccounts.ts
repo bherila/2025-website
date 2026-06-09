@@ -5,7 +5,10 @@ import { fetchWrapper } from '@/fetchWrapper'
 export interface FinAccount {
   acct_id: number
   acct_name: string
+  /** Full account number — only present from the detailed /api/finance/accounts endpoint. */
   acct_number?: string | null
+  /** Last four digits — exposed by the sanitized /api/finance/accounts/basic endpoint for suffix matching. */
+  acct_number_last4?: string | null
   acct_is_debt?: boolean
   acct_is_retirement?: boolean
   when_closed?: string | null
@@ -15,6 +18,7 @@ interface FinanceAccountsResponse {
   assetAccounts?: FinAccount[]
   liabilityAccounts?: FinAccount[]
   retirementAccounts?: FinAccount[]
+  accounts?: FinAccount[]
 }
 
 export function useFinanceAccounts(options: { enabled?: boolean } = {}): {
@@ -32,12 +36,16 @@ export function useFinanceAccounts(options: { enabled?: boolean } = {}): {
     setIsLoading(true)
     setError(null)
     try {
-      const data = await fetchWrapper.get('/api/finance/accounts') as FinanceAccountsResponse
-      setAccounts([
-        ...(data.assetAccounts ?? []),
-        ...(data.liabilityAccounts ?? []),
-        ...(data.retirementAccounts ?? []),
-      ])
+      const data = await fetchWrapper.get('/api/finance/accounts/basic') as FinanceAccountsResponse
+      if (data.accounts) {
+        setAccounts(data.accounts)
+      } else {
+        setAccounts([
+          ...(data.assetAccounts ?? []),
+          ...(data.liabilityAccounts ?? []),
+          ...(data.retirementAccounts ?? []),
+        ])
+      }
     } catch (caught) {
       const nextError = caught instanceof Error ? caught : new Error(String(caught))
       setError(nextError)

@@ -72,7 +72,10 @@ export default function ImportTransactions({
     onStatementParsed?.(statement)
   }, [statement, onStatementParsed])
 
-  // Fetch all user accounts (including acct_number for suffix matching)
+  // Fetch all user accounts. The sanitized basic endpoint returns only the last
+  // four digits (acct_number_last4); the matcher does suffix matching, so feeding
+  // it the last four works the same as a full number (falling back to a full
+  // acct_number when a caller supplies the detailed shape).
   const { accounts: allAccounts } = useFinanceAccounts()
 
   // Adapt accounts for the matcher utility
@@ -81,7 +84,7 @@ export default function ImportTransactions({
       allAccounts.map((a) => ({
         acct_id: a.acct_id,
         acct_name: a.acct_name,
-        acct_number: (a as { acct_number?: string | null }).acct_number ?? null,
+        acct_number: a.acct_number_last4 ?? a.acct_number ?? null,
       })),
     [allAccounts],
   )

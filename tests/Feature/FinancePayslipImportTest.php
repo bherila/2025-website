@@ -111,6 +111,7 @@ class FinancePayslipImportTest extends TestCase
     {
         $owner = User::factory()->create();
         $other = User::factory()->create();
+        $this->grantAllFeatures($other);
         $job = $this->makeJob($owner);
         $result = $this->makeResult($job, $this->payslipPayload());
 

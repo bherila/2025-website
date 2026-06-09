@@ -22,6 +22,43 @@ class FinanceApiController extends Controller
 {
     public function __construct(private readonly FeeAnalyticsService $feeAnalyticsService) {}
 
+    public function basicAccounts(Request $request): JsonResponse
+    {
+        $accounts = FinAccounts::query()
+            ->where('acct_owner', Auth::id())
+            ->orderBy('when_closed', 'asc')
+            ->orderBy('acct_sort_order', 'asc')
+            ->orderBy('acct_name', 'asc')
+            ->get([
+                'acct_id',
+                'acct_name',
+                'acct_number',
+                'acct_is_debt',
+                'acct_is_retirement',
+                'when_closed',
+            ]);
+
+        // Expose only the last four digits (not the full PII account number) so
+        // statement/PDF import auto-matching by suffix keeps working for callers
+        // holding finance.accounts.basic, without leaking full account numbers.
+        $shaped = $accounts->map(static function (FinAccounts $account): array {
+            $number = $account->acct_number;
+
+            return [
+                'acct_id' => $account->acct_id,
+                'acct_name' => $account->acct_name,
+                'acct_is_debt' => $account->acct_is_debt,
+                'acct_is_retirement' => $account->acct_is_retirement,
+                'when_closed' => $account->when_closed,
+                'acct_number_last4' => is_string($number) && $number !== '' ? substr($number, -4) : null,
+            ];
+        });
+
+        return response()->json([
+            'accounts' => $shaped->values(),
+        ]);
+    }
+
     public function accounts(Request $request): JsonResponse
     {
         $uid = Auth::id();

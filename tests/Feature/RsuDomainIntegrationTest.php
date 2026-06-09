@@ -10,11 +10,20 @@ use App\Models\FinanceTool\FinRsuVestSettlement;
 use App\Models\FinanceTool\FinRsuVestSettlementAllocation;
 use App\Models\FinanceTool\StockQuotesDaily;
 use App\Models\User;
+use App\Models\UserFeaturePermission;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class RsuDomainIntegrationTest extends TestCase
 {
+    private function grantRsuManage(User $user): void
+    {
+        UserFeaturePermission::query()->firstOrCreate([
+            'user_id' => $user->id,
+            'permission' => 'finance.rsu.manage',
+        ]);
+    }
+
     public function test_rsu_write_hardening_preserves_missing_prices_allows_clears_and_fractional_shares(): void
     {
         $user = User::factory()->create();
@@ -63,6 +72,7 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertSame(1, FinEquityAwards::query()->where('uid', $user->id)->count());
 
         $otherUser = User::factory()->create();
+        $this->grantRsuManage($otherUser);
         $this->actingAs($otherUser)->postJson('/api/rsu', [[
             'award_id' => 'RSU-1',
             'grant_date' => '2026-01-01',

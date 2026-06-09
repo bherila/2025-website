@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\UserFeaturePermission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -52,6 +53,10 @@ class LayoutFooterTest extends TestCase
         $this->withoutVite();
 
         $user = $this->createUser();
+        UserFeaturePermission::query()->create([
+            'user_id' => $user->id,
+            'permission' => 'finance.accounts.detail',
+        ]);
 
         $response = $this->actingAs($user)->get('/finance/accounts');
 

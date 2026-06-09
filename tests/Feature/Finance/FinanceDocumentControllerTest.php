@@ -367,6 +367,7 @@ class FinanceDocumentControllerTest extends TestCase
     {
         $user1 = $this->createUser();
         $user2 = $this->createUser();
+        $this->grantAllFeatures($user2);
         $doc = $this->makeDocument($user1->id);
 
         $response = $this->actingAs($user2)->getJson("/api/finance/documents/{$doc->id}");
@@ -588,6 +589,7 @@ class FinanceDocumentControllerTest extends TestCase
     {
         $owner = $this->createUser();
         $attacker = $this->createUser();
+        $this->grantAllFeatures($attacker);
 
         $ownerDoc = $this->makeDocument($owner->id);
         $attackerDoc = $this->makeDocument($attacker->id);

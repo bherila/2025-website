@@ -6,9 +6,11 @@ use App\GenAiProcessor\Jobs\ParseImportJob;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiJobDispatcherService;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\User;
 use App\Services\FileStorageService;
 use App\Services\PHR\Access\PhrPatientAccessService;
 use App\Services\PHR\Import\PhrStructuredDataImporter;
+use App\Support\Access\FeatureAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -28,7 +30,42 @@ class GenAiImportController extends Controller
         private FileStorageService $fileService,
         private GenAiJobDispatcherService $dispatcher,
         private PhrPatientAccessService $phrAccessService,
+        private FeatureAccess $featureAccess,
     ) {}
+
+    /**
+     * Feature permission required to view/act on a given import job type.
+     * Job types not listed here (e.g. PHR types) are unrestricted.
+     */
+    private function permissionForJobType(string $jobType): ?string
+    {
+        return match ($jobType) {
+            'finance_transactions' => 'finance.transactions.import',
+            'finance_payslip' => 'finance.payslips.manage',
+            'equity_award' => 'finance.rsu.manage',
+            'utility_bill' => 'utility-bills.manage',
+            'document_extract' => 'finance.tax-documents.manage',
+            default => null,
+        };
+    }
+
+    private function authorizeJobType(User $user, string $jobType): ?JsonResponse
+    {
+        $permission = $this->permissionForJobType($jobType);
+
+        if ($permission === null) {
+            return null;
+        }
+
+        if (! $this->featureAccess->can($user, $permission)) {
+            return response()->json([
+                'message' => 'Forbidden',
+                'required_permission' => $permission,
+            ], 403);
+        }
+
+        return null;
+    }
 
     /**
      * Generate a pre-signed S3 upload URL.
@@ -40,6 +77,7 @@ class GenAiImportController extends Controller
             'filename' => 'required|string|max:255',
             'content_type' => 'required|string|max:128',
             'file_size' => 'required|integer|min:1|max:52428800', // 50MB max
+            'job_type' => 'nullable|string|in:'.implode(',', GenAiImportJob::VALID_JOB_TYPES),
         ]);
 
         if ($validator->fails()) {
@@ -47,6 +85,11 @@ class GenAiImportController extends Controller
         }
 
         $user = Auth::user();
+        $jobType = $request->input('job_type');
+        if (is_string($jobType) && ($denied = $this->authorizeJobType($user, $jobType)) !== null) {
+            return $denied;
+        }
+
         $filename = $request->input('filename');
         $contentType = $request->input('content_type');
 
@@ -93,6 +136,10 @@ class GenAiImportController extends Controller
 
         $user = Auth::user();
         $jobType = $request->input('job_type');
+        if (($denied = $this->authorizeJobType($user, $jobType)) !== null) {
+            return $denied;
+        }
+
         $context = $request->input('context');
 
         // Validate context schema against job_type to prevent injection
@@ -201,6 +248,9 @@ class GenAiImportController extends Controller
         $user = Auth::user();
         $text = trim((string) $request->input('text'));
         $jobType = (string) $request->input('job_type');
+        if (($denied = $this->authorizeJobType($user, $jobType)) !== null) {
+            return $denied;
+        }
         /** @var array<string, mixed> $context */
         $context = $request->input('context_json', []);
         $context['pasted_text'] = $text;
@@ -266,7 +316,25 @@ class GenAiImportController extends Controller
             if (! in_array($jobType, GenAiImportJob::VALID_JOB_TYPES, true)) {
                 return response()->json(['error' => 'Invalid job_type.'], 422);
             }
+            if (($denied = $this->authorizeJobType($user, (string) $jobType)) !== null) {
+                return $denied;
+            }
             $query->where('job_type', $jobType);
+        } else {
+            // No explicit filter: never leak restricted job types (and their
+            // parsed results) the user is not authorized for. Reuse the same
+            // job_type -> permission mapping as the per-type authorization.
+            $blocked = array_values(array_filter(
+                GenAiImportJob::VALID_JOB_TYPES,
+                function (string $type) use ($user): bool {
+                    $permission = $this->permissionForJobType($type);
+
+                    return $permission !== null && ! $this->featureAccess->can($user, $permission);
+                }
+            ));
+            if ($blocked !== []) {
+                $query->whereNotIn('job_type', $blocked);
+            }
         }
 
         $acctId = $request->query('acct_id');
@@ -302,6 +370,10 @@ class GenAiImportController extends Controller
             return response()->json(['error' => 'Job not found.'], 404);
         }
 
+        if (($denied = $this->authorizeJobType($user, $job->job_type)) !== null) {
+            return $denied;
+        }
+
         return response()->json($job);
     }
 
@@ -318,6 +390,10 @@ class GenAiImportController extends Controller
 
         if (! $job) {
             return response()->json(['error' => 'Job not found.'], 404);
+        }
+
+        if (($denied = $this->authorizeJobType($user, $job->job_type)) !== null) {
+            return $denied;
         }
 
         if (! $job->canRetry()) {

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\DbQueryCountMiddleware;
+use App\Http\Middleware\RequireFeaturePermission;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,6 +18,10 @@ return Application::configure(basePath: dirname(__DIR__))
         __DIR__.'/../app/GenAiProcessor/Console/Commands',
     ])
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->alias([
+            'feature' => RequireFeaturePermission::class,
+        ]);
+
         // DbQueryCountMiddleware is a dev-only tool.  We use getenv() here
         // because app()->environment() is not yet available when withMiddleware
         // callbacks are resolved.  This ensures zero prod overhead — the class

@@ -24,11 +24,22 @@ export interface User {
   client_companies: { id: number; name: string; slug: string }[]
   last_login_date: string | null
   created_at: string
+  direct_permissions: string[]
+  effective_permissions: string[]
+}
+
+export interface FeaturePermissionDefinition {
+  permission: string
+  label: string
+  description: string
+  depends: string[]
+  category: string
 }
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>([])
   const [availableRoles, setAvailableRoles] = useState<string[]>([])
+  const [featurePermissions, setFeaturePermissions] = useState<Record<string, FeaturePermissionDefinition[]>>({})
   const [loading, setLoading] = useState(true)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -39,6 +50,8 @@ export default function UserManagementPage() {
       const response = await fetchWrapper.get('/api/admin/users')
       setUsers(response.users)
       setAvailableRoles(response.available_roles)
+      const permissionResponse = await fetchWrapper.get('/api/admin/feature-permissions')
+      setFeaturePermissions(permissionResponse.permissions ?? {})
     } catch (error) {
       console.error('Failed to fetch users:', error)
     } finally {
@@ -166,6 +179,7 @@ export default function UserManagementPage() {
         <UserActionsModal
           user={selectedUser}
           availableRoles={availableRoles}
+          featurePermissions={featurePermissions}
           isOpen={isModalOpen}
           onClose={handleModalClose}
           onUpdate={handleUserUpdate}

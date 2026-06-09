@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Support\AuthorizesFeatureAccess;
 use App\Models\FinanceTool\FinPayslips;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
@@ -13,8 +14,14 @@ use Laravel\Mcp\Server\Tool;
 #[Description('List payslips for the authenticated user. Supports filtering by year, has_rsu, and has_bonus. Returns all payslip fields including earnings, taxes, deductions, retirement contributions, RSU tax offsets, taxable wage bases, PTO balances, per-state tax data (state_data), deposit splits (deposits), and catch-all other.')]
 class ListPayslips extends Tool
 {
+    use AuthorizesFeatureAccess;
+
     public function handle(Request $request): Response
     {
+        if (($denied = $this->requireFeaturePermission('finance.payslips.view')) !== null) {
+            return $denied;
+        }
+
         $uid = Auth::id();
 
         $query = FinPayslips::where('uid', $uid)

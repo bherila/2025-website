@@ -192,6 +192,7 @@ class FinanceEmploymentEntityControllerTest extends TestCase
     {
         $user = $this->createUser();
         $otherUser = $this->createUser();
+        $this->grantAllFeatures($otherUser);
 
         // Create entity owned by otherUser
         $createResponse = $this->actingAs($otherUser)->postJson('/api/finance/employment-entities', [

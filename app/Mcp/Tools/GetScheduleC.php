@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Support\AuthorizesFeatureAccess;
 use App\Services\Finance\ScheduleCSummaryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
@@ -13,12 +14,18 @@ use Laravel\Mcp\Server\Tool;
 #[Description('Get Schedule C self-employment income/expense summary. Returns totals grouped by year and tax characteristic. Optionally filter by year.')]
 class GetScheduleC extends Tool
 {
+    use AuthorizesFeatureAccess;
+
     public function __construct(
         private ScheduleCSummaryService $service,
     ) {}
 
     public function handle(Request $request): Response
     {
+        if (($denied = $this->requireFeaturePermission('finance.tax-preview.view')) !== null) {
+            return $denied;
+        }
+
         $year = $request->input('year');
         $yearFilter = null;
         if (is_numeric($year)) {

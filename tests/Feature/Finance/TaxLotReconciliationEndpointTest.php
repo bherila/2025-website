@@ -72,6 +72,7 @@ class TaxLotReconciliationEndpointTest extends TestCase
     {
         $owner = $this->createUser();
         $attacker = $this->createUser();
+        $this->grantAllFeatures($attacker);
         $account = $this->makeAccount($owner->id);
 
         $response = $this->actingAs($attacker)->getJson("/api/finance/{$account->acct_id}/lots/reconciliation?tax_year=2025");

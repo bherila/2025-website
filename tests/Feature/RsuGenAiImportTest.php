@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Models\User;
+use App\Models\UserFeaturePermission;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -36,6 +37,14 @@ class RsuGenAiImportTest extends TestCase
         ]);
     }
 
+    private function grantRsuManage(User $user): void
+    {
+        UserFeaturePermission::query()->firstOrCreate([
+            'user_id' => $user->id,
+            'permission' => 'finance.rsu.manage',
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -62,6 +71,8 @@ class RsuGenAiImportTest extends TestCase
     public function test_rsu_index_does_not_fetch_quotes_for_awards_with_stored_vest_prices(): void
     {
         $user = User::factory()->create();
+        $this->grantRsuManage($user);
+
         DB::table('fin_equity_awards')->insert([
             'uid' => (string) $user->id,
             'award_id' => 'RSU-STORED',
@@ -84,6 +95,7 @@ class RsuGenAiImportTest extends TestCase
     public function test_confirm_creates_award_from_reviewed_result_and_marks_job_imported(): void
     {
         $user = User::factory()->create();
+        $this->grantRsuManage($user);
         $job = $this->makeJob($user);
         $result = $this->makeResult($job, $this->awardPayload());
 
@@ -112,6 +124,8 @@ class RsuGenAiImportTest extends TestCase
     {
         $owner = User::factory()->create();
         $other = User::factory()->create();
+        $this->grantRsuManage($owner);
+        $this->grantRsuManage($other);
         $job = $this->makeJob($owner);
         $result = $this->makeResult($job, $this->awardPayload());
 
@@ -126,6 +140,7 @@ class RsuGenAiImportTest extends TestCase
     public function test_confirm_rejects_wrong_job_type(): void
     {
         $user = User::factory()->create();
+        $this->grantRsuManage($user);
         $job = $this->makeJob($user, 'finance_payslip');
         $result = $this->makeResult($job, $this->awardPayload());
 
@@ -140,6 +155,7 @@ class RsuGenAiImportTest extends TestCase
     public function test_confirm_validates_award_payload(): void
     {
         $user = User::factory()->create();
+        $this->grantRsuManage($user);
         $job = $this->makeJob($user);
         $result = $this->makeResult($job, $this->awardPayload());
 
@@ -161,6 +177,7 @@ class RsuGenAiImportTest extends TestCase
     public function test_confirm_backfills_existing_row_without_erasing_existing_prices(): void
     {
         $user = User::factory()->create();
+        $this->grantRsuManage($user);
         $job = $this->makeJob($user);
         $result = $this->makeResult($job, $this->awardPayload([
             'grant_price' => null,
@@ -201,6 +218,8 @@ class RsuGenAiImportTest extends TestCase
     {
         $owner = User::factory()->create();
         $user = User::factory()->create();
+        $this->grantRsuManage($owner);
+        $this->grantRsuManage($user);
         $job = $this->makeJob($user);
         $result = $this->makeResult($job, $this->awardPayload());
 
@@ -226,6 +245,7 @@ class RsuGenAiImportTest extends TestCase
     public function test_job_stays_parsed_until_all_results_are_reviewed(): void
     {
         $user = User::factory()->create();
+        $this->grantRsuManage($user);
         $job = $this->makeJob($user);
         $first = $this->makeResult($job, $this->awardPayload(['vest_date' => '2027-01-15']), 0);
         $second = $this->makeResult($job, $this->awardPayload(['vest_date' => '2027-04-15']), 1);
@@ -250,6 +270,7 @@ class RsuGenAiImportTest extends TestCase
     public function test_skip_rejects_imported_result(): void
     {
         $user = User::factory()->create();
+        $this->grantRsuManage($user);
         $job = $this->makeJob($user);
         $result = $this->makeResult($job, $this->awardPayload());
         $result->update(['status' => 'imported']);

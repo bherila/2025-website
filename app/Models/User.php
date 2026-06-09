@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Models\ClientManagement\ClientCompany;
+use App\Support\Access\FeatureAccess;
 use App\Traits\SerializesDatesAsLocal;
 use Bherila\GenAiLaravel\Clients\AnthropicClient;
 use Bherila\GenAiLaravel\Clients\BedrockClient;
@@ -92,6 +93,29 @@ class User extends Authenticatable
     public function getGeminiApiKey(): ?string
     {
         return $this->gemini_api_key;
+    }
+
+    /** @return HasMany<UserFeaturePermission, $this> */
+    public function featurePermissions(): HasMany
+    {
+        return $this->hasMany(UserFeaturePermission::class);
+    }
+
+    /** @return list<string> */
+    public function directFeaturePermissions(): array
+    {
+        return app(FeatureAccess::class)->directPermissions($this);
+    }
+
+    /** @return list<string> */
+    public function effectiveFeaturePermissions(): array
+    {
+        return app(FeatureAccess::class)->effectivePermissions($this);
+    }
+
+    public function hasFeaturePermission(string $permission): bool
+    {
+        return app(FeatureAccess::class)->can($this, $permission);
     }
 
     /** @return HasMany<UserAiConfiguration, $this> */

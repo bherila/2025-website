@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Resources;
 
+use App\Mcp\Support\AuthorizesFeatureAccess;
 use App\Models\Files\FileForTaxDocument;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -14,8 +15,14 @@ use Laravel\Mcp\Server\Resource;
 #[Description('All reviewed tax documents for the current year with their parsed_data JSON blobs. For year-specific queries, use the list_tax_documents tool with is_reviewed=true.')]
 class TaxDocuments extends Resource
 {
+    use AuthorizesFeatureAccess;
+
     public function handle(Request $request): Response
     {
+        if (($denied = $this->requireFeaturePermission('finance.tax-documents.view')) !== null) {
+            return $denied;
+        }
+
         $userId = Auth::id();
         $year = (int) date('Y');
 
