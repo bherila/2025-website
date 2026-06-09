@@ -361,10 +361,13 @@ function Form8606Adapter({ state }: FormRenderProps): React.ReactElement {
 function Form8949Adapter({ state, instance }: FormRenderProps): React.ReactElement {
   const accountId = instance?.key !== undefined && instance.key !== 'all' ? Number(instance.key) : undefined
   const accountFilter = typeof accountId === 'number' && Number.isFinite(accountId) ? { accountId } : {}
+  const factFilter = accountId === undefined ? { form8949Facts: state.taxFacts?.form8949 ?? null } : {}
+
   return (
     <Form8949Preview
       selectedYear={state.year}
       reviewed1099Docs={state.reviewed1099Docs}
+      {...factFilter}
       {...accountFilter}
     />
   )
@@ -1089,7 +1092,9 @@ const rawFormRegistry: FormRegistry = {
       create: () => ({ key: 'all', label: 'All' }),
       allowCreate: false,
     },
-    hasData: (state) => buildCapitalGainsReportFromTaxDocuments(state.reviewed1099Docs).form8949Lots.length > 0,
+    hasData: (state) =>
+      (state.taxFacts?.form8949.rows.length ?? 0) > 0
+      || buildCapitalGainsReportFromTaxDocuments(state.reviewed1099Docs).form8949Lots.length > 0,
   },
   'action-items': {
     id: 'action-items',

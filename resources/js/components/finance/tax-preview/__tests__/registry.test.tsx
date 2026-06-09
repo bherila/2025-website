@@ -97,6 +97,39 @@ describe('formRegistry', () => {
     })
   })
 
+  describe('form-8949', () => {
+    const entry = formRegistry['form-8949']!
+
+    it('hasData returns true for server tax-fact rows without broker 1099 documents', () => {
+      const state = {
+        reviewed1099Docs: [],
+        taxFacts: {
+          form8949: {
+            rows: [{
+              form8949Box: 'F',
+              description: 'Partnership 731 gain',
+              dateAcquired: '2023-01-01',
+              dateSold: '2025-12-31',
+              proceeds: 40,
+              costBasis: 0,
+              adjustmentCode: null,
+              adjustmentAmount: 0,
+              gainOrLoss: 40,
+              isShortTerm: false,
+              isCovered: null,
+              isSummaryRow: false,
+              accountName: 'Partnership',
+              taxDocumentId: null,
+              sourceTransactionId: 'partnership_basis_year:1',
+            }],
+          },
+        },
+      } as unknown as TaxPreviewState
+
+      expect(entry.hasData!(state)).toBe(true)
+    })
+  })
+
   describe('form-6781', () => {
     const entry = formRegistry['form-6781']!
 

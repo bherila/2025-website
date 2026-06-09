@@ -15,6 +15,7 @@ export default defineConfig({
         'resources/js/navbar.tsx',
         'resources/js/back-to-top.tsx',
         'resources/js/finance/pages/account-fees.tsx',
+        'resources/js/finance/pages/account-basis.tsx',
         'resources/js/finance/pages/account-lots.tsx',
         'resources/js/finance/pages/account-maintenance.tsx',
         'resources/js/finance/pages/account-summary.tsx',

@@ -17,7 +17,6 @@ import AccountYearSelector from './AccountYearSelector'
 
 export { useFinanceAccounts } from './useFinanceAccounts'
 
-// Tabs that show year selector
 const TAB_ITEMS = FINANCE_ACCOUNT_TOOLS
   .filter((tool) => tool.visibleInNavbarTabs)
   .map((tool) => ({

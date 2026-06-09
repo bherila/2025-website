@@ -26,6 +26,7 @@ use App\Services\Finance\TaxPreviewFacts\Builders\Form8949FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8959FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8960FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Form8995FactsBuilder;
+use App\Services\Finance\TaxPreviewFacts\Builders\PartnershipBasisFactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Schedule1FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\Schedule3FactsBuilder;
 use App\Services\Finance\TaxPreviewFacts\Builders\ScheduleAFactsBuilder;
@@ -44,6 +45,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\Form8829Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8959Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8960Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8995Facts;
+use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule1Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\Schedule3Facts;
 use App\Services\Finance\TaxPreviewFacts\Data\ScheduleAFacts;
@@ -63,12 +65,13 @@ use RuntimeException;
 
 class TaxPreviewFactsService
 {
-    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'schedule3', 'scheduleB', 'scheduleC', 'form8829', 'scheduleF', 'scheduleSE', 'form8959', 'form4952', 'scheduleA', 'scheduleE', 'form6781', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582', 'form1040'];
+    private const array SUPPORTED_SLICES = ['all', 'schedule1', 'schedule3', 'scheduleB', 'scheduleC', 'form8829', 'scheduleF', 'scheduleSE', 'form8959', 'form4952', 'scheduleA', 'scheduleE', 'form6781', 'scheduleD', 'form8949', 'form4797', 'form8606', 'form1116', 'form8960', 'form8995', 'form6251', 'form8582', 'form1040', 'partnershipBasis'];
 
     private const array FEE_TRANSACTION_TYPES = ['fee', 'advisory fee', 'management fee'];
 
     public function __construct(
         private readonly CapitalGainsTaxReportService $capitalGainsTaxReportService,
+        private readonly PartnershipBasisFactsBuilder $partnershipBasisFactsBuilder,
         private readonly Schedule1FactsBuilder $schedule1FactsBuilder,
         private readonly Schedule3FactsBuilder $schedule3FactsBuilder,
         private readonly ScheduleBFactsBuilder $scheduleBFactsBuilder,
@@ -143,6 +146,9 @@ class TaxPreviewFactsService
             }
         }
 
+        $partnershipBasis = $userId !== null
+            ? $this->partnershipBasisFactsBuilder->build($userId, $year, $k1Docs)
+            : PartnershipBasisFacts::empty($year);
         $scheduleB = $this->scheduleBFactsBuilder->build($k1Docs, $docs1099);
         // Form 4797 and Schedule D are built before Form 4952 so Part II lines 4d–4h (net gain
         // from the disposition of property held for investment) can use the real capital-gains
@@ -163,6 +169,7 @@ class TaxPreviewFactsService
             $form6781,
             $form4797,
             $userId !== null ? $this->scheduleDCarryoverInputForYear($userId, $year) : null,
+            $this->partnershipBasisScheduleDSources($partnershipBasis),
         );
         $form4952 = $this->form4952FactsBuilder->build($k1Docs, $docs1099, $scheduleB, $scheduleD, $form4797, $year, $shortDividendDeduction, $marginInterestSources);
         $scheduleE = $this->scheduleEFactsBuilder->build($k1Docs, $docs1099, $form4952);
@@ -188,7 +195,7 @@ class TaxPreviewFactsService
             $deductionMagiIsEstimated,
         );
         $taxableIncomeBeforeQbi = $this->taxableIncomeBeforeQbi($deductionMagi ?? 0.0, $scheduleA, $isMarried);
-        $form8949 = $this->form8949FactsBuilder->build($capitalGainsReport);
+        $form8949 = $this->form8949FactsBuilder->build($capitalGainsReport, $partnershipBasis->form8949Rows);
         $form1116 = $this->form1116FactsBuilder->build($k1Docs, $docs1099, $form4952);
         $schedule3 = $this->schedule3FactsBuilder->build($form1116, $userDeductions);
         $form8960 = $this->form8960FactsBuilder->build($scheduleB, $scheduleE, $scheduleD, $form4952, $scheduleA, $deductionMagi, $userId, $year, $deductionMagiIsEstimated);
@@ -223,6 +230,7 @@ class TaxPreviewFactsService
             form6251: $form6251,
             form8582: $form8582,
             form1040: $form1040,
+            partnershipBasis: $partnershipBasis,
         );
     }
 
@@ -307,7 +315,10 @@ class TaxPreviewFactsService
             ],
             'form8949' => [
                 'year' => $year,
-                'form8949' => $this->form8949FactsBuilder->build($this->capitalGainsTaxReportService->reportForUserYear($userId, $year))->toArray(),
+                'form8949' => $this->form8949FactsBuilder->build(
+                    $this->capitalGainsTaxReportService->reportForUserYear($userId, $year),
+                    $this->partnershipBasisFactsBuilder->build($userId, $year, $k1Docs)->form8949Rows,
+                )->toArray(),
             ],
             'form4797' => [
                 'year' => $year,
@@ -344,6 +355,10 @@ class TaxPreviewFactsService
             'form1040' => [
                 'year' => $year,
                 'form1040' => $this->form1040FactsForSlice($k1Docs, $docs1099, $w2Docs, $userId, $year)->toArray(),
+            ],
+            'partnershipBasis' => [
+                'year' => $year,
+                'partnershipBasis' => $this->partnershipBasisFactsBuilder->build($userId, $year, $k1Docs)->toArray(),
             ],
             default => $this->factsForYear($userId, $year)->toArray(),
         };
@@ -484,6 +499,10 @@ class TaxPreviewFactsService
                 'year' => $facts['year'],
                 'form1040' => $facts['form1040'],
             ],
+            'partnershipBasis' => [
+                'year' => $facts['year'],
+                'partnershipBasis' => $facts['partnershipBasis'],
+            ],
             default => $facts,
         };
     }
@@ -587,7 +606,27 @@ class TaxPreviewFactsService
             $form6781,
             $form4797,
             $this->scheduleDCarryoverInputForYear($userId, $year),
+            $this->partnershipBasisScheduleDSources($this->partnershipBasisFactsBuilder->build($userId, $year, $k1Docs)),
         );
+    }
+
+    /**
+     * Determinable excess cash-distribution gains from the partnership-basis layer that route to
+     * Schedule D line 3 (short-term) or line 10 (long-term) as §731 sale-of-interest gains.
+     * Indeterminate-holding-period gains are left out (surfaced for review inside the
+     * partnershipBasis slice instead) so Schedule D totals are never silently inflated.
+     *
+     * @return TaxFactSource[]
+     */
+    private function partnershipBasisScheduleDSources(PartnershipBasisFacts $partnershipBasis): array
+    {
+        return array_values(array_filter(
+            $partnershipBasis->distributionGainSources,
+            static fn (TaxFactSource $source): bool => in_array($source->routing, [
+                TaxFactRouting::ScheduleDLine3->value,
+                TaxFactRouting::ScheduleDLine10->value,
+            ], true),
+        ));
     }
 
     /**

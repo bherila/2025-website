@@ -12,6 +12,7 @@ use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Services\FileStorageService;
 use App\Services\Finance\Broker1099ParsedDataShapeService;
 use App\Services\Finance\CapitalGains\ReconciliationSummaryService;
+use App\Services\Finance\PartnershipBasisService;
 use App\Services\Finance\TaxDocumentParsedDataNormalizer;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\TaxDocument\TaxDocumentCreationService;
@@ -39,6 +40,8 @@ class TaxDocumentController extends Controller
 
     protected Broker1099ParsedDataShapeService $broker1099ShapeService;
 
+    protected PartnershipBasisService $partnershipBasisService;
+
     protected TaxPreviewFactsService $taxPreviewFactsService;
 
     public function __construct(
@@ -47,6 +50,7 @@ class TaxDocumentController extends Controller
         TaxDocumentCreationService $creationService,
         TaxDocumentParsedDataNormalizer $parsedDataNormalizer,
         Broker1099ParsedDataShapeService $broker1099ShapeService,
+        PartnershipBasisService $partnershipBasisService,
         TaxPreviewFactsService $taxPreviewFactsService,
     ) {
         $this->fileService = $fileService;
@@ -54,6 +58,7 @@ class TaxDocumentController extends Controller
         $this->creationService = $creationService;
         $this->parsedDataNormalizer = $parsedDataNormalizer;
         $this->broker1099ShapeService = $broker1099ShapeService;
+        $this->partnershipBasisService = $partnershipBasisService;
         $this->taxPreviewFactsService = $taxPreviewFactsService;
     }
 
@@ -321,6 +326,9 @@ class TaxDocumentController extends Controller
         $link = TaxDocumentAccount::where('id', $linkId)
             ->where('document_id', $doc->document_id)
             ->firstOrFail();
+        $basisRanges = $link->form_type === 'k1'
+            ? $this->partnershipBasisService->documentBasisRecomputeRanges($doc, $link->id)
+            : collect();
 
         $request->validate([
             'account_id' => 'nullable|integer|min:1',
@@ -355,6 +363,15 @@ class TaxDocumentController extends Controller
 
         $link->save();
         $this->forgetReconciliationSummary($doc);
+        if ($link->form_type === 'k1') {
+            $freshDoc = $doc->fresh(['accountLinks.account']);
+            if ($freshDoc instanceof FileForTaxDocument) {
+                $this->syncPartnershipBasisForTaxDocument($freshDoc);
+                $this->partnershipBasisService->recomputeDocumentBasisRanges($basisRanges);
+            }
+        } else {
+            $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
+        }
 
         $responseLink = $link->load('account:acct_id,acct_name,acct_number');
 
@@ -377,7 +394,10 @@ class TaxDocumentController extends Controller
 
         $deleteDoc = false;
 
+        $basisRanges = $this->partnershipBasisService->documentBasisRecomputeRanges($doc, $link->id);
+
         DB::transaction(function () use ($doc, $link, &$deleteDoc): void {
+            $this->partnershipBasisService->deleteDocumentBasisEvents($doc, $link->id);
             $link->delete();
 
             $remaining = TaxDocumentAccount::where('document_id', $doc->document_id)->count();
@@ -394,6 +414,7 @@ class TaxDocumentController extends Controller
             $this->fileService->deleteFile($doc->s3_path);
         }
         $this->forgetReconciliationSummary($doc);
+        $this->partnershipBasisService->recomputeDocumentBasisRanges($basisRanges);
 
         return response()->json(['success' => true]);
     }
@@ -536,8 +557,11 @@ class TaxDocumentController extends Controller
             ->where('user_id', Auth::id())
             ->firstOrFail();
 
-        // Deletes account links via DB cascade; booted() event queues S3 cleanup.
+        $basisRanges = $this->partnershipBasisService->documentBasisRecomputeRanges($doc);
+
+        // Deletes account links and K-1 basis source events via DB cascade; booted() event queues S3 cleanup.
         $this->fileService->deleteFileRecord($doc);
+        $this->partnershipBasisService->recomputeDocumentBasisRanges($basisRanges);
 
         return response()->json(['success' => true]);
     }
@@ -589,6 +613,7 @@ class TaxDocumentController extends Controller
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+        $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
 
         return $this->jsonWithOptionalTaxFacts(
             $request,
@@ -785,6 +810,7 @@ class TaxDocumentController extends Controller
 
         $doc->load(['uploader:id,name', 'employmentEntity:id,display_name', 'account:acct_id,acct_name,acct_number', 'accountLinks.account:acct_id,acct_name,acct_number']);
         $this->parsedDataNormalizer->persistReviewFlagsForDocument($doc);
+        $this->syncPartnershipBasisForOptionalTaxFacts($request, $doc);
 
         return $this->jsonWithOptionalTaxFacts(
             $request,
@@ -804,6 +830,34 @@ class TaxDocumentController extends Controller
             $payloadKey => $payload,
             'taxFacts' => $this->taxPreviewFactsService->arrayForYear((int) Auth::id(), $year),
         ]);
+    }
+
+    private function syncPartnershipBasisForOptionalTaxFacts(Request $request, FileForTaxDocument $doc): void
+    {
+        if (! $request->boolean('include_tax_facts')) {
+            return;
+        }
+
+        $this->syncPartnershipBasisForTaxDocument($doc);
+    }
+
+    private function syncPartnershipBasisForTaxDocument(FileForTaxDocument $doc): void
+    {
+        $doc->loadMissing(['accountLinks.account']);
+        $hasK1Link = $doc->accountLinks->contains(fn ($link): bool => $link instanceof TaxDocumentAccount && $link->form_type === 'k1');
+        if ($doc->form_type !== 'k1' && ! $hasK1Link) {
+            return;
+        }
+
+        $years = collect([(int) $doc->tax_year])
+            ->merge($doc->accountLinks
+                ->filter(fn ($link): bool => $link instanceof TaxDocumentAccount && $link->form_type === 'k1')
+                ->map(fn (TaxDocumentAccount $link): int => (int) ($link->tax_year ?? $doc->tax_year)))
+            ->filter(fn (int $year): bool => $year > 0)
+            ->unique()
+            ->values();
+
+        $years->each(fn (int $year) => $this->partnershipBasisService->recomputeForUserYear((int) Auth::id(), $year, [$doc]));
     }
 
     /**

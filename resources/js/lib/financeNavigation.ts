@@ -23,6 +23,7 @@ export type FinanceAccountToolId =
   | 'lots'
   | 'summary'
   | 'fees'
+  | 'basis'
   | 'import'
   | 'maintenance'
 
@@ -54,6 +55,7 @@ export const FINANCE_ACCOUNT_TOOLS: FinanceAccountToolDef[] = [
   { id: 'lots', label: 'Lots', keywords: ['lots', 'tax lots', 'cost basis'], supportsAllAccounts: true, preserveYear: true, visibleInNavbarTabs: true },
   { id: 'summary', label: 'Summary', keywords: ['summary', 'overview'], supportsAllAccounts: false, preserveYear: true, visibleInNavbarTabs: true },
   { id: 'fees', label: 'Fees', keywords: ['fees', 'fee drag', 'advisory fees'], supportsAllAccounts: true, preserveYear: true, visibleInNavbarTabs: true },
+  { id: 'basis', label: 'Basis', keywords: ['basis', 'partnership basis', 'k1 basis', 'k-1 basis'], supportsAllAccounts: false, preserveYear: true, visibleInNavbarTabs: true },
   { id: 'import', label: 'Import', keywords: ['import', 'upload transactions'], supportsAllAccounts: true, preserveYear: false, visibleInNavbarTabs: false },
   { id: 'maintenance', label: 'Maintenance', keywords: ['maintenance', 'settings'], supportsAllAccounts: false, preserveYear: false, visibleInNavbarTabs: false },
 ]

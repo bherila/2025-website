@@ -130,6 +130,43 @@ export interface K3Elections {
   sourcedByPartnerAsUSSource?: boolean
 }
 
+
+export interface K1BasisData {
+  capitalAccount?: {
+    method?: 'tax_basis' | 'gaap' | 'section_704b' | 'other' | 'unknown'
+    beginningCapital?: number | null
+    capitalContributedDuringYear?: number | null
+    currentYearNetIncomeLoss?: number | null
+    otherIncreaseDecrease?: number | null
+    withdrawalsAndDistributions?: number | null
+    endingCapital?: number | null
+    sourceText?: string | null
+  }
+  liabilities?: {
+    beginningRecourse?: number | null
+    endingRecourse?: number | null
+    beginningQualifiedNonrecourse?: number | null
+    endingQualifiedNonrecourse?: number | null
+    beginningNonrecourse?: number | null
+    endingNonrecourse?: number | null
+  }
+  distributions?: Array<{
+    box: '19'
+    code: string
+    amount: number
+    propertyDescription?: string | null
+    partnershipAdjustedBasis?: number | null
+    fairMarketValue?: number | null
+    sourceText?: string | null
+  }>
+  outsideBasisWorksheet?: {
+    beginningBasis?: number | null
+    endingBasis?: number | null
+    suspendedLossCarryforward?: number | null
+    providedByPartnership?: boolean
+  }
+}
+
 /**
  * Structured K-1 / K-3 data stored in parsed_data (schemaVersion "2026.1").
  *
@@ -156,6 +193,8 @@ export interface FK1StructuredData {
    * Each entry is one §469 activity for Form 8582 Part V (All Other Passive Activities).
    */
   passiveActivities?: K1PassiveActivity[]
+  /** Normalized partner basis, capital, liability, and distribution fields for rollforward. */
+  basis?: K1BasisData
   k3?: {
     sections: K3Section[]
   }
