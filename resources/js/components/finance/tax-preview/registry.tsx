@@ -610,7 +610,12 @@ interface TaxDocumentMutationResponse {
   taxFacts?: TaxPreviewFacts
 }
 
-function saveParsedDataOverride(
+/**
+ * Exported for regression testing of the multi-year K-1 column: when
+ * `alwaysRefreshTaxFacts` is set the handler must refresh for the page's selected
+ * year instead of applying the edited document's (possibly different-year) facts.
+ */
+export function saveParsedDataOverride(
   state: FormRenderProps['state'],
   options: { alwaysRefreshTaxFacts?: boolean } = {},
 ): (docId: number, parsedData: FK1StructuredData) => Promise<void> {

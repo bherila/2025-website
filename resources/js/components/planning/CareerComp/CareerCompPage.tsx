@@ -824,12 +824,11 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
             onOpenOfferNotes={openOfferNotes}
             onOpenModelAssumptions={() => openSection({ kind: 'form', id: 'model-assumptions' })}
             activeGrant={activeGrant}
-            compact={isCurrentJob ? false : true}
+            compact={!isCurrentJob}
           />
         ),
       }
     }
-
 
     if (column.kind === 'grant') {
       return {
