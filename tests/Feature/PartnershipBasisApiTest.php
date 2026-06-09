@@ -271,6 +271,94 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(20.0, $rows[1]['gainOrLoss']);
     }
 
+    public function test_sale_exchange_with_complete_metadata_flows_to_form8949_rollups_and_schedule_d(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Sale Exchange Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Sale Exchange LP',
+            'normalized_partnership_name' => 'sale exchange lp',
+            'form_type' => 'k1_1065',
+        ]);
+
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 999_00, '2024-06-15', [
+            'date_acquired' => '2023-01-01',
+            'proceeds_cents' => 150_00,
+            'liability_relief_cents' => 20_00,
+            'selling_expenses_cents' => 10_00,
+            'description' => 'Sale Exchange LP partnership interest',
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $source = collect($facts['partnershipBasis']['liquidationGainLossSources'])
+            ->firstWhere('label', 'Sale Exchange LP - sale/exchange of partnership interest (2024-06-15)');
+        $this->assertNotNull($source);
+        $this->assertSame(60.0, $source['amount']);
+        $this->assertSame('schedule_d_line_10', $source['routing']);
+
+        $row = collect($facts['form8949']['rows'])
+            ->firstWhere('accountName', 'Sale Exchange LP');
+        $this->assertNotNull($row, 'complete sale/exchange metadata should generate a Form 8949 row');
+        $this->assertSame('F', $row['form8949Box']);
+        $this->assertSame('Sale Exchange LP partnership interest', $row['description']);
+        $this->assertSame('2023-01-01', $row['dateAcquired']);
+        $this->assertSame('2024-06-15', $row['dateSold']);
+        $this->assertSame(160.0, $row['proceeds']);
+        $this->assertSame(100.0, $row['costBasis']);
+        $this->assertSame(60.0, $row['gainOrLoss']);
+        $this->assertFalse($row['isShortTerm']);
+
+        $rollup = collect($facts['form8949']['scheduleDRollups'])
+            ->firstWhere('form8949Box', 'F');
+        $this->assertNotNull($rollup);
+        $this->assertSame('10', $rollup['scheduleDLine']);
+        $this->assertSame(160.0, $rollup['totalProceeds']);
+        $this->assertSame(100.0, $rollup['totalCostBasis']);
+        $this->assertSame(60.0, $rollup['netGainOrLoss']);
+
+        $this->assertSame(60.0, $facts['scheduleD']['line10GainLoss']);
+        $this->assertEmpty(collect($facts['scheduleD']['line12Sources'])
+            ->where('sourceType', 'partnership_liquidation_gain_loss'));
+    }
+
+    public function test_sale_exchange_with_incomplete_metadata_stays_review_only(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Incomplete Sale Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Incomplete Sale LP',
+            'normalized_partnership_name' => 'incomplete sale lp',
+            'form_type' => 'k1_1065',
+        ]);
+
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 150_00, '2024-06-15', [
+            'proceeds_cents' => 150_00,
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $this->assertEmpty(collect($facts['form8949']['rows'])
+            ->where('accountName', 'Incomplete Sale LP'));
+        $source = collect($facts['partnershipBasis']['liquidationGainLossSources'])
+            ->firstWhere('label', 'Incomplete Sale LP - sale/exchange gain/loss (review)');
+        $this->assertNotNull($source);
+        $this->assertSame(50.0, $source['amount']);
+        $this->assertSame('needs_review_schedule_d_line_5_or_12', $source['routing']);
+        $this->assertSame(0.0, $facts['scheduleD']['line3GainLoss']);
+        $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss']);
+    }
+
     public function test_property_distribution_emits_form7217_sources_and_workbook_rows(): void
     {
         $user = User::factory()->create();
@@ -595,7 +683,10 @@ class PartnershipBasisApiTest extends TestCase
         ]);
     }
 
-    private function datedEvent(int $userId, int $interestId, int $year, string $eventType, int $amountCents, ?string $eventDate): void
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    private function datedEvent(int $userId, int $interestId, int $year, string $eventType, int $amountCents, ?string $eventDate, array $metadata = []): void
     {
         FinPartnershipBasisEvent::create([
             'user_id' => $userId,
@@ -606,6 +697,7 @@ class PartnershipBasisApiTest extends TestCase
             'amount_cents' => $amountCents,
             'source_type' => 'manual',
             'review_status' => 'reviewed',
+            'metadata' => $metadata,
         ]);
     }
 }

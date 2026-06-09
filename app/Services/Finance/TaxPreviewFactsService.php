@@ -611,17 +611,17 @@ class TaxPreviewFactsService
     }
 
     /**
-     * Determinable excess cash-distribution gains from the partnership-basis layer that route to
-     * Schedule D line 3 (short-term) or line 10 (long-term) as §731 sale-of-interest gains.
-     * Indeterminate-holding-period gains are left out (surfaced for review inside the
-     * partnershipBasis slice instead) so Schedule D totals are never silently inflated.
+     * Determinable partnership-basis disposition gains from the partnership-basis layer that route
+     * to Schedule D line 3 (short-term) or line 10 (long-term) through Form 8949. Indeterminate
+     * holding-period gains are left out (surfaced for review inside the partnershipBasis slice
+     * instead) so Schedule D totals are never silently inflated.
      *
      * @return TaxFactSource[]
      */
     private function partnershipBasisScheduleDSources(PartnershipBasisFacts $partnershipBasis): array
     {
         return array_values(array_filter(
-            $partnershipBasis->distributionGainSources,
+            [...$partnershipBasis->distributionGainSources, ...$partnershipBasis->liquidationGainLossSources],
             static fn (TaxFactSource $source): bool => in_array($source->routing, [
                 TaxFactRouting::ScheduleDLine3->value,
                 TaxFactRouting::ScheduleDLine10->value,
