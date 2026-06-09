@@ -5,7 +5,7 @@ export interface IAward {
   award_id?: string
   grant_date?: string
   vest_date?: string
-  share_count?: currency | number
+  share_count?: currency | number | string
   symbol?: string
   vest_price?: number | null // price per share at vest date
   vest_price_source?: 'manual' | 'imported' | 'quote_close' | 'unknown' | null

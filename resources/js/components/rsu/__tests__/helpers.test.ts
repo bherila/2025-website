@@ -51,6 +51,10 @@ describe('rsu/helpers', () => {
       expect(getShares({ share_count: currency(7.5) })).toBe(7.5)
     })
 
+    it('coerces numeric-string share counts (decimal cast) to a number', () => {
+      expect(getShares({ share_count: '10.125000' })).toBe(10.125)
+    })
+
     it('returns undefined when share_count is missing', () => {
       expect(getShares({})).toBeUndefined()
     })
