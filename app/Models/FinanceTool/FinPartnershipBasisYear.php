@@ -20,6 +20,7 @@ class FinPartnershipBasisYear extends Model
             'tax_year' => 'integer',
             'is_stale' => 'boolean',
             'locked_at' => 'datetime',
+            'unlocked_at' => 'datetime',
         ];
     }
 

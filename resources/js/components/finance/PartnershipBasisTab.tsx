@@ -68,6 +68,13 @@ interface PartnershipBasisInterest {
   liquidationGainLoss: number | null
   reviewStatus: string
   isStale: boolean
+  lockedAt: string | null
+  lockedByUserId: number | null
+  unlockedAt: string | null
+  unlockedByUserId: number | null
+  unlockReason: string | null
+  amendmentReason: string | null
+  amendedSourceDocumentId: number | null
   events: PartnershipBasisEvent[]
 }
 
@@ -271,11 +278,17 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
   }, [runMutation, accountId, year])
 
   const unlockYear = useCallback(() => {
-    if (!window.confirm(`Unlock ${year}? This re-opens the basis rollforward for amendment (e.g. an amended K-1) and recomputes it.`)) {
+    const reason = window.prompt(`Unlock ${year}? This re-opens the basis rollforward for amendment (e.g. an amended K-1) and recomputes it.\n\nEnter a reason for the audit trail:`)
+    if (reason === null) {
       return
     }
-    void runMutation(() => fetchWrapper.post(`/api/finance/accounts/${accountId}/basis/unlock?year=${year}`, {}))
-  }, [runMutation, accountId, year])
+    const trimmedReason = reason.trim()
+    if (trimmedReason === '') {
+      setError('An unlock reason is required.')
+      return
+    }
+    void runMutation(() => fetchWrapper.post(`/api/finance/accounts/${accountId}/basis/unlock?year=${year}`, { reason: trimmedReason }))
+  }, [runMutation, accountId, year, setError])
 
   const totals = useMemo(() => {
     const interests = data?.interests ?? []
@@ -350,6 +363,19 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
                     {interest.interestEndDate ? ` · Disposed: ${interest.interestEndDate}` : ''}
                   </span>
                 </div>
+                {interest.lockedAt ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <Lock className="mr-1 inline h-3 w-3" />Locked {interest.lockedAt}
+                    {interest.lockedByUserId ? ` by user #${interest.lockedByUserId}` : ''}
+                  </p>
+                ) : null}
+                {interest.unlockReason ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <LockOpen className="mr-1 inline h-3 w-3" />Last unlocked{interest.unlockedAt ? ` ${interest.unlockedAt}` : ''}{interest.unlockedByUserId ? ` by user #${interest.unlockedByUserId}` : ''}: {interest.unlockReason}
+                    {interest.amendmentReason ? ` (amendment: ${interest.amendmentReason})` : ''}
+                    {interest.amendedSourceDocumentId ? ` [doc #${interest.amendedSourceDocumentId}]` : ''}
+                  </p>
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 {interest.reviewStatus === 'locked' && <Lock className="h-4 w-4 text-muted-foreground" />}

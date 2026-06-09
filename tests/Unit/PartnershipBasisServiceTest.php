@@ -418,6 +418,42 @@ class PartnershipBasisServiceTest extends TestCase
         ]);
     }
 
+    public function test_lock_records_the_locking_user(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Audit Lock LP',
+            'initial_cash_contribution_cents' => 100_00,
+        ]);
+
+        $this->service->lockAccountYear($this->account, $this->user->id, 2024);
+
+        $basisYear = FinPartnershipBasisYear::query()->where('tax_year', 2024)->firstOrFail();
+        $this->assertSame('locked', $basisYear->review_status);
+        $this->assertNotNull($basisYear->locked_at);
+        $this->assertSame($this->user->id, (int) $basisYear->locked_by_user_id);
+    }
+
+    public function test_unlock_persists_audit_reason_and_user(): void
+    {
+        $this->service->initializeAccount($this->account, $this->user->id, [
+            'tax_year' => 2024,
+            'partnership_name' => 'Audit Unlock LP',
+            'initial_cash_contribution_cents' => 100_00,
+        ]);
+        $this->service->lockAccountYear($this->account, $this->user->id, 2024);
+
+        $this->service->unlockAccountYear($this->account, $this->user->id, 2024, 'Amended K-1 received', 'Box 1 ordinary income corrected');
+
+        $basisYear = FinPartnershipBasisYear::query()->where('tax_year', 2024)->firstOrFail();
+        $this->assertSame('needs_review', $basisYear->review_status);
+        $this->assertNull($basisYear->locked_at);
+        $this->assertNotNull($basisYear->unlocked_at);
+        $this->assertSame($this->user->id, (int) $basisYear->unlocked_by_user_id);
+        $this->assertSame('Amended K-1 received', $basisYear->unlock_reason);
+        $this->assertSame('Box 1 ordinary income corrected', $basisYear->amendment_reason);
+    }
+
     public function test_manual_event_requires_interest_id_when_account_has_multiple_interests(): void
     {
         $this->basisFromK1(2024, 'First Fund LP', ['5' => '100'], [], [], '11-1111111');
