@@ -70,6 +70,18 @@ class PartnershipBasisController extends Controller
         return response()->json($this->partnershipBasisService->eventToArray($event), 201);
     }
 
+    public function seedReconciliation(Request $request, int $account): JsonResponse
+    {
+        $year = $this->year($request);
+        $financeAccount = $this->account($account);
+        $result = $this->partnershipBasisService->seedOutsideBasisFromTransactions($financeAccount, (int) Auth::id(), $year);
+
+        return response()->json(array_merge(
+            $this->partnershipBasisService->accountBasisData($financeAccount, (int) Auth::id(), $year),
+            ['seed' => $result],
+        ));
+    }
+
     public function acceptReconciliation(Request $request, int $account): JsonResponse
     {
         $payload = $request->validate([

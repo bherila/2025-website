@@ -1010,6 +1010,212 @@ class PartnershipBasisApiTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('tax_year');
     }
 
+    public function test_seed_from_transactions_creates_contribution_and_distribution_events(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Seed Basis Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Seed Basis LP',
+            'normalized_partnership_name' => 'seed basis lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        // Contribution line item (keyword: "capital call")
+        $contribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-04-01',
+            't_type' => 'Wire',
+            't_amt' => -50_000.00,
+            't_description' => 'Capital call',
+        ]);
+
+        // Distribution line item
+        $distribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-08-15',
+            't_type' => 'Distribution',
+            't_amt' => -25_00,
+            't_description' => 'Q3 distribution',
+        ]);
+
+        $response = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024");
+
+        $response->assertOk()
+            ->assertJsonPath('seed.created', 2)
+            ->assertJsonPath('seed.skipped', 0);
+
+        // Both events should now exist in the database
+        $events = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('source_type', 'account_transaction')
+            ->orderBy('line_item_id')
+            ->get();
+
+        $this->assertCount(2, $events);
+
+        $contribEvent = $events->firstWhere('line_item_id', $contribution->t_id);
+        $this->assertNotNull($contribEvent);
+        $this->assertSame('capital_contribution_cash', $contribEvent->event_type);
+        $this->assertSame('reviewed', $contribEvent->review_status);
+        $this->assertSame((int) $contribution->t_id, (int) $contribEvent->line_item_id);
+
+        $distEvent = $events->firstWhere('line_item_id', $distribution->t_id);
+        $this->assertNotNull($distEvent);
+        $this->assertSame('cash_distribution', $distEvent->event_type);
+        $this->assertSame('reviewed', $distEvent->review_status);
+        $this->assertSame((int) $distribution->t_id, (int) $distEvent->line_item_id);
+    }
+
+    public function test_seed_from_transactions_is_idempotent(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Idempotent Seed Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Idempotent Seed LP',
+            'normalized_partnership_name' => 'idempotent seed lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 200_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-03-10',
+            't_type' => 'Distribution',
+            't_amt' => -30_00,
+            't_description' => 'Distribution payment',
+        ]);
+
+        // First seed: creates 1 event
+        $first = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024");
+        $first->assertOk()->assertJsonPath('seed.created', 1)->assertJsonPath('seed.skipped', 0);
+
+        // Second seed: skips the already-seeded item; no duplicate is created
+        $second = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024");
+        $second->assertOk()->assertJsonPath('seed.created', 0)->assertJsonPath('seed.skipped', 1);
+
+        $eventCount = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('source_type', 'account_transaction')
+            ->count();
+        $this->assertSame(1, $eventCount);
+    }
+
+    public function test_seed_from_transactions_recomputes_rollforward(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Seed Recompute Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Seed Recompute LP',
+            'normalized_partnership_name' => 'seed recompute lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 500_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-07-01',
+            't_type' => 'Distribution',
+            't_amt' => -150.00,
+            't_description' => 'Cash distribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertOk()
+            ->assertJsonPath('seed.created', 1);
+
+        // The rollforward should now reflect the seeded distribution
+        $this->getJson("/api/finance/accounts/{$account->acct_id}/basis?year=2024")
+            ->assertOk()
+            ->assertJsonPath('interests.0.cashDistributions', 150);
+    }
+
+    public function test_seed_from_transactions_rejects_locked_year(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Seed Locked Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Seed Locked LP',
+            'normalized_partnership_name' => 'seed locked lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/lock?year=2024")->assertOk();
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-06-01',
+            't_type' => 'Distribution',
+            't_amt' => -20_00,
+            't_description' => 'Distribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('tax_year');
+    }
+
+    public function test_seed_from_transactions_preserves_source_provenance(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Provenance Seed Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Provenance Seed LP',
+            'normalized_partnership_name' => 'provenance seed lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $lineItem = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-05-20',
+            't_type' => 'Wire',
+            't_amt' => -10_000.00,
+            't_description' => 'Capital contribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertOk()
+            ->assertJsonPath('seed.created', 1);
+
+        $event = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('line_item_id', $lineItem->t_id)
+            ->first();
+
+        $this->assertNotNull($event);
+        $this->assertSame('account_transaction', $event->source_type);
+        $this->assertSame((int) $lineItem->t_id, (int) $event->line_item_id);
+        $this->assertSame('reviewed', $event->review_status);
+        $this->assertIsArray($event->metadata);
+        $this->assertTrue($event->metadata['seeded_from_transactions'] ?? false);
+    }
+
     private function event(int $userId, int $interestId, int $year, string $eventType, int $amountCents, string $reviewStatus): void
     {
         FinPartnershipBasisEvent::create([

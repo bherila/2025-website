@@ -130,6 +130,7 @@ Route::middleware(['web', 'auth', 'feature:finance.accounts.manage'])->post('/fi
 Route::middleware(['web', 'auth', 'feature:finance.accounts.manage'])->post('/finance/accounts/{account}/basis/lock', [PartnershipBasisController::class, 'lock']);
 Route::middleware(['web', 'auth', 'feature:finance.accounts.manage'])->post('/finance/accounts/{account}/basis/unlock', [PartnershipBasisController::class, 'unlock']);
 Route::middleware(['web', 'auth', 'feature:finance.accounts.manage'])->post('/finance/accounts/{account}/basis/reconciliation/accept', [PartnershipBasisController::class, 'acceptReconciliation']);
+Route::middleware(['web', 'auth', 'feature:finance.accounts.manage'])->post('/finance/accounts/{account}/basis/reconciliation/seed', [PartnershipBasisController::class, 'seedReconciliation']);
 Route::middleware(['web', 'auth', 'feature:finance.accounts.detail'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu', [FinanceRsuController::class, 'getRsuData']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/backfill-vest-prices', [FinanceRsuController::class, 'backfillVestPrices']);

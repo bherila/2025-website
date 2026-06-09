@@ -521,6 +521,83 @@ class PartnershipBasisService
         return null;
     }
 
+    /**
+     * Batch-seed outside-basis contribution and distribution events from an account's transaction
+     * feed. Iterates the reconciliation candidates (contributions and distributions) produced by
+     * PartnershipBasisReconciliationService for the given account/year and creates one basis event
+     * per un-seeded line item using the same path as acceptReconciliationCandidate(). Idempotent:
+     * a second call skips every line item that already has a seeded event and only creates the
+     * remainder.
+     *
+     * @return array{created: int, skipped: int}
+     */
+    public function seedOutsideBasisFromTransactions(FinAccounts $account, int $userId, int $year): array
+    {
+        $interest = $this->resolveManualInterest($account, $userId, null);
+        $this->assertYearEditable($interest, $year);
+
+        $basisYears = FinPartnershipBasisYear::query()
+            ->where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
+            ->get();
+
+        $reconciliation = $this->reconciliationService->reconcile((int) $account->acct_id, $year, $basisYears);
+        $candidates = array_merge($reconciliation->contributionCandidates, $reconciliation->distributionCandidates);
+
+        $created = 0;
+        $skipped = 0;
+
+        foreach ($candidates as $candidate) {
+            // Only line-item-backed candidates can be seeded (they carry a stable idempotency key).
+            if ($candidate->lineItemId === null) {
+                $skipped++;
+
+                continue;
+            }
+
+            $payload = [
+                'line_item_id' => $candidate->lineItemId,
+                'statement_id' => $candidate->statementId,
+                'statement_investment_id' => $candidate->statementInvestmentId,
+            ];
+
+            $existingEvent = $this->findExistingCandidateEvent($interest, $year, $payload);
+            if ($existingEvent instanceof FinPartnershipBasisEvent) {
+                $skipped++;
+
+                continue;
+            }
+
+            $eventType = PartnershipBasisEventType::from($candidate->suggestedEventType);
+
+            $this->appendEvent($interest, [
+                'tax_year' => $year,
+                'event_type' => $eventType->value,
+                'event_order' => $this->eventOrder($eventType->value),
+                'basis_side' => $this->basisSideFor($eventType),
+                'amount_cents' => (int) round($candidate->amount * 100),
+                'source_type' => 'account_transaction',
+                'account_id' => $account->acct_id,
+                'line_item_id' => $candidate->lineItemId,
+                'statement_id' => $candidate->statementId,
+                'statement_investment_id' => $candidate->statementInvestmentId,
+                'event_date' => $candidate->date,
+                'source_label' => $candidate->description,
+                'review_status' => 'reviewed',
+                'metadata' => ['seeded_from_transactions' => true],
+            ]);
+
+            $created++;
+        }
+
+        if ($created > 0) {
+            $this->recomputeInterestYearRange($interest, $year, $year);
+        }
+
+        return ['created' => $created, 'skipped' => $skipped];
+    }
+
     /** @return EloquentCollection<int, FinPartnershipBasisYear> */
     public function lockAccountYear(FinAccounts $account, int $userId, int $year): EloquentCollection
     {
