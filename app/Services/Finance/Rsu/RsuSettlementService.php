@@ -10,6 +10,7 @@ use App\Models\FinanceTool\FinPayslips;
 use App\Models\FinanceTool\FinRsuVestSettlement;
 use App\Models\FinanceTool\FinRsuVestSettlementAllocation;
 use Closure;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -175,11 +176,17 @@ class RsuSettlementService
         $summary = $this->summary($awards);
         /** @var FinEquityAwards $first */
         $first = $awards->first();
-        $settlement = FinRsuVestSettlement::query()->firstOrNew([
-            'uid' => $userId,
-            'vest_date' => (string) $first->vest_date,
-            'symbol' => $first->symbol,
-        ]);
+        $vestDate = Carbon::parse((string) $first->vest_date)->format('Y-m-d');
+        $settlement = FinRsuVestSettlement::query()
+            ->where('uid', $userId)
+            ->whereDate('vest_date', $vestDate)
+            ->where('symbol', $first->symbol)
+            ->first()
+            ?? new FinRsuVestSettlement([
+                'uid' => $userId,
+                'vest_date' => $vestDate,
+                'symbol' => $first->symbol,
+            ]);
 
         if ($settlement->exists && in_array($settlement->status, ['confirmed', 'partially_reconciled', 'reconciled', 'ignored'], true)) {
             return [];

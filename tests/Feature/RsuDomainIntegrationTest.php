@@ -94,6 +94,34 @@ class RsuDomainIntegrationTest extends TestCase
         ])->assertUnprocessable();
     }
 
+    public function test_confirmed_settlement_is_not_resuggested(): void
+    {
+        $user = User::factory()->create();
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-DEDUP',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+        $this->assertNotNull($settlementId);
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 3,
+            'actualTaxRemitted' => 250,
+        ])->assertOk();
+
+        $second = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk();
+
+        $this->assertCount(0, $second->json());
+        $this->assertSame(1, FinRsuVestSettlement::query()->where('uid', $user->id)->count());
+    }
+
     public function test_settlement_confirmation_uses_route_settlement_for_updates(): void
     {
         $user = User::factory()->create();
