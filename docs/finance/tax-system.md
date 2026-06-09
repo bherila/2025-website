@@ -916,3 +916,15 @@ TypeScript types are spread across several files in `resources/js/types/finance/
 ---
 
 See [tax-preview-dock.md](tax-preview-dock.md) for the Miller-column dock UI architecture.
+
+## RSU tax facts
+
+RSU tax facts are supplied by backend RSU services and should not be duplicated as React-only tax math. The RSU projection endpoint is `GET /api/rsu/tax-projection?year=YYYY` and returns ordinary income at vest, withholding value, actual tax remitted, excess refund, unreconciled amount, events, and sources.
+
+RSU tax invariants:
+
+- Ordinary wage income is vested shares multiplied by vest-date FMV.
+- Deposited share basis is vest-date FMV per share.
+- Sell-to-cover shares sold at the vest price generally produce zero gain/loss.
+- Later sales use the normal tax-lot/capital-gains path.
+- Excess refunds are reconciliation items, not new vest income.

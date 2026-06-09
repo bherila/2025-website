@@ -6,8 +6,8 @@ use App\Models\CareerComparison;
 use App\Models\CareerJob;
 use App\Models\FinanceTool\FinEquityAwards;
 use App\Services\Finance\MoneyMath;
+use App\Services\Finance\Rsu\RsuGrantAssembler;
 use App\Support\ShortCode;
-use DateTimeImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -21,7 +21,7 @@ class CareerComparisonWorkflowService
      */
     private const PLACEHOLDER_CURRENT_SHARE_PRICE = 25.0;
 
-    public function __construct(private CareerCompCalculator $calculator) {}
+    public function __construct(private CareerCompCalculator $calculator, private RsuGrantAssembler $rsuGrantAssembler) {}
 
     /**
      * The owner's private "latest" scenario: the row with a NULL short_code (never shared).
@@ -398,92 +398,11 @@ class CareerComparisonWorkflowService
      */
     private function rsuGrantsFromAwards(Collection $awards): array
     {
-        $grouped = $awards->groupBy(fn (FinEquityAwards $award): string => implode('|', [
-            (string) $award->award_id,
-            (string) $award->grant_date,
-            (string) $award->symbol,
-        ]));
-
-        $grants = [];
-
-        foreach ($grouped as $group) {
-            $first = $group->first();
-            if (! $first instanceof FinEquityAwards) {
-                continue;
-            }
-
-            $grantDate = (string) $first->grant_date;
-            $shareCount = (float) $group->sum(fn (FinEquityAwards $award): float => (float) $award->share_count);
-
-            $vestDates = $group
-                ->map(fn (FinEquityAwards $award): string => (string) $award->vest_date)
-                ->filter(fn (string $date): bool => $date !== '')
-                ->sort()
-                ->values()
-                ->all();
-
-            $firstVest = $vestDates[0] ?? null;
-            $lastVest = $vestDates !== [] ? $vestDates[array_key_last($vestDates)] : null;
-
-            $cliffMonths = $firstVest !== null ? $this->monthsBetween($grantDate, $firstVest) : 0;
-            $vestingYears = $lastVest !== null
-                ? $this->vestingYearsFromMonths($this->monthsBetween($grantDate, $lastVest))
-                : 1;
-
-            $grantPrice = $group
-                ->map(fn (FinEquityAwards $award): ?float => $award->grant_price !== null ? (float) $award->grant_price : null)
-                ->first(fn (?float $price): bool => $price !== null);
-
-            $vestingEvents = $group
-                ->map(fn (FinEquityAwards $award): ?array => $this->vestingEventFromAward($award))
-                ->filter(fn (?array $event): bool => $event !== null)
-                ->sortBy(fn (array $event): string => (string) $event['vestDate'])
-                ->values()
-                ->all();
-
-            $grants[] = [
-                'id' => 'rsu-tool-'.preg_replace('/[^A-Za-z0-9_-]+/', '-', strtolower((string) $first->award_id ?: (string) $first->id)),
-                'kind' => 'hire',
-                'grantDate' => $grantDate,
-                'shareCount' => $shareCount,
-                'grantValue' => null,
-                'grantPrice' => $grantPrice !== null ? MoneyMath::round($grantPrice) : null,
-                'cliffMonths' => $cliffMonths,
-                'vestingYears' => $vestingYears,
-                'vestingFrequency' => $this->inferVestingFrequency($vestDates),
-                'vestingEvents' => $vestingEvents,
-            ];
-        }
-
-        return $grants;
+        return $this->rsuGrantAssembler->assemble($awards);
     }
 
     /**
-     * @return array<string, mixed>|null
-     */
-    private function vestingEventFromAward(FinEquityAwards $award): ?array
-    {
-        $vestDate = (string) $award->vest_date;
-        $shareCount = (float) $award->share_count;
-        if ($vestDate === '' || $shareCount <= 0.0) {
-            return null;
-        }
-
-        return [
-            'vestDate' => $vestDate,
-            'shareCount' => $shareCount,
-            'sourceAwardId' => $award->award_id,
-            'sourceAwardRowId' => $award->id,
-            'symbol' => $award->symbol,
-            'grantPrice' => $award->grant_price !== null ? MoneyMath::round((float) $award->grant_price) : null,
-            'vestPrice' => $award->vest_price !== null ? MoneyMath::round((float) $award->vest_price) : null,
-        ];
-    }
-
-    /**
-     * Best-effort go-forward share price: the most recent market price at vest
-     * (vest_price), else the most recent grant price as a fallback. Returns null
-     * when neither is available.
+     * Best-effort go-forward share price: the most recent market price at vest, else grant price.
      *
      * @param  Collection<int, FinEquityAwards>  $awards
      */
@@ -508,69 +427,6 @@ class CareerComparisonWorkflowService
         }
 
         return null;
-    }
-
-    private function vestingYearsFromMonths(int $months): int|float
-    {
-        $months = max(3, $months);
-
-        return $months % 12 === 0
-            ? (int) ($months / 12)
-            : round($months / 12, 4);
-    }
-
-    /**
-     * Infer a vesting cadence from the typical gap between consecutive vest
-     * dates (the grant→first-vest cliff is excluded, so a 1-year cliff does not
-     * masquerade as annual cadence). Single-tranche grants default to annual.
-     *
-     * @param  list<string>  $vestDates  ascending Y-m-d vest dates
-     */
-    private function inferVestingFrequency(array $vestDates): string
-    {
-        $count = count($vestDates);
-
-        if ($count <= 1) {
-            return 'annual';
-        }
-
-        $gaps = [];
-        for ($i = 1; $i < $count; $i++) {
-            $gaps[] = $this->monthsBetween($vestDates[$i - 1], $vestDates[$i]);
-        }
-
-        sort($gaps);
-        $medianGap = $gaps[intdiv(count($gaps) - 1, 2)];
-
-        if ($medianGap <= 2) {
-            return 'monthly';
-        }
-
-        if ($medianGap <= 6) {
-            return 'quarterly';
-        }
-
-        return 'annual';
-    }
-
-    /**
-     * Whole months between two Y-m-d dates, rounded to the nearest month (real
-     * vest dates fall on exact monthly anniversaries; this tolerates day drift).
-     * Returns 0 when either date is unparseable or $to precedes $from.
-     */
-    private function monthsBetween(string $from, string $to): int
-    {
-        $start = DateTimeImmutable::createFromFormat('!Y-m-d', $from);
-        $end = DateTimeImmutable::createFromFormat('!Y-m-d', $to);
-
-        if (! $start instanceof DateTimeImmutable || ! $end instanceof DateTimeImmutable || $end < $start) {
-            return 0;
-        }
-
-        $diff = $start->diff($end);
-        $months = $diff->y * 12 + $diff->m;
-
-        return $diff->d >= 15 ? $months + 1 : $months;
     }
 
     private function workflowTitle(CareerCompInputs $inputs, ?string $title): string

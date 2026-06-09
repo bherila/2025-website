@@ -23,8 +23,8 @@ const RsuAwardDraftSchema = z.object({
   share_count: z.string().trim().refine((value) => {
     if (value === '') return false
     const numeric = Number(value)
-    return Number.isInteger(numeric) && numeric >= 1
-  }, 'Shares must be a whole number of at least 1'),
+    return Number.isFinite(numeric) && numeric > 0
+  }, 'Shares must be greater than 0'),
   symbol: z.string()
     .trim()
     .transform((value) => value.toUpperCase())

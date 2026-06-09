@@ -18,7 +18,7 @@ export function todayIso(): string {
 }
 
 export function isVested(award: Pick<IAward, 'vest_date'>, today: string = todayIso()): boolean {
-  return !!award.vest_date && award.vest_date < today
+  return !!award.vest_date && award.vest_date <= today
 }
 
 export function getShares(award: Pick<IAward, 'share_count'>): number | undefined {

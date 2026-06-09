@@ -250,3 +250,7 @@ Both `{account_id}` routes and their `all`-account counterparts share the same c
 > **Deprecated:** `/api/finance/all-line-items` is kept for backwards compatibility and maps to the same handler as `/api/finance/all/line_items`. Prefer the new endpoint.
 
 ...
+
+## RSU reciprocal links
+
+Transactions can be linked to RSU settlements through `fin_rsu_links`. These links are typed (`share_deposit`, `sell_to_cover`, `withholding_cash`, `sale`, and related values) and are intentionally separate from transfer links because RSU settlement semantics are not older/newer transaction pairs. Transaction detail surfaces can use `GET /api/finance/transactions/{transaction}/rsu-links` to show the reciprocal RSU settlement or vesting-event badge.
