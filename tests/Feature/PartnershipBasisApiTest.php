@@ -359,6 +359,75 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss']);
     }
 
+    public function test_sale_exchange_with_unparseable_metadata_date_stays_review_only_without_crashing(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Bad Date Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Bad Date LP',
+            'normalized_partnership_name' => 'bad date lp',
+            'form_type' => 'k1_1065',
+        ]);
+
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 150_00, '2024-06-15', [
+            'date_acquired' => 'not a real date',
+            'date_sold' => 'also garbage',
+            'proceeds_cents' => 150_00,
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $this->assertEmpty(collect($facts['form8949']['rows'])
+            ->where('accountName', 'Bad Date LP'));
+        $source = collect($facts['partnershipBasis']['liquidationGainLossSources'])
+            ->firstWhere('label', 'Bad Date LP - sale/exchange gain/loss (review)');
+        $this->assertNotNull($source, 'unparseable metadata date should leave the disposition review-only');
+        $this->assertSame('needs_review_schedule_d_line_5_or_12', $source['routing']);
+        $this->assertSame(0.0, $facts['scheduleD']['line3GainLoss']);
+        $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss']);
+    }
+
+    public function test_sale_exchange_uses_interest_start_date_when_metadata_omits_acquisition_date(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Start Date Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Start Date LP',
+            'normalized_partnership_name' => 'start date lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2021-01-01',
+        ]);
+
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 150_00, '2024-06-15', [
+            'proceeds_cents' => 150_00,
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $row = collect($facts['form8949']['rows'])
+            ->firstWhere('accountName', 'Start Date LP');
+        $this->assertNotNull($row, 'interest_start_date should establish the holding period and produce a Form 8949 row');
+        $this->assertSame('F', $row['form8949Box']);
+        $this->assertSame('2021-01-01', $row['dateAcquired']);
+        $this->assertSame('2024-06-15', $row['dateSold']);
+        $this->assertSame(150.0, $row['proceeds']);
+        $this->assertSame(100.0, $row['costBasis']);
+        $this->assertSame(50.0, $row['gainOrLoss']);
+        $this->assertFalse($row['isShortTerm']);
+
+        $this->assertSame(50.0, $facts['scheduleD']['line10GainLoss']);
+    }
+
     public function test_property_distribution_emits_form7217_sources_and_workbook_rows(): void
     {
         $user = User::factory()->create();

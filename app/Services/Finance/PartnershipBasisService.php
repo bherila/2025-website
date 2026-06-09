@@ -1642,25 +1642,7 @@ class PartnershipBasisService
     {
         return (int) $events
             ->where('event_type', PartnershipBasisEventType::SaleExchange->value)
-            ->sum(fn (FinPartnershipBasisEvent $event): int => $this->saleExchangeAmountRealizedCents($event));
-    }
-
-    private function saleExchangeAmountRealizedCents(FinPartnershipBasisEvent $event): int
-    {
-        $metadata = $event->getAttribute('metadata');
-        if (! is_array($metadata) || ! isset($metadata['proceeds_cents']) || ! is_numeric($metadata['proceeds_cents'])) {
-            return abs((int) $event->amount_cents);
-        }
-
-        return (int) $metadata['proceeds_cents']
-            + $this->metadataCents($metadata, 'liability_relief_cents')
-            - $this->metadataCents($metadata, 'selling_expenses_cents');
-    }
-
-    /** @param array<string, mixed> $metadata */
-    private function metadataCents(array $metadata, string $key): int
-    {
-        return isset($metadata[$key]) && is_numeric($metadata[$key]) ? (int) $metadata[$key] : 0;
+            ->sum(fn (FinPartnershipBasisEvent $event): int => PartnershipBasisSaleExchangeMath::amountRealizedCents($event));
     }
 
     public function eventOrder(string $eventType): int

@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\PartnershipBasisReconciliationService;
+use App\Services\Finance\PartnershipBasisSaleExchangeMath;
 use App\Services\Finance\PartnershipBasisService;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8949RowFact;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisEventFact;
@@ -116,7 +117,7 @@ class PartnershipBasisFactsBuilder
             }
 
             $saleExchangeSources = [];
-            foreach ($this->saleExchangeAllocations($basisYear, $events) as $allocation) {
+            foreach ($this->saleExchangeAllocations($basisYear, $interest, $events) as $allocation) {
                 $sourceId = "partnership-basis-event-{$allocation['event']->id}-sale-exchange";
                 $gainDollars = MoneyMath::fromCents($allocation['gain_loss_cents']);
                 $reviewStatus = (string) ($allocation['event']->review_status ?: $basisYear->review_status);
@@ -300,7 +301,7 @@ class PartnershipBasisFactsBuilder
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      * @return array<int, array{event: FinPartnershipBasisEvent, amount_realized_cents: int, cost_basis_cents: int, gain_loss_cents: int, date_acquired: ?string, date_sold: ?string, description: ?string, holding_period: string, is_complete: bool}>
      */
-    private function saleExchangeAllocations(FinPartnershipBasisYear $basisYear, Collection $events): array
+    private function saleExchangeAllocations(FinPartnershipBasisYear $basisYear, FinPartnershipInterest $interest, Collection $events): array
     {
         $availableOutsideBasis = (int) $basisYear->beginning_outside_basis_cents;
         $allocations = [];
@@ -314,9 +315,13 @@ class PartnershipBasisFactsBuilder
             if ($type === PartnershipBasisEventType::SaleExchange) {
                 $metadata = $event->getAttribute('metadata');
                 $metadata = is_array($metadata) ? $metadata : [];
-                $amountRealized = $this->saleExchangeAmountRealizedCents($event, $metadata);
+                $amountRealized = PartnershipBasisSaleExchangeMath::amountRealizedCents($event);
                 $hasProceedsMetadata = isset($metadata['proceeds_cents']) && is_numeric($metadata['proceeds_cents']);
-                $dateAcquired = $this->metadataDate($metadata, 'date_acquired');
+                // Fall back to the interest's recorded acquisition date when the event metadata omits
+                // date_acquired, mirroring the §731 distribution path (#947 acceptance criterion:
+                // "holding period: exact when interest_start_date set").
+                $dateAcquired = $this->metadataDate($metadata, 'date_acquired')
+                    ?? $this->interestStartDate($interest);
                 $dateSold = $this->metadataDate($metadata, 'date_sold')
                     ?? ($event->event_date === null ? null : CarbonImmutable::parse($event->event_date)->toDateString());
                 $holdingPeriod = $this->saleExchangeHoldingPeriod($dateAcquired, $dateSold);
@@ -360,25 +365,14 @@ class PartnershipBasisFactsBuilder
         return $allocations;
     }
 
-    /** @param array<string, mixed> $metadata */
-    private function saleExchangeAmountRealizedCents(FinPartnershipBasisEvent $event, array $metadata): int
-    {
-        if (! isset($metadata['proceeds_cents']) || ! is_numeric($metadata['proceeds_cents'])) {
-            return abs((int) $event->amount_cents);
-        }
-
-        return (int) $metadata['proceeds_cents']
-            + $this->metadataCents($metadata, 'liability_relief_cents')
-            - $this->metadataCents($metadata, 'selling_expenses_cents');
-    }
-
-    /** @param array<string, mixed> $metadata */
-    private function metadataCents(array $metadata, string $key): int
-    {
-        return isset($metadata[$key]) && is_numeric($metadata[$key]) ? (int) $metadata[$key] : 0;
-    }
-
-    /** @param array<string, mixed> $metadata */
+    /**
+     * Parse a metadata-supplied date string defensively. The manual-event endpoint only validates
+     * metadata as ['nullable','array'] — it does not validate the shape of date_acquired/date_sold —
+     * so a stored value can be unparseable. An unparseable date is treated as MISSING (null) rather
+     * than throwing, keeping the disposition review-only instead of crashing the whole tax-preview year.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
     private function metadataDate(array $metadata, string $key): ?string
     {
         $value = $metadata[$key] ?? null;
@@ -386,7 +380,11 @@ class PartnershipBasisFactsBuilder
             return null;
         }
 
-        return CarbonImmutable::parse($value)->toDateString();
+        try {
+            return CarbonImmutable::parse($value)->toDateString();
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     /** @param array<string, mixed> $metadata */
