@@ -261,7 +261,12 @@ export default function FinanceNavbar({
         </div>
       </div>
 
-      <FinanceCommandPalette currentAccountId={accountId} activeSection={activeSection} />
+      <FinanceCommandPalette
+        currentAccountId={accountId}
+        activeTab={activeTab}
+        activeSection={activeSection}
+        accounts={accountId !== undefined ? accounts : undefined}
+      />
 
       {children}
     </div>

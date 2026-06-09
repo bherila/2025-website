@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { MillerCommandPalette, type MillerCommandPaletteRow } from '@/components/ui/miller'
 import { commandFilter } from '@/lib/commandSearch'
 import { FINANCE_ACCOUNT_TOOLS, FINANCE_TOP_TOOLS, type FinanceAccountToolDef } from '@/lib/financeNavigation'
-import { financeAccountToolUrl, getYearFromUrl, YEAR_CHANGED_EVENT, type YearSelection } from '@/lib/financeRouteBuilder'
+import { financeAccountToolUrl, getEffectiveYear, getYearFromUrl, YEAR_CHANGED_EVENT, type YearSelection } from '@/lib/financeRouteBuilder'
 
 import {
   type FinanceCommandCategory,
@@ -26,7 +26,10 @@ const GROUP_HEADINGS: Record<FinanceCommandCategory, string> = {
 
 interface FinanceCommandPaletteProps {
   currentAccountId?: number | 'all' | undefined
+  activeTab?: string | undefined
   activeSection?: string | undefined
+  accounts?: FinAccount[] | undefined
+  onNavigate?: ((href: string) => void) | undefined
 }
 
 interface PaletteRow extends MillerCommandPaletteRow<FinanceCommandCategory> {
@@ -36,11 +39,18 @@ interface PaletteRow extends MillerCommandPaletteRow<FinanceCommandCategory> {
   priority: number
 }
 
-export function FinanceCommandPalette({ currentAccountId, activeSection }: FinanceCommandPaletteProps): React.ReactElement {
+export function FinanceCommandPalette({
+  currentAccountId,
+  activeTab,
+  activeSection,
+  accounts: providedAccounts,
+  onNavigate = navigateToFinanceCommandHref,
+}: FinanceCommandPaletteProps): React.ReactElement {
   const [open, setOpen] = useFinanceCommandPaletteOpen()
   const [hasOpened, setHasOpened] = useState(open)
-  const [currentYear, setCurrentYear] = useState<YearSelection | null>(() => (typeof window === 'undefined' ? null : getYearFromUrl()))
-  const { accounts } = useFinanceAccounts({ enabled: hasOpened })
+  const [currentYear, setCurrentYear] = useState<YearSelection | null>(() => readPaletteYear(currentAccountId, activeTab))
+  const { accounts: fetchedAccounts } = useFinanceAccounts({ enabled: hasOpened && providedAccounts === undefined })
+  const accounts = providedAccounts ?? fetchedAccounts
   const registeredRows = useFinanceCommandRows()
 
   useEffect(() => {
@@ -52,7 +62,7 @@ export function FinanceCommandPalette({ currentAccountId, activeSection }: Finan
   useFinanceCommandPaletteShortcut(open)
 
   useEffect(() => {
-    const syncYear = (): void => setCurrentYear(getYearFromUrl())
+    const syncYear = (): void => setCurrentYear(readPaletteYear(currentAccountId, activeTab))
 
     window.addEventListener(YEAR_CHANGED_EVENT, syncYear)
     window.addEventListener('popstate', syncYear)
@@ -60,11 +70,12 @@ export function FinanceCommandPalette({ currentAccountId, activeSection }: Finan
       window.removeEventListener(YEAR_CHANGED_EVENT, syncYear)
       window.removeEventListener('popstate', syncYear)
     }
-  }, [])
+  }, [activeTab, currentAccountId])
 
+  const paletteYear = open ? readPaletteYear(currentAccountId, activeTab) : currentYear
   const builtRows = useMemo(
-    () => buildFinanceCommandRows(accounts, currentAccountId, currentYear),
-    [accounts, currentAccountId, currentYear],
+    () => buildFinanceCommandRows(accounts, currentAccountId, paletteYear),
+    [accounts, currentAccountId, paletteYear],
   )
   const rows = useMemo(
     () => [...builtRows, ...registeredRows].map(toPaletteRow).sort(sortRows),
@@ -84,7 +95,7 @@ export function FinanceCommandPalette({ currentAccountId, activeSection }: Finan
       return
     }
     if (row.sourceRow.href) {
-      window.location.href = row.sourceRow.href
+      onNavigate(row.sourceRow.href)
     }
   }
 
@@ -103,6 +114,10 @@ export function FinanceCommandPalette({ currentAccountId, activeSection }: Finan
       filter={commandFilter}
     />
   )
+}
+
+function navigateToFinanceCommandHref(href: string): void {
+  window.location.href = href
 }
 
 export function FinanceCommandPaletteTrigger(): React.ReactElement {
@@ -168,6 +183,23 @@ function buildFinanceCommandRows(
   }
 
   return rows
+}
+
+function readPaletteYear(currentAccountId?: number | 'all', activeTab?: string): YearSelection | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const urlYear = getYearFromUrl()
+  if (urlYear !== null) {
+    return urlYear
+  }
+
+  if (typeof currentAccountId === 'number' && activeTab !== 'transactions') {
+    return getEffectiveYear(currentAccountId)
+  }
+
+  return null
 }
 
 function routeOptionsForTool(tool: FinanceAccountToolDef, currentYear: YearSelection | null): { year?: YearSelection } {

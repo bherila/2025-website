@@ -92,8 +92,9 @@ export interface RouteOptions {
   hash?: string | undefined  // e.g., 't_id=123'
 }
 
-function buildQueryString(year?: YearSelection): string {
-  if (year === undefined || year === 'all') return ''
+function buildQueryString(year?: YearSelection, options: { preserveAll?: boolean } = {}): string {
+  if (year === undefined) return ''
+  if (year === 'all') return options.preserveAll ? '?year=all' : ''
   return `?year=${year}`
 }
 
@@ -106,7 +107,7 @@ function buildHash(hash?: string): string {
  * Build URL for account transactions page
  */
 export function transactionsUrl(accountId: number, options: RouteOptions = {}): string {
-  return `/finance/account/${accountId}/transactions${buildQueryString(options.year)}${buildHash(options.hash)}`
+  return `/finance/account/${accountId}/transactions${buildQueryString(options.year, { preserveAll: true })}${buildHash(options.hash)}`
 }
 
 /**
@@ -169,7 +170,7 @@ export function maintenanceUrl(accountId: number): string {
  * Build URL for all-accounts view with a specific tab.
  */
 export function allAccountsUrl(tab: string = 'transactions', options: RouteOptions = {}): string {
-  return `/finance/account/all/${tab}${buildQueryString(options.year)}`
+  return `/finance/account/all/${tab}${buildQueryString(options.year, { preserveAll: tab === 'transactions' })}`
 }
 
 export function financeAccountToolUrl(
