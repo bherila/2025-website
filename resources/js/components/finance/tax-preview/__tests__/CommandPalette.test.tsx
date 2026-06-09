@@ -13,8 +13,11 @@ jest.mock('@/components/finance/ScheduleCPreview', () => ({
   computeScheduleCNetIncome: () => ({ total: 0, byQuarter: { q1: 0, q2: 0, q3: 0, q4: 0 } }),
 }))
 
+import { commandFilter } from '@/lib/commandSearch'
+
+import { getFinanceCommandRows, replaceFinanceCommands } from '../../FinanceCommandRegistry'
 import { TaxPreviewProvider } from '../../TaxPreviewContext'
-import { CommandPalette } from '../CommandPalette'
+import { buildTaxPreviewCommandRows, CommandPalette, useRegisterTaxPreviewCommands } from '../CommandPalette'
 import { DockActionsProvider } from '../DockActions'
 import type { FormRegistry, FormRenderProps } from '../formRegistry'
 
@@ -26,6 +29,13 @@ function Wrapper({ children }: { children: React.ReactNode }): React.ReactElemen
       <DockActionsProvider>{children}</DockActionsProvider>
     </TaxPreviewProvider>
   )
+}
+
+
+
+function RegisterCommandsHarness({ registry }: { registry: FormRegistry }): null {
+  useRegisterTaxPreviewCommands(registry)
+  return null
 }
 
 function MockComponent(_props: FormRenderProps): React.ReactElement {
@@ -258,11 +268,45 @@ function stubColumn(id: string, label: string, shortLabel: string): FormRegistry
 }
 
 beforeEach(() => {
+  replaceFinanceCommands('tax-preview', [])
   window.location.hash = ''
   ;(fetchWrapper.get as jest.Mock).mockResolvedValue({})
 })
 
 describe('CommandPalette', () => {
+
+
+  it('registers and unregisters rows under the tax-preview source', () => {
+    const { unmount } = render(
+      <Wrapper>
+        <RegisterCommandsHarness registry={mockRegistry} />
+      </Wrapper>,
+    )
+
+    expect(getFinanceCommandRows().some((row) => row.id === 'tax-preview:k1-all-in-one')).toBe(true)
+
+    unmount()
+
+    expect(getFinanceCommandRows().some((row) => row.id === 'tax-preview:k1-all-in-one')).toBe(false)
+  })
+
+  it('normalizes k1 and k-1 matching for registered tax rows', () => {
+    const rows = buildTaxPreviewCommandRows(
+      mockRegistry,
+      { year: 2025 } as never,
+      { pushColumn: jest.fn(), navigate: jest.fn(), openWorksheet: jest.fn() } as never,
+    )
+    const k1Labels = rows
+      .filter((row) => commandFilter(row.id, 'k1', [row.label, row.description ?? '', ...row.keywords]) > 0)
+      .map((row) => row.label)
+    const kDash1Labels = rows
+      .filter((row) => commandFilter(row.id, 'k-1', [row.label, row.description ?? '', ...row.keywords]) > 0)
+      .map((row) => row.label)
+
+    expect(k1Labels).toEqual(expect.arrayContaining(['All-in-One K-1', 'K-1/K-3 Source Value Overrides']))
+    expect(kDash1Labels).toEqual(expect.arrayContaining(['All-in-One K-1', 'K-1/K-3 Source Value Overrides']))
+  })
+
   it('renders grouped results from the registry', () => {
     const onOpenChange = jest.fn()
     render(

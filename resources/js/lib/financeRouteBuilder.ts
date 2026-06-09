@@ -6,6 +6,8 @@
  * Also syncs to sessionStorage for persistence when navigating without explicit year param.
  */
 
+import type { FinanceAccountToolId } from '@/lib/financeNavigation'
+
 export type YearSelection = number | 'all'
 
 const STORAGE_KEY_PREFIX = 'finance_year_'
@@ -85,13 +87,14 @@ export function getEffectiveYear(accountId: number): YearSelection {
 // Route builders
 // ============================================================================
 
-interface RouteOptions {
+export interface RouteOptions {
   year?: YearSelection | undefined
   hash?: string | undefined  // e.g., 't_id=123'
 }
 
-function buildQueryString(year?: YearSelection): string {
-  if (year === undefined || year === 'all') return ''
+function buildQueryString(year?: YearSelection, options: { preserveAll?: boolean } = {}): string {
+  if (year === undefined) return ''
+  if (year === 'all') return options.preserveAll ? '?year=all' : ''
   return `?year=${year}`
 }
 
@@ -104,7 +107,7 @@ function buildHash(hash?: string): string {
  * Build URL for account transactions page
  */
 export function transactionsUrl(accountId: number, options: RouteOptions = {}): string {
-  return `/finance/account/${accountId}/transactions${buildQueryString(options.year)}${buildHash(options.hash)}`
+  return `/finance/account/${accountId}/transactions${buildQueryString(options.year, { preserveAll: true })}${buildHash(options.hash)}`
 }
 
 /**
@@ -131,8 +134,8 @@ export function statementsUrl(accountId: number, options: RouteOptions = {}): st
 /**
  * Build URL for lots page
  */
-export function lotsUrl(accountId: number): string {
-  return `/finance/account/${accountId}/lots`
+export function lotsUrl(accountId: number, options: RouteOptions = {}): string {
+  return `/finance/account/${accountId}/lots${buildQueryString(options.year)}`
 }
 
 /**
@@ -166,8 +169,20 @@ export function maintenanceUrl(accountId: number): string {
 /**
  * Build URL for all-accounts view with a specific tab.
  */
-export function allAccountsUrl(tab: string = 'transactions'): string {
-  return `/finance/account/all/${tab}`
+export function allAccountsUrl(tab: string = 'transactions', options: RouteOptions = {}): string {
+  return `/finance/account/all/${tab}${buildQueryString(options.year, { preserveAll: tab === 'transactions' })}`
+}
+
+export function financeAccountToolUrl(
+  tool: FinanceAccountToolId,
+  accountId: number | 'all',
+  options: RouteOptions = {},
+): string {
+  if (accountId === 'all') {
+    return allAccountsUrl(tool, options)
+  }
+
+  return getTabUrl(tool, accountId, options.year)
 }
 
 /**
@@ -223,7 +238,7 @@ export function navigateToTab(
       window.location.href = statementsUrl(accountId, { year })
       break
     case 'lots':
-      window.location.href = lotsUrl(accountId)
+      window.location.href = lotsUrl(accountId, { year })
       break
     case 'summary':
       window.location.href = summaryUrl(accountId, { year })
@@ -259,7 +274,7 @@ export function getTabUrl(
     case 'statements':
       return statementsUrl(accountId, options)
     case 'lots':
-      return lotsUrl(accountId)
+      return lotsUrl(accountId, options)
     case 'summary':
       return summaryUrl(accountId, options)
     case 'fees':

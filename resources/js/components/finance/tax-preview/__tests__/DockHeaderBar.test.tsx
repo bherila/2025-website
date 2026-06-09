@@ -3,12 +3,16 @@ import type { ComponentProps } from 'react'
 
 import { DockHeaderBar } from '../DockHeaderBar'
 
-const mockSetPaletteOpen = jest.fn()
+const mockSetFinanceCommandPaletteOpen = jest.fn()
 const mockExportXlsx = jest.fn()
 const mockOpenTaxReturnPdfExport = jest.fn()
 const mockOpenReviewQueue = jest.fn()
 let mockIsExportingXlsx = false
 let mockIsExportingPdf = false
+
+jest.mock('../../FinanceCommandRegistry', () => ({
+  setFinanceCommandPaletteOpen: (open: boolean) => mockSetFinanceCommandPaletteOpen(open),
+}))
 
 jest.mock('../DockActions', () => ({
   useDockActions: () => ({
@@ -17,7 +21,6 @@ jest.mock('../DockActions', () => ({
     openTaxReturnPdfExport: mockOpenTaxReturnPdfExport,
     isExportingPdf: mockIsExportingPdf,
     openReviewQueue: mockOpenReviewQueue,
-    setPaletteOpen: mockSetPaletteOpen,
   }),
 }))
 
@@ -41,7 +44,7 @@ function renderHeader(overrides: Partial<ComponentProps<typeof DockHeaderBar>> =
 
 describe('DockHeaderBar', () => {
   beforeEach(() => {
-    mockSetPaletteOpen.mockClear()
+    mockSetFinanceCommandPaletteOpen.mockClear()
     mockExportXlsx.mockClear()
     mockOpenTaxReturnPdfExport.mockClear()
     mockOpenReviewQueue.mockClear()
@@ -112,5 +115,13 @@ describe('DockHeaderBar', () => {
     renderHeader()
 
     expect(screen.queryByText(/dock=0/i)).not.toBeInTheDocument()
+  })
+
+  it('opens the shared Finance command palette from the jump button', () => {
+    renderHeader()
+
+    fireEvent.click(screen.getByRole('button', { name: /open command palette/i }))
+
+    expect(mockSetFinanceCommandPaletteOpen).toHaveBeenCalledWith(true)
   })
 })
