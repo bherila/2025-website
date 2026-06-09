@@ -14,6 +14,27 @@ class IrsReturnPdfBuilder
 {
     private const int FORM_8949_ROWS_PER_PAGE = 11;
 
+    /**
+     * Identity/PII profile fields that are suppressed from field resolution unless
+     * the request explicitly opts in. Non-PII profile fields (filing status and the
+     * digital-assets answer) are always rendered.
+     *
+     * @var array<int, string>
+     */
+    private const array PII_PROFILE_FIELDS = [
+        'taxpayer_first_name',
+        'taxpayer_last_name',
+        'taxpayer_ssn',
+        'spouse_first_name',
+        'spouse_last_name',
+        'spouse_ssn',
+        'address_line1',
+        'address_line2',
+        'city',
+        'state',
+        'postal_code',
+    ];
+
     public function __construct(
         private readonly TaxPreviewFactsService $taxPreviewFactsService,
         private readonly IrsPdfTemplateRepository $templates,
@@ -42,18 +63,63 @@ class IrsReturnPdfBuilder
             $options->mode,
             $profile,
             $facts,
+            $options->formIds(),
         );
 
         if (! $readiness->isReady()) {
             throw new TaxReturnPdfUnavailableException($readiness->errors, $readiness->warnings);
         }
 
-        $formIds = $options->scope === 'return'
-            ? $readiness->requiredForms
-            : [$options->formId ?? 'form-1040'];
-        $content = $this->fillEngine->fillForms($this->formFillJobs($formIds, $options, $facts, $profile), $options);
+        $warnings = $readiness->warnings;
+        $formIds = $this->selectedFormIds($options, $readiness->requiredForms, $facts);
+        $profileForFields = $this->profileForFields($profile, $options->includeProfilePii);
 
-        return new TaxReturnPdfBuildResult($content, array_values(array_filter($formIds)));
+        if ($formIds === []) {
+            throw new TaxReturnPdfUnavailableException(['Select at least one supported IRS PDF form to export.'], $warnings);
+        }
+
+        if (in_array('form-8949', $formIds, true) && $this->form8949Instances($facts) === []) {
+            $warnings[] = 'Form 8949 has no supported detail rows, so a blank Form 8949 was generated for manual completion.';
+        }
+
+        $content = $this->fillEngine->fillForms($this->formFillJobs($formIds, $options, $facts, $profileForFields), $options);
+
+        return new TaxReturnPdfBuildResult($content, array_values(array_filter($formIds)), array_values(array_unique($warnings)));
+    }
+
+    /**
+     * @param  array<int, string>  $requiredForms
+     * @param  array<string, mixed>  $facts
+     * @return array<int, string>
+     */
+    private function selectedFormIds(TaxReturnPdfOptions $options, array $requiredForms, array $facts): array
+    {
+        if ($options->scope === 'form') {
+            return TaxReturnPdfOptions::normalizeFormIds([$options->formId ?? 'form-1040']);
+        }
+
+        if ($options->scope === 'selection') {
+            return TaxReturnPdfOptions::normalizeFormIds($options->formIds);
+        }
+
+        $recommended = TaxReturnPdfOptions::normalizeFormIds($requiredForms);
+
+        return $recommended === [] ? ['form-1040'] : $recommended;
+    }
+
+    private function profileForFields(?FinTaxReturnProfile $profile, bool $includeProfilePii): ?FinTaxReturnProfile
+    {
+        if (! $profile instanceof FinTaxReturnProfile || $includeProfilePii) {
+            return $profile;
+        }
+
+        $redacted = clone $profile;
+
+        foreach (self::PII_PROFILE_FIELDS as $field) {
+            $redacted->setAttribute($field, null);
+        }
+
+        return $redacted;
     }
 
     /**
@@ -67,7 +133,15 @@ class IrsReturnPdfBuilder
 
         foreach ($formIds as $index => $formId) {
             if ($formId === 'form-8949') {
-                foreach ($this->form8949Instances($facts) as $instanceIndex => $instance) {
+                $instances = $this->form8949Instances($facts);
+
+                if ($instances === []) {
+                    $jobs[] = $this->formFillJob($formId, "{$options->scope}-{$index}-blank", $options, $this->withBlankForm8949Current($facts), $profile);
+
+                    continue;
+                }
+
+                foreach ($instances as $instanceIndex => $instance) {
                     $instanceFacts = $facts;
                     $instanceFacts['irsPdf']['form8949']['current'] = $instance;
                     $jobs[] = $this->formFillJob($formId, "{$options->scope}-{$index}-{$instanceIndex}", $options, $instanceFacts, $profile);
@@ -402,6 +476,17 @@ class IrsReturnPdfBuilder
     private function schedule3Line6DisplayAmount(float $amount): string
     {
         return (string) (int) round($amount);
+    }
+
+    /**
+     * @param  array<string, mixed>  $facts
+     * @return array<string, mixed>
+     */
+    private function withBlankForm8949Current(array $facts): array
+    {
+        $facts['irsPdf']['form8949']['current'] = $this->form8949Instance(null, [], null, [], 'blank');
+
+        return $facts;
     }
 
     /**

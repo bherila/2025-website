@@ -12,7 +12,7 @@ class IrsReturnReadinessServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_complete_return_requires_profile_fields_and_includes_supported_schedules(): void
+    public function test_complete_return_warns_for_missing_profile_fields_and_includes_supported_schedules(): void
     {
         $user = User::factory()->create();
 
@@ -26,16 +26,16 @@ class IrsReturnReadinessServiceTest extends TestCase
             facts: ['form1040' => ['line8' => 100]],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('schedule-1', $readiness->requiredForms);
         $this->assertNotContains('schedule-1', $readiness->unsupportedForms);
         $this->assertNotEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'taxpayer first name'),
+            $readiness->warnings,
+            static fn (string $warning): bool => str_contains($warning, 'taxpayer first name'),
         ));
     }
 
-    public function test_complete_return_still_blocks_when_an_unsupported_dependent_form_is_required(): void
+    public function test_complete_return_warns_when_an_unsupported_dependent_form_is_required(): void
     {
         $user = User::factory()->create();
         $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
@@ -53,16 +53,43 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('schedule-1', $readiness->requiredForms);
         $this->assertContains('schedule-c', $readiness->unsupportedForms);
         $this->assertNotEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'schedule-c appears required'),
+            $readiness->warnings,
+            static fn (string $warning): bool => str_contains($warning, 'schedule-c appears required'),
         ));
     }
 
-    public function test_form_8949_rows_without_supported_boxes_block_export(): void
+    public function test_selection_export_warns_when_an_unsupported_dependent_form_is_required(): void
+    {
+        $user = User::factory()->create();
+        $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
+
+        $readiness = app(IrsReturnReadinessService::class)->forRequest(
+            user: $user,
+            year: 2025,
+            scope: 'selection',
+            formId: null,
+            mode: 'editable',
+            profile: $profile,
+            facts: [
+                'form1040' => ['line8' => 100],
+                'scheduleC' => ['netProfitRoutedToSchedule1' => 100],
+            ],
+            selectedFormIds: ['form-1040', 'schedule-1'],
+        );
+
+        $this->assertTrue($readiness->isReady());
+        $this->assertContains('schedule-c', $readiness->unsupportedForms);
+        $this->assertNotEmpty(array_filter(
+            $readiness->warnings,
+            static fn (string $warning): bool => str_contains($warning, 'schedule-c appears required'),
+        ));
+    }
+
+    public function test_form_8949_rows_without_supported_boxes_warn(): void
     {
         $user = User::factory()->create();
         $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
@@ -81,12 +108,12 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('schedule-d', $readiness->requiredForms);
         $this->assertContains('form-8949', $readiness->requiredForms);
         $this->assertNotEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'Form 8949 export is blocked'),
+            $readiness->warnings,
+            static fn (string $warning): bool => str_contains($warning, 'supported Form 8949 box'),
         ));
     }
 
@@ -113,7 +140,7 @@ class IrsReturnReadinessServiceTest extends TestCase
         $this->assertSame(['form-1040', 'schedule-d', 'form-8949'], $readiness->requiredForms);
     }
 
-    public function test_summary_schedule_d_lines_block_form_8949_when_no_detail_rows_are_available(): void
+    public function test_summary_schedule_d_lines_warn_when_no_detail_rows_are_available(): void
     {
         $user = User::factory()->create();
         $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
@@ -133,11 +160,11 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('form-8949', $readiness->requiredForms);
         $this->assertNotEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'no supported Form 8949 rows are available'),
+            $readiness->warnings,
+            static fn (string $warning): bool => str_contains($warning, 'no supported Form 8949 detail rows'),
         ));
     }
 
@@ -224,7 +251,7 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('form-1116', $readiness->unsupportedForms);
     }
 
@@ -267,7 +294,7 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('form-1116', $readiness->unsupportedForms);
     }
 
@@ -310,7 +337,7 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('form-1116', $readiness->unsupportedForms);
     }
 
@@ -349,11 +376,11 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('form-1116', $readiness->unsupportedForms);
     }
 
-    public function test_schedule_3_line_7_blocks_when_line_6_details_are_missing(): void
+    public function test_schedule_3_line_7_warns_when_line_6_details_are_missing(): void
     {
         $user = User::factory()->create();
         $profile = FinTaxReturnProfile::factory()->for($user, 'user')->create();
@@ -375,11 +402,11 @@ class IrsReturnReadinessServiceTest extends TestCase
             ],
         );
 
-        $this->assertFalse($readiness->isReady());
+        $this->assertTrue($readiness->isReady());
         $this->assertContains('schedule-3', $readiness->requiredForms);
         $this->assertNotEmpty(array_filter(
-            $readiness->errors,
-            static fn (string $error): bool => str_contains($error, 'without supported line 6 details'),
+            $readiness->warnings,
+            static fn (string $warning): bool => str_contains($warning, 'line 6 details'),
         ));
     }
 

@@ -84,7 +84,7 @@ class FinanceTaxReturnPdfCommandTest extends TestCase
         $content = (string) file_get_contents($out);
 
         $this->assertStringStartsWith('%PDF', $content);
-        $this->assertStringContainsString('Taxpayer', $content);
+        $this->assertStringNotContainsString('Taxpayer', $content);
         $this->assertStringContainsString('/AcroForm', $content);
 
         unlink($out);
