@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('purpose', 32);
             $table->string('client_hint', 64)->nullable();
             $table->string('module', 64)->nullable();
-            $table->string('token_hash', 64)->unique('agent_tokens_hash_unique');
+            $table->string('token_hash', 64);
             $table->string('token_prefix', 16)->nullable();
             $table->json('allowed_permissions')->nullable();
             $table->timestamp('expires_at')->nullable();
@@ -23,6 +23,7 @@ return new class extends Migration
             $table->timestamp('last_used_at')->nullable();
             $table->timestamps();
 
+            $table->unique('token_hash', 'agent_tokens_hash_unique');
             $table->index(['user_id', 'purpose'], 'agent_tokens_user_purpose_idx');
         });
     }
