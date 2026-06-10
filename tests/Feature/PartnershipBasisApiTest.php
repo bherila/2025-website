@@ -1271,6 +1271,74 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(1, $eventCount);
     }
 
+    public function test_bulk_seed_is_disabled_when_k1_distribution_events_exist(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'K1 Seed Guard Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'K1 Seed Guard LP',
+            'normalized_partnership_name' => 'k1 seed guard lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+
+        // A K-1-sourced (Box 19A) cash distribution already represents this year's
+        // distribution; a matching bank transaction must not be seeded on top of it.
+        FinPartnershipBasisEvent::create([
+            'user_id' => $user->id,
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 25_00,
+            'source_type' => 'k1_code',
+            'k1_box' => '19',
+            'k1_code' => 'A',
+            'review_status' => 'reviewed',
+        ]);
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-08-15',
+            't_type' => 'Distribution',
+            't_amt' => -25_00,
+            't_description' => 'Q3 distribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('seed');
+
+        // No account_transaction event was created.
+        $this->assertSame(0, FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('source_type', 'account_transaction')
+            ->count());
+    }
+
+    public function test_bulk_seed_is_disabled_for_multi_interest_accounts(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Multi Interest Seed Account']);
+        foreach (['Interest One', 'Interest Two'] as $name) {
+            FinPartnershipInterest::create([
+                'user_id' => $user->id,
+                'account_id' => $account->acct_id,
+                'partnership_name' => $name,
+                'normalized_partnership_name' => strtolower($name),
+                'form_type' => 'k1_1065',
+            ]);
+        }
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('partnership_interest_id');
+    }
+
     public function test_seed_from_transactions_recomputes_rollforward(): void
     {
         $user = User::factory()->create();

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Enums\Finance\PartnershipBasisEventType;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPartnershipBasisEvent;
@@ -321,6 +322,43 @@ class PartnershipBasisServiceTest extends TestCase
 
         $this->assertSame(16_00, $basisYear->foreign_taxes_decrease_cents);
         $this->assertSame(34_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_k3_foreign_tax_reviewed_override_wins_over_raw_section_total(): void
+    {
+        // A reviewer correction to the K-3 foreign-tax total must win over the raw
+        // extraction so the basis rollforward matches Form 1116 after the override.
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => ['grandTotalUSD' => 40.0],
+                'notes' => '',
+            ],
+        ];
+        $overrides = ['k3:foreign-tax-total' => ['value' => 25]];
+        $basisYear = $this->basisFromK1(2024, 'K3 Override LP', ['5' => '100'], [], [], null, $overrides, $k3Sections);
+
+        $this->assertSame(25_00, $basisYear->foreign_taxes_decrease_cents, 'reviewed override (25) should win over raw K-3 total (40)');
+        $this->assertSame(75_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_section754_stepup_is_memorandum_and_does_not_affect_outside_basis(): void
+    {
+        // Box 13 code W is §754/§743(b) step-up amortization: a memorandum detail
+        // that adjusts inside basis, not the partner's outside basis.
+        $basisYear = $this->basisFromK1(2024, 'Section754 LP', ['5' => '100'], ['13' => [['code' => 'W', 'value' => '30']]]);
+
+        // Box 5 income (+100) is the only outside-basis movement; §754 must not reduce it.
+        $this->assertSame(100_00, $basisYear->ending_outside_basis_cents);
+
+        $event = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', PartnershipBasisEventType::Section754StepUpAmortization->value)
+            ->first();
+        $this->assertNotNull($event, 'a §754 step-up memorandum event must be recorded');
+        $this->assertSame('memorandum', $event->basis_side);
+        $this->assertSame(PartnershipBasisEventType::BASIS_EFFECT_NONE, PartnershipBasisEventType::from($event->event_type)->basisEffect());
     }
 
     public function test_box21_takes_priority_over_k3_foreign_taxes_and_no_double_count(): void
