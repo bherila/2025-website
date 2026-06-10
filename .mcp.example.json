@@ -13,6 +13,20 @@
       "headers": {
         "Authorization": "Bearer <your-token>"
       }
+    },
+    "bh-tax": {
+      "$comment": "Tax module over HTTP — token from the 'Agent Access (AI clients)' card on the Tax Preview page. See docs/finance/tax-reconciliation-agent.md.",
+      "url": "https://your-domain.com/mcp/tax",
+      "headers": {
+        "Authorization": "Bearer <your-token>"
+      }
+    },
+    "bh-career-comparison": {
+      "$comment": "Career Comparison module over HTTP — token from the 'Agent access' card on the Career Comparison page. See docs/financial-planning/career-comparison-agent.md.",
+      "url": "https://your-domain.com/mcp/career-comparison",
+      "headers": {
+        "Authorization": "Bearer <your-token>"
+      }
     }
   }
 }

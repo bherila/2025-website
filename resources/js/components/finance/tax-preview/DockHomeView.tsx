@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import AgentAccessCard from '@/components/agent/AgentAccessCard'
 import { computeActionItemSeverityCounts } from '@/components/finance/actionItemsCounts'
 import LotReconciliationHealthWidget from '@/components/finance/LotReconciliationHealthWidget'
 import { Badge } from '@/components/ui/badge'
@@ -162,6 +163,8 @@ export function DockHomeView(): React.ReactElement {
           </CardContent>
         </Card>
       )}
+
+      <AgentAccessCard module="tax" />
     </div>
   )
 }

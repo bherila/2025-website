@@ -173,6 +173,18 @@ describe('DockHomeView', () => {
     expect(stored.pinnedForms).toContain('sch-a')
   })
 
+  it('renders the Tax-scoped agent access setup card', () => {
+    render(
+      <Wrapper>
+        <DockHomeView />
+      </Wrapper>,
+    )
+    expect(screen.getByText('Agent Access (AI clients)')).toBeInTheDocument()
+    expect(screen.getByText('Copy Claude setup')).toBeInTheDocument()
+    expect(screen.getByText('Copy REST/TOON setup')).toBeInTheDocument()
+    expect(screen.getByText(/Connect Claude, Codex, or other AI clients to the Tax module/)).toBeInTheDocument()
+  })
+
   it('renders Recent above App and Forms but below Pinned', () => {
     window.localStorage.setItem(
       STORAGE_KEY,
