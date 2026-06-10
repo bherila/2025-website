@@ -6,6 +6,7 @@ import {
   hasBrokerageLink,
   hasPayslipLink,
   needsRefundReconciliation,
+  settlementLinkHref,
   transactionHref,
   virtualRefreshersFromCareerComp,
 } from '../rsuUiHelpers'
@@ -81,6 +82,24 @@ describe('rsuUiHelpers', () => {
     expect(rows[0]?.share_count).toBe(32.8125)
   })
 
+  it('anchors virtual current-job refreshers to jobs starting after the projection start year', () => {
+    const rows = virtualRefreshersFromCareerComp({
+      ...inputs,
+      currentJobs: [{
+        ...inputs.currentJobs[0]!,
+        startDate: '2027-03-15',
+      }],
+    })
+
+    expect(rows).toHaveLength(32)
+    expect(rows[0]).toMatchObject({
+      award_id: 'Projected refresher 2028',
+      vest_date: '2028-04-01',
+      virtualValue: 55125,
+    })
+    expect(rows[0]?.share_count).toBe(34.453125)
+  })
+
   it('classifies brokerage and payslip links separately', () => {
     const award: IAward = {
       rsu_links: [
@@ -112,6 +131,24 @@ describe('rsuUiHelpers', () => {
     expect(firstPayslipHref(award)).toBe('/finance/payslips/entry?id=44')
   })
 
+  it('does not count refund-only payslips as income payslip links', () => {
+    const refundSettlement: IAward = {
+      settlement_allocations: [{ settlement: { id: 9, refund_payslip_id: 44, status: 'confirmed' } }],
+      rsu_links: [],
+    }
+    const refundLink: IAward = {
+      settlement_allocations: [{ settlement: { id: 10, excess_refund: '42.00', status: 'confirmed' } }],
+      rsu_links: [{ id: 1, link_type: 'payslip_rsu_excess_refund', payslip_id: 45 }],
+    }
+
+    expect(hasPayslipLink(refundSettlement)).toBe(false)
+    expect(firstPayslipHref(refundSettlement)).toBeNull()
+    expect(hasPayslipLink(refundLink)).toBe(false)
+    expect(firstPayslipHref(refundLink)).toBeNull()
+    expect(needsRefundReconciliation(refundSettlement)).toBe(false)
+    expect(needsRefundReconciliation(refundLink)).toBe(false)
+  })
+
   it('does not count type-only payslip links as linked payslips', () => {
     const award: IAward = {
       rsu_links: [{ id: 1, link_type: 'payslip_rsu_income', payslip_id: null }],
@@ -136,5 +173,9 @@ describe('rsuUiHelpers', () => {
       ...award,
       rsu_links: [{ id: 3, link_type: 'payslip_rsu_excess_refund', payslip_id: null }],
     })).toBe(true)
+  })
+
+  it('can carry a default RSU link type in settlement link URLs', () => {
+    expect(settlementLinkHref(9, 'payslip', 'payslip_rsu_excess_refund')).toBe('/finance/rsu?settlement_id=9&link=payslip&link_type=payslip_rsu_excess_refund')
   })
 })

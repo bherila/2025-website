@@ -24,8 +24,9 @@ export function settlementHref(settlementId: number): string {
   return `/finance/rsu?settlement_id=${settlementId}`
 }
 
-export function settlementLinkHref(settlementId: number, target: 'transaction' | 'payslip'): string {
-  return `/finance/rsu?settlement_id=${settlementId}&link=${target}`
+export function settlementLinkHref(settlementId: number, target: 'transaction' | 'payslip', linkType?: RsuLinkType): string {
+  const typeParam = linkType ? `&link_type=${encodeURIComponent(linkType)}` : ''
+  return `/finance/rsu?settlement_id=${settlementId}&link=${target}${typeParam}`
 }
 
 export function transactionHref(link: Pick<IRsuLink, 'transaction_id' | 'account_id'>): string | null {
@@ -53,8 +54,7 @@ export function hasPayslipLink(award: Pick<IAward, 'rsu_links' | 'settlement_all
   const settlement = primarySettlement(award)
   return Boolean(
     settlement?.payslip_id
-    || settlement?.refund_payslip_id
-    || award.rsu_links?.some((link) => link.payslip_id),
+    || award.rsu_links?.some((link) => link.link_type === 'payslip_rsu_income' && link.payslip_id),
   )
 }
 
@@ -75,13 +75,13 @@ export function firstTransactionLink(links: IRsuLink[] | undefined): IRsuLink | 
 }
 
 export function firstPayslipLink(links: IRsuLink[] | undefined): IRsuLink | null {
-  return links?.find((link) => link.payslip_id) ?? null
+  return links?.find((link) => link.link_type === 'payslip_rsu_income' && link.payslip_id) ?? null
 }
 
 export function firstPayslipHref(award: Pick<IAward, 'rsu_links' | 'settlement_allocations'>): string | null {
   const link = firstPayslipLink(award.rsu_links)
   const settlement = primarySettlement(award)
-  return payslipHref(link?.payslip_id ?? settlement?.payslip_id ?? settlement?.refund_payslip_id)
+  return payslipHref(link?.payslip_id ?? settlement?.payslip_id)
 }
 
 export function settlementLabel(settlement: IRsuSettlement | null | undefined): string {
@@ -119,12 +119,15 @@ function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: 
 
   const cadence = Math.max(1, Math.round(job.refresher.cadenceYears))
   const firstOffset = Math.max(0, Math.round(job.refresher.firstYearOffset))
+  const anchorYear = Math.max(startYear, yearFromIsoDate(job.startDate) ?? startYear)
+  const horizonEndYear = startYear + horizonYears
   const sharePrice = Math.max(0, Number(job.company.currentSharePrice ?? 0))
   const rows: IAward[] = []
 
-  for (let offset = firstOffset; offset < horizonYears; offset += cadence) {
-    const year = startYear + offset
-    const raiseFactor = (1 + (job.comp.annualRaisePct / 100)) ** offset
+  for (let offset = firstOffset; anchorYear + offset < horizonEndYear; offset += cadence) {
+    const year = anchorYear + offset
+    const projectionOffset = Math.max(0, year - startYear)
+    const raiseFactor = (1 + (job.comp.annualRaisePct / 100)) ** projectionOffset
     const targetValue = currency(job.comp.baseSalary).multiply(raiseFactor).multiply(job.refresher.pctOfBase / 100).value
     const shareCount = sharePrice > 0 ? currency(targetValue).divide(sharePrice).value : undefined
     const vestEvents = shareCount !== undefined
@@ -156,6 +159,13 @@ function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: 
   }
 
   return rows
+}
+
+function yearFromIsoDate(value: string | null | undefined): number | null {
+  if (!value) return null
+  const year = Number(value.slice(0, 4))
+
+  return Number.isFinite(year) ? year : null
 }
 
 function linearVestingEvents(

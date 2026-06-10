@@ -83,13 +83,15 @@ export default function RsuPage() {
   const canViewPayslips = hasPermission('finance.payslips.view')
   const canManagePayslips = hasPermission('finance.payslips.manage')
   const focusQuery = useMemo(() => {
-    if (typeof window === 'undefined') return { settlementId: null, linkTarget: null }
+    if (typeof window === 'undefined') return { settlementId: null, linkTarget: null, defaultLinkType: null }
     const params = new URLSearchParams(window.location.search)
     const settlementParam = params.get('settlement_id')
     const linkParam = params.get('link')
+    const linkTarget = linkParam === 'transaction' || linkParam === 'payslip' ? linkParam as RsuLinkTarget : null
     return {
       settlementId: settlementParam ? Number(settlementParam) : null,
-      linkTarget: linkParam === 'transaction' || linkParam === 'payslip' ? linkParam as RsuLinkTarget : null,
+      linkTarget,
+      defaultLinkType: linkTypeFromQuery(params.get('link_type'), linkTarget),
     }
   }, [])
   const loadRsuData = useCallback(() => {
@@ -183,6 +185,7 @@ export default function RsuPage() {
                 canManageRsu={canManageRsu}
                 canViewPayslips={canViewPayslips}
                 canViewTransactions={canViewTransactions}
+                defaultLinkType={focusQuery.defaultLinkType}
                 linkTarget={focusQuery.linkTarget}
                 onLinked={loadRsuData}
                 settlementId={focusQuery.settlementId}
@@ -237,6 +240,7 @@ export default function RsuPage() {
                     const total = shareValue(shares, price)
                     const grantPrice = r.grant_price ?? null
                     const grantValue = shareValue(shares, grantPrice)
+                    const displayGrantValue = grantValue ?? (r.virtualValue != null ? currency(r.virtualValue) : null)
                     const settlement = primarySettlement(r)
                     const transactionLink = firstTransactionLink(r.rsu_links)
                     const transactionUrl = transactionLink ? transactionHref(transactionLink) : null
@@ -253,7 +257,7 @@ export default function RsuPage() {
                         <TableCell>{r.grant_date}</TableCell>
                         <TableCell>{shares != null ? Number(shares.toFixed(6)) : '—'}</TableCell>
                         <TableCell>{grantPrice != null ? currency(grantPrice).format() : ''}</TableCell>
-                        <TableCell>{r.virtualValue != null ? currency(r.virtualValue).format() : grantValue ? grantValue.format() : ''}</TableCell>
+                        <TableCell>{displayGrantValue ? displayGrantValue.format() : ''}</TableCell>
                         <TableCell style={{ borderLeft: '2px solid #e5e7eb' }}>
                           {price != null ? currency(price).format() : ''}
                         </TableCell>
@@ -314,7 +318,7 @@ export default function RsuPage() {
                                 )}
                                 {settlement?.id && (!payslipUrl || refundReconciliationNeeded) && canViewPayslips && canManageRsu && (
                                   <Button asChild variant="outline" size="sm">
-                                    <a href={settlementLinkHref(settlement.id, 'payslip')}>
+                                    <a href={settlementLinkHref(settlement.id, 'payslip', refundReconciliationNeeded ? 'payslip_rsu_excess_refund' : undefined)}>
                                       <ReceiptText className="h-3.5 w-3.5" />
                                       {refundReconciliationNeeded ? 'Refund payslip' : 'Payslip'}
                                     </a>
@@ -390,11 +394,23 @@ function allocationChoice(award: IAward, allocation: IRsuSettlementAllocation, i
   }
 }
 
+function defaultLinkTypeForTarget(linkTarget: RsuLinkTarget): RsuLinkType {
+  return linkTarget === 'transaction' ? 'share_deposit' : 'payslip_rsu_income'
+}
+
+function linkTypeFromQuery(value: string | null, linkTarget: RsuLinkTarget | null): RsuLinkType | null {
+  if (!value || !linkTarget) return null
+  const options = linkTarget === 'transaction' ? TRANSACTION_LINK_TYPES : PAYSLIP_LINK_TYPES
+
+  return options.includes(value as RsuLinkType) ? value as RsuLinkType : null
+}
+
 function RsuLinkWorkflow({
   allocationChoices,
   canManageRsu,
   canViewPayslips,
   canViewTransactions,
+  defaultLinkType,
   linkTarget,
   onLinked,
   settlementId,
@@ -403,6 +419,7 @@ function RsuLinkWorkflow({
   canManageRsu: boolean
   canViewPayslips: boolean
   canViewTransactions: boolean
+  defaultLinkType?: RsuLinkType | null
   linkTarget: RsuLinkTarget
   onLinked: () => void
   settlementId: number
@@ -415,13 +432,14 @@ function RsuLinkWorkflow({
   const [message, setMessage] = useState<string | null>(null)
   const [selectedCandidateKey, setSelectedCandidateKey] = useState('')
   const [selectedAllocationKey, setSelectedAllocationKey] = useState('settlement')
-  const [linkType, setLinkType] = useState<RsuLinkType>(linkTarget === 'transaction' ? 'share_deposit' : 'payslip_rsu_income')
+  const [linkType, setLinkType] = useState<RsuLinkType>(defaultLinkType ?? defaultLinkTypeForTarget(linkTarget))
 
   useEffect(() => {
     setCandidates({})
     setMessage(null)
     setSelectedCandidateKey('')
-    setLinkType(linkTarget === 'transaction' ? 'share_deposit' : 'payslip_rsu_income')
+    setSelectedAllocationKey('settlement')
+    setLinkType(defaultLinkType ?? defaultLinkTypeForTarget(linkTarget))
 
     if (!canViewSource) return
 
@@ -444,7 +462,7 @@ function RsuLinkWorkflow({
     return () => {
       cancelled = true
     }
-  }, [canViewSource, linkTarget, settlementId])
+  }, [canViewSource, defaultLinkType, linkTarget, settlementId])
 
   const rows = linkTarget === 'transaction' ? candidates.transactions ?? [] : candidates.payslips ?? []
   const selectedCandidate = rows.find((candidate) => candidateKey(linkTarget, candidate.id) === selectedCandidateKey) ?? rows[0] ?? null
@@ -459,8 +477,11 @@ function RsuLinkWorkflow({
   }, [linkTarget, rows, selectedCandidateKey])
 
   useEffect(() => {
-    if (selectedAllocationKey === 'settlement' && allocationChoices[0]) {
-      setSelectedAllocationKey(allocationChoices[0].key)
+    if (
+      selectedAllocationKey !== 'settlement'
+      && !allocationChoices.some((choice) => choice.key === selectedAllocationKey)
+    ) {
+      setSelectedAllocationKey('settlement')
     }
   }, [allocationChoices, selectedAllocationKey])
 
