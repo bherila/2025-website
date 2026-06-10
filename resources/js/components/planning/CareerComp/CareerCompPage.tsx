@@ -1,6 +1,7 @@
 import { AlertTriangle, Archive, BarChart3, Briefcase, ChevronRight, Copy, Download, FileText, LineChart, type LucideIcon, ReceiptText, Settings2, Share2, Table2, Trash2, Upload } from 'lucide-react'
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import AgentAccessCard from '@/components/agent/AgentAccessCard'
 import Container from '@/components/container'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -1076,6 +1077,13 @@ export function CareerCompPage({ initialData }: CareerCompPageProps): ReactEleme
           {RESULT_VIEWS.map((view) => renderColumnLauncher(view, () => openSection({ kind: 'result', id: view.id })))}
         </div>
       </section>
+
+      {initialData.authenticated && !isShareView ? (
+        <section className="grid gap-3">
+          <h2 className="text-sm font-semibold text-muted-foreground">Agent access</h2>
+          <AgentAccessCard module="career-comparison" />
+        </section>
+      ) : null}
     </div>
   )
 
