@@ -35,11 +35,14 @@ The finance module ships a project-specific **Model Context Protocol (MCP) serve
 
 ## Authentication (Production / HTTP Transport)
 
-The HTTP route (`POST /mcp/finance`) requires an `Authorization: Bearer <token>` header. The token is matched against the `mcp_api_key` column on the `users` table via the `AuthenticateMcpRequest` middleware. A matching token is not enough by itself: the associated user must also pass `User::canLogin()`, so disabled users or users with all login roles removed receive the same generic `401 Unauthorized` response as invalid tokens.
+The HTTP route (`POST /mcp/finance`) requires an `Authorization: Bearer <token>` header. Two kinds of bearer token are accepted:
 
-**Generating a key:** Users navigate to **My Account** → **MCP API Key** section and click **Generate MCP API Key**. The key is shown once. A subsequent click **regenerates** the key, immediately invalidating the old one.
+1. **Agent setup tokens (recommended)** — temporary, Finance-scoped tokens (`bha_…`, 4-hour default) issued by the **Agent Access (AI clients)** card on the Finance Config page. Clicking **Copy Claude setup** issues a token and copies an MCP client config with the token embedded; manage or revoke tokens from **My Account → Agent API Tokens**. See [docs/agent-access.md](../agent-access.md) for the full token model, scoping rules, and the REST/TOON surface.
+2. **Legacy per-user MCP API key** — matched against the `mcp_api_key` column on the `users` table. Generate from **My Account → MCP API Key** (shown once; regenerating invalidates the old one). Legacy keys are unscoped and follow the user's live permissions.
 
-**No shared secret / env var is used.** Each user has their own per-user key that can be rotated without a deploy.
+In both cases a matching token is not enough by itself: the associated user must also pass `User::canLogin()`, so disabled users or users with all login roles removed receive the same generic `401 Unauthorized` response as invalid tokens. Tool visibility (`tools/list`) and invocation are additionally filtered by the user's feature permissions and, for agent tokens, by the token's module scope.
+
+**No shared secret / env var is used.** Each user has their own per-user tokens that can be rotated without a deploy.
 
 ---
 
@@ -61,7 +64,7 @@ For Claude Code / GitHub Copilot Coding Agent in local dev, add to your MCP clie
 
 ## Production (HTTP Transport)
 
-Generate an MCP API key from My Account, then:
+The easiest path is the **Agent Access (AI clients)** card on the Finance Config page — **Copy Claude setup** generates this config for you with a temporary Finance-scoped token already embedded. To configure manually (with either an agent setup token or a legacy MCP API key):
 
 ```json
 {
@@ -69,12 +72,14 @@ Generate an MCP API key from My Account, then:
     "bh-finance": {
       "url": "https://your-domain.com/mcp/finance",
       "headers": {
-        "Authorization": "Bearer <your-mcp-api-key>"
+        "Authorization": "Bearer <your-token>"
       }
     }
   }
 }
 ```
+
+A checked-in example client config covering both transports is at [`.mcp.example.json`](../../.mcp.example.json).
 
 ## GitHub Copilot Coding Agent (Remote Access)
 
