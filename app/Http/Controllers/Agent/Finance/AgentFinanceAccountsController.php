@@ -38,13 +38,13 @@ class AgentFinanceAccountsController extends Controller
                         'acct_name' => $account->acct_name,
                         'acct_is_debt' => (bool) $account->acct_is_debt,
                         'acct_is_retirement' => (bool) $account->acct_is_retirement,
-                        'when_closed' => $account->when_closed?->toDateString(),
+                        'when_closed' => $account->when_closed,
                     ];
 
                     if ($includeDetail) {
                         $row += [
                             'acct_last_balance' => $account->acct_last_balance,
-                            'acct_last_balance_date' => $account->acct_last_balance_date?->toDateString(),
+                            'acct_last_balance_date' => $account->acct_last_balance_date,
                             'acct_sort_order' => $account->acct_sort_order,
                         ];
                     }

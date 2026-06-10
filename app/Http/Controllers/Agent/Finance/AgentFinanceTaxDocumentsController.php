@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Agent\Finance;
 
 use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
+use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinEmploymentEntity;
 use App\Services\Finance\Agent\TaxDocumentsQueryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -73,6 +75,9 @@ class AgentFinanceTaxDocumentsController extends Controller
      */
     private function metadata(FileForTaxDocument $doc): array
     {
+        $entity = $doc->employmentEntity;
+        $account = $doc->account;
+
         return [
             'id' => $doc->id,
             'tax_year' => $doc->tax_year,
@@ -83,14 +88,14 @@ class AgentFinanceTaxDocumentsController extends Controller
             'is_reviewed' => (bool) $doc->is_reviewed,
             'genai_status' => $doc->genai_status,
             'parsed_data_needs_review' => (bool) $doc->parsed_data_needs_review,
-            'employment_entity' => $doc->employmentEntity === null ? null : [
-                'id' => $doc->employmentEntity->id,
-                'display_name' => $doc->employmentEntity->display_name,
-            ],
-            'account' => $doc->account === null ? null : [
-                'acct_id' => $doc->account->acct_id,
-                'acct_name' => $doc->account->acct_name,
-            ],
+            'employment_entity' => $entity instanceof FinEmploymentEntity ? [
+                'id' => $entity->id,
+                'display_name' => $entity->display_name,
+            ] : null,
+            'account' => $account instanceof FinAccounts ? [
+                'acct_id' => $account->acct_id,
+                'acct_name' => $account->acct_name,
+            ] : null,
             'created_at' => $doc->created_at?->toIso8601String(),
         ];
     }

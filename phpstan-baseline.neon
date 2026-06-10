@@ -585,8 +585,8 @@ parameters:
 		-
 			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTaxDocument model\.$#'
 			identifier: larastan.relationExistence
-			count: 1
-			path: app/Mcp/Tools/GetTaxDocument.php
+			count: 2
+			path: app/Services/Finance/Agent/TaxDocumentsQueryService.php
 
 		-
 			message: '#^Call to an undefined method Laravel\\Mcp\\Request\:\:input\(\)\.$#'
@@ -633,12 +633,6 @@ parameters:
 		-
 			message: '#^Method App\\Mcp\\Tools\\ListTaxDocuments\:\:schema\(\) should return array\<string, Illuminate\\Contracts\\JsonSchema\\JsonSchema\> but returns array\<string, Illuminate\\JsonSchema\\Types\\BooleanType\|Illuminate\\JsonSchema\\Types\\IntegerType\|Illuminate\\JsonSchema\\Types\\StringType\>\.$#'
 			identifier: return.type
-			count: 1
-			path: app/Mcp/Tools/ListTaxDocuments.php
-
-		-
-			message: '#^Relation ''uploader'' is not found in App\\Models\\Files\\FileForTaxDocument model\.$#'
-			identifier: larastan.relationExistence
 			count: 1
 			path: app/Mcp/Tools/ListTaxDocuments.php
 

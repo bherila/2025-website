@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Agent\Finance;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountTag;
 use App\Services\Finance\Agent\TransactionsQueryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -58,7 +59,7 @@ class AgentFinanceTransactionsController extends Controller
                     't_harvested_amount' => $item->t_harvested_amount,
                     't_account_balance' => $item->t_account_balance,
                     'tags' => $item->tags
-                        ->map(fn ($tag): array => [
+                        ->map(fn (FinAccountTag $tag): array => [
                             'tag_id' => $tag->tag_id,
                             'tag_label' => $tag->tag_label,
                             'tag_color' => $tag->tag_color,

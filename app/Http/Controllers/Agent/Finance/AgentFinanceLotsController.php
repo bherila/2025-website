@@ -43,7 +43,7 @@ class AgentFinanceLotsController extends Controller
                     'acct_id' => $lot->acct_id,
                     'symbol' => $lot->symbol,
                     'quantity' => $lot->quantity,
-                    'purchase_date' => $lot->purchase_date?->toDateString(),
+                    'purchase_date' => $lot->purchase_date->toDateString(),
                     'sale_date' => $lot->sale_date?->toDateString(),
                     'cost_basis' => $lot->cost_basis,
                     'cost_per_unit' => $lot->cost_per_unit,
