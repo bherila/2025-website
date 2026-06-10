@@ -174,7 +174,7 @@ class McpFinanceToolsTest extends TestCase
 
         Finance::actingAs($user)
             ->tool(ListAccounts::class)
-            ->assertHasErrors(['Forbidden: missing required feature permission [finance.accounts.basic].']);
+            ->assertHasErrors(['Tool [list-accounts] not found.']);
     }
 
     public function test_mcp_http_endpoint_rejects_token_for_disabled_user(): void

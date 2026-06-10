@@ -20,6 +20,7 @@ Mcp::local('finance', Finance::class);
  * AuthenticateAgentRequest resolves the user statelessly (legacy keys keep
  * working via the AgentTokenService fallback) and binds an AgentContext so
  * tools/list discovery is filtered by feature permission AND token scope
- * (see App\Mcp\Support\FiltersByFeature).
+ * (see App\Mcp\Support\FiltersByFeature). The `:finance` parameter rejects
+ * module-scoped agent tokens issued for a different module.
  */
-Mcp::web('/mcp/finance', Finance::class)->middleware(AuthenticateAgentRequest::class);
+Mcp::web('/mcp/finance', Finance::class)->middleware(AuthenticateAgentRequest::class.':finance');
