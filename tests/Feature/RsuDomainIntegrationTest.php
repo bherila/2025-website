@@ -6,6 +6,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEquityAwards;
 use App\Models\FinanceTool\FinPayslips;
+use App\Models\FinanceTool\FinRsuLink;
 use App\Models\FinanceTool\FinRsuVestSettlement;
 use App\Models\FinanceTool\FinRsuVestSettlementAllocation;
 use App\Models\FinanceTool\StockQuotesDaily;
@@ -855,6 +856,136 @@ class RsuDomainIntegrationTest extends TestCase
             (float) $allocation->vested_shares,
             (float) $allocation->allocated_withheld_shares,
         );
+    }
+
+    public function test_reducing_to_fractional_gross_floors_withheld_shares(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-FRAC',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 8,
+            'actualTaxRemitted' => 300,
+        ])->assertOk();
+
+        // Reduce gross to a fractional share count below the withheld count.
+        $this->actingAs($user)->postJson('/api/rsu', [[
+            'id' => $award->id,
+            'award_id' => 'RSU-FRAC',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 5.5,
+            'symbol' => 'META',
+            'vest_price' => 100,
+        ]])->assertOk();
+
+        $settlement = FinRsuVestSettlement::query()->findOrFail($settlementId);
+        $this->assertSame('5.500000', $settlement->gross_shares);
+        // withheld_shares_whole must stay whole: floor(5.5) = 5, never 5.5.
+        $this->assertSame('5.000000', $settlement->withheld_shares_whole);
+        $this->assertSame('500.0000', $settlement->withheld_value);
+    }
+
+    public function test_batch_upsert_does_not_delete_settlement_during_transient_empty_bucket(): void
+    {
+        $user = User::factory()->create();
+        $stay = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-MOVE-OUT',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 6,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm")->assertOk();
+
+        // One payload that moves the only award out of the bucket AND adds a
+        // replacement award into the same bucket. The bucket is transiently empty
+        // between the two rows, but non-empty once the whole payload is applied.
+        $this->actingAs($user)->postJson('/api/rsu', [
+            [
+                'id' => $stay->id,
+                'award_id' => 'RSU-MOVE-OUT',
+                'grant_date' => '2025-01-01',
+                'vest_date' => '2026-07-01',
+                'share_count' => 6,
+                'symbol' => 'META',
+                'vest_price' => 100,
+            ],
+            [
+                'award_id' => 'RSU-MOVE-IN',
+                'grant_date' => '2025-01-01',
+                'vest_date' => '2026-06-01',
+                'share_count' => 4,
+                'symbol' => 'META',
+                'vest_price' => 100,
+            ],
+        ])->assertOk();
+
+        // The settlement survives (it is not deleted-and-lost mid-batch) and now
+        // reflects the replacement award.
+        $settlement = FinRsuVestSettlement::query()->with('allocations')->find($settlementId);
+        $this->assertNotNull($settlement, 'settlement must not be deleted during the transient empty-bucket state');
+        $this->assertSame('4.000000', $settlement->gross_shares);
+        $replacement = FinEquityAwards::query()->where('award_id', 'RSU-MOVE-IN')->firstOrFail();
+        $this->assertSame((int) $replacement->id, (int) $settlement->allocations->first()->equity_award_id);
+    }
+
+    public function test_reconciliation_backfills_award_id_on_legacy_allocation_only_link(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-LEGACY-LINK',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm")->assertOk();
+        $allocation = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId)->allocations->first();
+
+        // Simulate a legacy allocation-only link created before equity_award_id
+        // was derived on link creation.
+        $link = FinRsuLink::query()->create([
+            'uid' => $user->id,
+            'settlement_id' => $settlementId,
+            'settlement_allocation_id' => $allocation->id,
+            'equity_award_id' => null,
+            'link_type' => 'tax_lot',
+            'status' => 'confirmed',
+        ]);
+
+        // Any reconciliation that updates the allocation in place backfills the link.
+        $this->actingAs($user)->postJson('/api/rsu', [[
+            'id' => $award->id,
+            'award_id' => 'RSU-LEGACY-LINK',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 12,
+            'symbol' => 'META',
+            'vest_price' => 100,
+        ]])->assertOk();
+
+        $this->assertSame((int) $award->id, (int) $link->refresh()->equity_award_id);
     }
 
     public function test_allocation_only_link_appears_on_award_level_response(): void
