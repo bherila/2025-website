@@ -1231,12 +1231,6 @@ parameters:
 			path: app/Models/UtilityBillTracker/UtilityAccount.php
 
 		-
-			message: '#^Method App\\Models\\UtilityBillTracker\\UtilityBill\:\:linkedTransaction\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
-			identifier: missingType.generics
-			count: 1
-			path: app/Models/UtilityBillTracker/UtilityBill.php
-
-		-
 			message: '#^Method App\\Models\\UtilityBillTracker\\UtilityBill\:\:utilityAccount\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\BelongsTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
 			identifier: missingType.generics
 			count: 1
