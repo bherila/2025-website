@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\SerializesDatesAsLocal;
 use Database\Factories\AgentApiTokenFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -29,7 +30,7 @@ use Illuminate\Support\Carbon;
 class AgentApiToken extends Model
 {
     /** @use HasFactory<AgentApiTokenFactory> */
-    use HasFactory;
+    use HasFactory, SerializesDatesAsLocal;
 
     public const PURPOSE_QUICK_SETUP = 'quick_setup';
 

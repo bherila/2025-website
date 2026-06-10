@@ -69,7 +69,7 @@ class AgentSetupTokenTest extends TestCase
         $user = $this->user();
 
         $this->actingAs($user)
-            ->postJson('/api/agent/setup-tokens', ['module' => 'tax', 'ttl_minutes' => 30])
+            ->postJson('/api/agent/setup-tokens', ['module' => 'finance', 'ttl_minutes' => 30])
             ->assertStatus(201);
 
         $model = AgentApiToken::query()->where('user_id', $user->id)->sole();
@@ -84,6 +84,12 @@ class AgentSetupTokenTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors(['module']);
 
         $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'phr'])
+            ->assertStatus(422)->assertJsonValidationErrors(['module']);
+
+        $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'tax'])
+            ->assertStatus(422)->assertJsonValidationErrors(['module']);
+
+        $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'career-comparison'])
             ->assertStatus(422)->assertJsonValidationErrors(['module']);
 
         $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'finance', 'client' => 'cursor'])

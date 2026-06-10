@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,22 +38,29 @@ export const AgentTokensSection: React.FC<AgentTokensSectionProps> = ({ onSucces
   const [tokens, setTokens] = useState<AgentToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [revokingId, setRevokingId] = useState<number | null>(null);
+  const onErrorRef = useRef(onError);
 
-  const fetchTokens = useCallback(async () => {
-    try {
-      const data = (await fetchWrapper.get('/api/agent/setup-tokens')) as { tokens: AgentToken[] };
-      setTokens(data.tokens);
-    } catch (err: unknown) {
-      const message = typeof err === 'string' ? err : 'Failed to load agent tokens';
-      onError('agentTokens', message);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    onErrorRef.current = onError;
   }, [onError]);
 
   useEffect(() => {
-    fetchTokens();
-  }, [fetchTokens]);
+    const fetchTokens = async () => {
+      setLoading(true);
+
+      try {
+        const data = (await fetchWrapper.get('/api/agent/setup-tokens')) as { tokens: AgentToken[] };
+        setTokens(data.tokens);
+      } catch (err: unknown) {
+        const message = typeof err === 'string' ? err : 'Failed to load agent tokens';
+        onErrorRef.current('agentTokens', message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchTokens();
+  }, []);
 
   const revokeToken = async (id: number) => {
     setRevokingId(id);
