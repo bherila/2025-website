@@ -19,7 +19,7 @@ interface AddPaymentModalProps {
     onClose: () => void
     payment: ClientInvoicePayment | null
     defaultAmount?: string
-    /** Remaining balance on the invoice, used to warn about overpayment. Optional. */
+    /** Remaining balance on the invoice, net of any existing payment being edited. Optional. */
     remainingBalance?: number
     onSave: (payment: Partial<ClientInvoicePayment>) => void
     onDelete?: (payment: ClientInvoicePayment) => void
@@ -32,9 +32,12 @@ export default function AddPaymentModal({ isOpen, onClose, payment, defaultAmoun
     const [notes, setNotes] = useState('')
     const [isSaving, setIsSaving] = useState(false)
     const enteredAmount = Number(amount)
+    const editableBalance = remainingBalance === undefined
+        ? undefined
+        : currency(remainingBalance).add(payment ? payment.amount : 0).value
     const overpaymentLabel =
-        remainingBalance !== undefined && Number.isFinite(enteredAmount) && enteredAmount > remainingBalance
-            ? currency(enteredAmount).subtract(remainingBalance).format()
+        editableBalance !== undefined && Number.isFinite(enteredAmount) && enteredAmount > editableBalance
+            ? currency(enteredAmount).subtract(editableBalance).format()
             : null
 
     useEffect(() => {
