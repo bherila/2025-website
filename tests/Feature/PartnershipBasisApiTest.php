@@ -6,8 +6,10 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPartnershipBasisEvent;
+use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Models\User;
+use App\Services\Finance\MoneyMath;
 use App\Services\Finance\PartnershipBasisService;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\Finance\TaxPreviewWorkbookBuilder;
@@ -426,6 +428,99 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertFalse($row['isShortTerm']);
 
         $this->assertSame(50.0, $facts['scheduleD']['line10GainLoss']);
+    }
+
+    public function test_released_suspended_loss_reduces_form8949_cost_basis_to_match_service_ending_basis(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Released Loss Sale Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Released Loss Sale LP',
+            'normalized_partnership_name' => 'released loss sale lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2021-01-01',
+        ]);
+
+        // 2023: a 150 loss against 100 basis suspends 50 and zeroes outside basis.
+        $this->event($user->id, $interest->id, 2023, 'beginning_basis', 100_00, 'reviewed');
+        $this->event($user->id, $interest->id, 2023, 'deductible_loss', 150_00, 'reviewed');
+        // 2024: a 100 contribution restores basis; 50 of the suspended loss releases (basis → 50),
+        // then a complete sale realizes 200.
+        $this->event($user->id, $interest->id, 2024, 'capital_contribution_cash', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 999_00, '2024-06-15', [
+            'date_acquired' => '2021-01-01',
+            'proceeds_cents' => 200_00,
+            'description' => 'Released Loss Sale LP partnership interest',
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2023);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $basisYear = FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->firstOrFail();
+        // Service: contribution restores 100, release nets 50 → ending outside basis 50 before sale.
+        $this->assertSame(0, $basisYear->suspended_loss_carryforward_cents);
+        // Amount realized 200 − basis-immediately-before-sale 50 = 150 gain.
+        $this->assertSame(150_00, $basisYear->liquidation_gain_loss_cents);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+        $row = collect($facts['form8949']['rows'])
+            ->firstWhere('accountName', 'Released Loss Sale LP');
+        $this->assertNotNull($row, 'complete sale/exchange metadata should generate a Form 8949 row');
+        // The released suspended loss must net out of the Form 8949 cost basis so it matches the
+        // service's basis immediately before the sale (50) rather than the pre-release 100.
+        $this->assertSame(50.0, $row['costBasis']);
+        $this->assertSame(200.0, $row['proceeds']);
+        // Builder gain/loss and the stored estimate no longer diverge.
+        $this->assertSame(150.0, $row['gainOrLoss']);
+        $this->assertSame(MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents), $row['gainOrLoss']);
+    }
+
+    public function test_negative_amount_realized_flows_signed_through_estimate_and_form8949(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Negative Realized Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Negative Realized LP',
+            'normalized_partnership_name' => 'negative realized lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2021-01-01',
+        ]);
+
+        // Selling expenses (60) exceed proceeds (10) + liability relief (5): amount realized = −45.
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 999_00, '2024-06-15', [
+            'date_acquired' => '2021-01-01',
+            'proceeds_cents' => 10_00,
+            'liability_relief_cents' => 5_00,
+            'selling_expenses_cents' => 60_00,
+            'description' => 'Negative Realized LP partnership interest',
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $basisYear = FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->firstOrFail();
+        // Amount realized −45 − basis 100 = −145 loss; the signed amount realized is not clamped.
+        $this->assertSame(-145_00, $basisYear->liquidation_gain_loss_cents);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+        $row = collect($facts['form8949']['rows'])
+            ->firstWhere('accountName', 'Negative Realized LP');
+        $this->assertNotNull($row, 'a negative amount realized should still produce a complete Form 8949 row');
+        $this->assertSame(-45.0, $row['proceeds']);
+        $this->assertSame(100.0, $row['costBasis']);
+        $this->assertSame(-145.0, $row['gainOrLoss']);
+        // The stored estimate and the Form 8949 row agree on the signed loss.
+        $this->assertSame(MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents), $row['gainOrLoss']);
     }
 
     public function test_property_distribution_emits_form7217_sources_and_workbook_rows(): void

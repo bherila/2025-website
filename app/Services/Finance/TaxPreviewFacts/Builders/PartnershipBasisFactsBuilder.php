@@ -318,13 +318,23 @@ class PartnershipBasisFactsBuilder
         $availableOutsideBasis = (int) $basisYear->beginning_outside_basis_cents;
         $allocations = [];
 
+        // The authoritative rollforward (PartnershipBasisService) releases a suspended loss AFTER its
+        // event loop and reduces ending outside basis by that amount before computing the sale gain,
+        // independent of event_order. SuspendedLossReleased carries BASIS_EFFECT_NONE in the enum
+        // (other call sites depend on that) and is ordered AFTER the sale event, so the in-loop switch
+        // would never apply it before the SaleExchange snapshot. Pre-compute the release here and net
+        // it out at the snapshot so cost_basis_cents matches the service's ending outside basis.
+        $releasedSuspendedLoss = $this->releasedSuspendedLossCents($events);
+
         foreach ($events as $event) {
             $type = PartnershipBasisEventType::tryFrom((string) $event->event_type);
-            if ($type === null || in_array($type, [PartnershipBasisEventType::BeginningBasis, PartnershipBasisEventType::PriorYearRollforward], true)) {
+            if ($type === null || in_array($type, [PartnershipBasisEventType::BeginningBasis, PartnershipBasisEventType::PriorYearRollforward, PartnershipBasisEventType::SuspendedLossReleased], true)) {
                 continue;
             }
 
             if ($type === PartnershipBasisEventType::SaleExchange) {
+                $availableOutsideBasis -= min($availableOutsideBasis, $releasedSuspendedLoss);
+                $releasedSuspendedLoss = 0;
                 $metadata = $event->getAttribute('metadata');
                 $metadata = is_array($metadata) ? $metadata : [];
                 $amountRealized = PartnershipBasisSaleExchangeMath::amountRealizedCents($event);
@@ -375,6 +385,27 @@ class PartnershipBasisFactsBuilder
         }
 
         return $allocations;
+    }
+
+    /**
+     * Total suspended loss released into outside basis this year. The service stores each release as a
+     * SuspendedLossReleased event whose metadata key released_suspended_loss_cents is authoritative,
+     * falling back to the absolute signed amount when the metadata is absent.
+     *
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     */
+    private function releasedSuspendedLossCents(Collection $events): int
+    {
+        return (int) $events
+            ->where('event_type', PartnershipBasisEventType::SuspendedLossReleased->value)
+            ->sum(function (FinPartnershipBasisEvent $event): int {
+                $metadata = $event->getAttribute('metadata');
+                $metadata = is_array($metadata) ? $metadata : [];
+
+                return isset($metadata['released_suspended_loss_cents']) && is_numeric($metadata['released_suspended_loss_cents'])
+                    ? (int) $metadata['released_suspended_loss_cents']
+                    : abs((int) $event->amount_cents);
+            });
     }
 
     /**

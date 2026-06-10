@@ -1633,6 +1633,12 @@ class PartnershipBasisService
     }
 
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
+    private function hasSaleExchangeEvent(Collection $events): bool
+    {
+        return $events->contains(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::SaleExchange->value);
+    }
+
+    /** @param Collection<int, FinPartnershipBasisEvent> $events */
     private function beginningOutsideBasisCents(Collection $events, ?FinPartnershipBasisYear $prior): int
     {
         $manual = $events->filter(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::BeginningBasis->value)->last();
@@ -1820,9 +1826,13 @@ class PartnershipBasisService
             return null;
         }
 
-        $saleAmountRealized = $this->saleExchangeAmountRealizedTotalCents($events);
-        if ($saleAmountRealized > 0) {
-            return $saleAmountRealized - $endingOutside;
+        // A sale/exchange event is authoritative for amount realized, even when selling expenses exceed
+        // proceeds plus liability relief and the amount realized is negative — that simply yields a
+        // larger capital loss. Gate on the PRESENCE of a sale/exchange event, not on a positive amount
+        // realized, so a legitimately negative amount realized flows through signed (matching the Form
+        // 8949 row) rather than being dropped to the distribution/remaining-basis fallback.
+        if ($this->hasSaleExchangeEvent($events)) {
+            return $this->saleExchangeAmountRealizedTotalCents($events) - $endingOutside;
         }
 
         return $distributionGain > 0 ? $distributionGain : -$endingOutside;

@@ -1269,6 +1269,24 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(-40_00, $basisYear->liquidation_gain_loss_cents);
     }
 
+    public function test_sale_exchange_negative_amount_realized_is_honored_signed(): void
+    {
+        $interest = $this->interest('Negative Realized LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        // Selling expenses (60) exceed proceeds (10) + liability relief (5): amount realized = −45.
+        $this->manualEvent($interest, 2024, 'sale_exchange', 999_00, [
+            'proceeds_cents' => 10_00,
+            'liability_relief_cents' => 5_00,
+            'selling_expenses_cents' => 60_00,
+        ]);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        // Amount realized −45 − basis 100 = −145; the negative amount realized is not clamped to a
+        // remaining-basis fallback loss of −100.
+        $this->assertSame(-145_00, $basisYear->liquidation_gain_loss_cents);
+    }
+
     public function test_signed_manual_loss_does_not_inflate_tax_basis_capital(): void
     {
         $interest = $this->interest('Signed Capital LP');
