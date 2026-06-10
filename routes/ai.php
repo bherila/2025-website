@@ -14,9 +14,9 @@ Mcp::local('finance', Finance::class);
 
 /**
  * HTTP transport — used by remote MCP clients (e.g. production Claude Desktop config).
- * Requests must carry an `Authorization: Bearer <mcp_api_key>` header.
+ * Requests must carry an `Authorization: Bearer <mcp_api_key_or_agent_token>` header.
  *
- * The AuthenticateMcpRequest middleware looks up the user by mcp_api_key
- * and calls Auth::login() so all per-user model scopes work correctly.
+ * The AuthenticateMcpRequest middleware sets the authenticated user
+ * statelessly so all per-user model scopes work correctly.
  */
 Mcp::web('/mcp/finance', Finance::class)->middleware(AuthenticateMcpRequest::class);

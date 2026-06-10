@@ -2,9 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Mcp\Servers\Finance;
+use App\Mcp\Tools\ListAccounts;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
 use App\Services\Finance\DocumentIngestionService;
+use App\Support\Agent\AgentContext;
+use App\Support\Agent\AgentTokenService;
 use Tests\TestCase;
 
 /**
@@ -125,6 +129,52 @@ class McpFinanceToolsTest extends TestCase
 
         // Auth passed — should not be 401 (may be 200 or other MCP protocol response)
         $response->assertStatus(200);
+    }
+
+    public function test_mcp_http_endpoint_accepts_finance_agent_api_token(): void
+    {
+        $user = $this->grantFeatures($this->createUser(), ['finance.payslips.view']);
+        $result = app(AgentTokenService::class)->createQuickSetupToken($user, 'finance', 'claude');
+
+        $response = $this->postJson('/mcp/finance', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+        ], [
+            'Authorization' => 'Bearer '.$result['token'],
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertNotNull($result['model']->refresh()->last_used_at);
+    }
+
+    public function test_mcp_http_endpoint_rejects_agent_api_token_for_other_module(): void
+    {
+        $user = $this->grantFeatures($this->createUser(), ['finance.tax-preview.view']);
+        $result = app(AgentTokenService::class)->createQuickSetupToken($user, 'tax', 'claude');
+
+        $response = $this->postJson('/mcp/finance', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+        ], [
+            'Authorization' => 'Bearer '.$result['token'],
+        ]);
+
+        $response->assertStatus(401);
+    }
+
+    public function test_mcp_tool_authorization_enforces_agent_token_permission_scope(): void
+    {
+        $user = $this->grantFeatures($this->createUser(), ['finance.accounts.basic', 'finance.payslips.view']);
+        $result = app(AgentTokenService::class)->createQuickSetupToken($user, 'finance', 'claude');
+
+        $result['model']->forceFill(['allowed_permissions' => ['finance.payslips.view']])->save();
+        app()->instance(AgentContext::class, new AgentContext($user, $result['model']->refresh()));
+
+        Finance::actingAs($user)
+            ->tool(ListAccounts::class)
+            ->assertHasErrors(['Forbidden: missing required feature permission [finance.accounts.basic].']);
     }
 
     public function test_mcp_http_endpoint_rejects_token_for_disabled_user(): void

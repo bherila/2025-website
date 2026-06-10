@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { getAuthComponents, getCsrfToken } from './auth/shared-components';
 import { Alert, AlertDescription } from './components/ui/alert';
 import { Spinner } from './components/ui/spinner';
+import { AgentTokensSection } from './user/agent-tokens';
 import { AiConfigurationsSection } from './user/ai-configurations';
 import { ApiKeySection } from './user/api-key';
 import { GenAiQuotaSection } from './user/genai-quota';
@@ -107,6 +108,11 @@ const MyAccount: React.FC = () => {
         onSuccess={setSuccess}
         onError={(field, message) => setErrors({ [field]: message })}
         onUserUpdate={fetchUserData}
+      />
+
+      <AgentTokensSection
+        onSuccess={setSuccess}
+        onError={(field, message) => setErrors({ [field]: message })}
       />
 
       <LoginAuditSection

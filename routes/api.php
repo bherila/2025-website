@@ -3,6 +3,7 @@
 use App\GenAiProcessor\Http\Controllers\AdminGenAiJobsController;
 use App\GenAiProcessor\Http\Controllers\GenAiImportController;
 use App\Http\Controllers\AdminTaxNormalizationController;
+use App\Http\Controllers\Agent\AgentSetupTokenController;
 use App\Http\Controllers\Api\UserAiConfigurationController;
 use App\Http\Controllers\Api\UserAiModelsController;
 use App\Http\Controllers\ClassActionClaimController;
@@ -316,6 +317,14 @@ Route::middleware(['web', 'auth', 'feature:finance.lots.manage'])->post('/financ
 Route::middleware(['web', 'auth'])->post('/user/update-api-key', [UserApiController::class, 'updateApiKey']);
 Route::middleware(['web', 'auth'])->post('/user/update-genai-quota', [UserApiController::class, 'updateGenAiQuota']);
 Route::middleware(['web', 'auth'])->post('/user/generate-mcp-api-key', [UserApiController::class, 'generateMcpApiKey']);
+
+// Agent API quick-setup tokens (browser UI; session auth, NOT bearer).
+// The bearer-authenticated agent surface itself lives in routes/agent.php.
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::post('/agent/setup-tokens', [AgentSetupTokenController::class, 'store']);
+    Route::get('/agent/setup-tokens', [AgentSetupTokenController::class, 'index']);
+    Route::delete('/agent/setup-tokens/{id}', [AgentSetupTokenController::class, 'destroy']);
+});
 
 // AI configuration routes
 Route::middleware(['web', 'auth'])->group(function () {
