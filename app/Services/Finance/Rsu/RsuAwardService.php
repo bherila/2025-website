@@ -31,9 +31,20 @@ class RsuAwardService
     {
         return DB::transaction(function () use ($userId, $grants, $priceSource): array {
             $awards = [];
+            $buckets = [];
             foreach ($grants as $grant) {
-                $awards[] = $this->upsert($userId, $grant, $priceSource);
+                $result = $this->persistAward($userId, $grant, $priceSource);
+                $awards[] = $result['award'];
+                foreach ($result['buckets'] as $bucket) {
+                    $buckets[] = $bucket;
+                }
             }
+
+            // Reconcile once per affected bucket after every row is applied. Doing
+            // it row-by-row could delete a settlement during a transient empty-bucket
+            // state (an award moved out by one row before another row moves one in),
+            // even though the bucket is non-empty once the whole payload is applied.
+            $this->reconcileBuckets($userId, $buckets);
 
             return $awards;
         });
@@ -41,6 +52,22 @@ class RsuAwardService
 
     /** @param array<string, mixed> $payload */
     public function upsert(int $userId, array $payload, string $priceSource = self::PRICE_SOURCE_MANUAL): FinEquityAwards
+    {
+        $result = $this->persistAward($userId, $payload, $priceSource);
+        $this->reconcileBuckets($userId, $result['buckets']);
+
+        return $result['award'];
+    }
+
+    /**
+     * Persist a single award without reconciling, returning the award and the
+     * settlement buckets its create/edit affects (the new vest_date+symbol, plus
+     * the bucket it left behind if the edit moved it).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{award: FinEquityAwards, buckets: array<int, array{0: string, 1: string}>}
+     */
+    private function persistAward(int $userId, array $payload, string $priceSource): array
     {
         $data = $this->validated($payload);
         $identity = [
@@ -63,30 +90,51 @@ class RsuAwardService
         $this->applyNullablePrice($award, $data, 'vest_price', 'vest_price_source', 'vest_price_fetched_at', $priceSource);
         $award->save();
 
-        $this->reconcileAffectedSettlements($userId, $award, $originalVestDate, $originalSymbol);
-
-        return $award;
+        return ['award' => $award, 'buckets' => $this->affectedBuckets($award, $originalVestDate, $originalSymbol)];
     }
 
     /**
-     * After an award is created or edited, re-reconcile the settlement(s) it
-     * affects. An edit that moves the award to a different vest_date/symbol must
-     * also reconcile the settlement it left behind.
+     * The settlement bucket(s) a create/edit affects: the new vest_date+symbol,
+     * plus the bucket it left behind when the edit moved it. Empty/undated
+     * buckets are dropped.
+     *
+     * @return array<int, array{0: string, 1: string}>
      */
-    private function reconcileAffectedSettlements(int $userId, FinEquityAwards $award, ?string $originalVestDate, ?string $originalSymbol): void
+    private function affectedBuckets(FinEquityAwards $award, ?string $originalVestDate, ?string $originalSymbol): array
     {
         $newVestDate = $this->dateString($award->vest_date);
         $newSymbol = (string) $award->symbol;
 
-        $buckets = [[$newVestDate, $newSymbol]];
+        $candidates = [[$newVestDate, $newSymbol]];
         if ($originalVestDate !== null && ($originalVestDate !== $newVestDate || $originalSymbol !== $newSymbol)) {
-            $buckets[] = [$originalVestDate, (string) $originalSymbol];
+            $candidates[] = [$originalVestDate, (string) $originalSymbol];
         }
 
-        foreach ($buckets as [$vestDate, $symbol]) {
+        $buckets = [];
+        foreach ($candidates as [$vestDate, $symbol]) {
             if ($vestDate === null || $symbol === '') {
                 continue;
             }
+            $buckets[] = [$vestDate, $symbol];
+        }
+
+        return $buckets;
+    }
+
+    /**
+     * Reconcile each affected settlement bucket exactly once.
+     *
+     * @param  array<int, array{0: string, 1: string}>  $buckets
+     */
+    private function reconcileBuckets(int $userId, array $buckets): void
+    {
+        $seen = [];
+        foreach ($buckets as [$vestDate, $symbol]) {
+            $key = $vestDate.'|'.$symbol;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
             $this->settlementService->reconcileAfterAwardChange($userId, $vestDate, $symbol);
         }
     }

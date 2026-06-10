@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEquityAwards;
 use App\Models\FinanceTool\FinPayslips;
+use App\Models\FinanceTool\FinRsuLink;
 use App\Models\FinanceTool\FinRsuVestSettlement;
 use App\Models\FinanceTool\FinRsuVestSettlementAllocation;
 use Closure;
@@ -371,7 +372,9 @@ class RsuSettlementService
     {
         $withheldShares = $settlement->withheld_shares_whole !== null ? (float) $settlement->withheld_shares_whole : null;
         if ($withheldShares !== null && $withheldShares > $grossShares) {
-            $withheldShares = $grossShares;
+            // withheld_shares_whole is a whole-share field; gross shares can be
+            // fractional, so floor rather than copying a fractional gross value.
+            $withheldShares = (float) floor($grossShares);
         }
 
         $withheldValue = ($withheldShares === null || $vestPrice === null)
@@ -426,6 +429,7 @@ class RsuSettlementService
             $allocation = $existing->get((int) $award->id);
             if ($allocation instanceof FinRsuVestSettlementAllocation) {
                 $allocation->update($attributes);
+                $this->backfillAllocationLinkAwardId($allocation, (int) $award->id);
 
                 continue;
             }
@@ -436,6 +440,21 @@ class RsuSettlementService
         $settlement->allocations()
             ->whereNotIn('equity_award_id', $retainedAwardIds === [] ? [0] : $retainedAwardIds)
             ->delete();
+    }
+
+    /**
+     * Backfill equity_award_id on any allocation-only links (those attached via
+     * settlement_allocation_id with a null equity_award_id). The award-level RSU
+     * response loads links by equity_award_id, so legacy allocation-only links
+     * created before deriveAllocationAwardId() would otherwise stay invisible
+     * across an in-place allocation update.
+     */
+    private function backfillAllocationLinkAwardId(FinRsuVestSettlementAllocation $allocation, int $awardId): void
+    {
+        FinRsuLink::query()
+            ->where('settlement_allocation_id', $allocation->id)
+            ->whereNull('equity_award_id')
+            ->update(['equity_award_id' => $awardId]);
     }
 
     private function reconcileAllocatedSettlement(FinRsuVestSettlement $settlement): void
