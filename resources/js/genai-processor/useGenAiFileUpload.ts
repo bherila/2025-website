@@ -49,6 +49,7 @@ export function useGenAiFileUpload(options: GenAiUploadOptions): {
           filename: file.name,
           content_type: file.type || 'application/pdf',
           file_size: file.size,
+          job_type: options.jobType,
         })
         const { signed_url, s3_key } = uploadData
 

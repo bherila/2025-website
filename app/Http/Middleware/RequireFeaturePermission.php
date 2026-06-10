@@ -13,9 +13,14 @@ class RequireFeaturePermission
     public function __construct(private readonly FeatureAccess $featureAccess) {}
 
     /**
+     * Authorize the request when the user holds ANY of the given feature
+     * permissions. Passing multiple permissions (comma-separated in the route
+     * definition, e.g. `feature:finance.lots.view,finance.transactions.view`)
+     * grants access if at least one is satisfied, without over-granting either.
+     *
      * @param  Closure(Request): Response  $next
      */
-    public function handle(Request $request, Closure $next, string $permission): Response|JsonResponse
+    public function handle(Request $request, Closure $next, string ...$permissions): Response|JsonResponse
     {
         $user = $request->user();
 
@@ -23,17 +28,19 @@ class RequireFeaturePermission
             abort(401);
         }
 
-        if (! $this->featureAccess->can($user, $permission)) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'message' => 'Forbidden',
-                    'required_permission' => $permission,
-                ], 403);
+        foreach ($permissions as $permission) {
+            if ($this->featureAccess->can($user, $permission)) {
+                return $next($request);
             }
-
-            abort(403);
         }
 
-        return $next($request);
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Forbidden',
+                'required_permission' => implode(',', $permissions),
+            ], 403);
+        }
+
+        abort(403);
     }
 }

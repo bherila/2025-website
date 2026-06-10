@@ -16,6 +16,7 @@ use App\Services\Finance\Rsu\RsuSettlementService;
 use App\Services\Finance\Rsu\RsuTaxProjectionService;
 use App\Services\Finance\Rsu\RsuTransactionMatcher;
 use App\Services\Finance\Rsu\RsuVestPriceBackfillService;
+use App\Support\Access\FeatureAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -33,6 +34,7 @@ class FinanceRsuController extends Controller
         private readonly RsuSettlementService $settlementService,
         private readonly RsuTransactionMatcher $matcher,
         private readonly RsuTaxProjectionService $taxProjectionService,
+        private readonly FeatureAccess $featureAccess,
     ) {}
 
     public function getRsuData(Request $request): JsonResponse
@@ -114,14 +116,48 @@ class FinanceRsuController extends Controller
     {
         $this->authorizeSettlement($settlement);
 
-        return response()->json($settlement->links()->with(['transaction', 'payslip'])->get());
+        $links = $settlement->links()->with(['transaction', 'payslip'])->get();
+
+        if (! $this->canReadTransactions()) {
+            $links->each(static fn (FinRsuLink $link) => $link->unsetRelation('transaction'));
+        }
+
+        if (! $this->canReadPayslips()) {
+            $links->each(static fn (FinRsuLink $link) => $link->unsetRelation('payslip'));
+        }
+
+        return response()->json($links);
     }
 
     public function settlementCandidates(FinRsuVestSettlement $settlement): JsonResponse
     {
         $this->authorizeSettlement($settlement);
 
-        return response()->json($this->matcher->candidates($settlement));
+        $candidates = $this->matcher->candidates($settlement);
+
+        if (! $this->canReadTransactions()) {
+            $candidates['transactions'] = [];
+        }
+
+        if (! $this->canReadPayslips()) {
+            $candidates['payslips'] = [];
+        }
+
+        return response()->json($candidates);
+    }
+
+    private function canReadTransactions(): bool
+    {
+        $user = Auth::user();
+
+        return $user !== null && $this->featureAccess->can($user, 'finance.transactions.view');
+    }
+
+    private function canReadPayslips(): bool
+    {
+        $user = Auth::user();
+
+        return $user !== null && $this->featureAccess->can($user, 'finance.payslips.view');
     }
 
     public function createSettlementLink(Request $request, FinRsuVestSettlement $settlement): JsonResponse

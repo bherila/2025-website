@@ -39,7 +39,7 @@ class GenAiImportControllerTest extends TestCase
 
         $response = $this->actingAs($user)->postJson('/api/genai/import/request-upload', []);
         $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['filename', 'content_type', 'file_size']);
+        $response->assertJsonValidationErrors(['filename', 'content_type', 'file_size', 'job_type']);
     }
 
     public function test_request_upload_validates_file_size_max(): void
@@ -68,6 +68,7 @@ class GenAiImportControllerTest extends TestCase
             'filename' => 'my statement.pdf',
             'content_type' => 'application/pdf',
             'file_size' => 101851,
+            'job_type' => 'document_extract',
         ]);
 
         $response->assertOk();
@@ -105,6 +106,7 @@ class GenAiImportControllerTest extends TestCase
             'filename' => 'statement.pdf',
             'content_type' => 'application/pdf',
             'file_size' => 1024,
+            'job_type' => 'document_extract',
         ]);
 
         $response->assertStatus(503);
