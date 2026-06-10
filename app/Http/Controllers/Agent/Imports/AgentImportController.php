@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Agent\Imports;
 
+use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Services\GenAiImportService;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Accounting\AccountingPeriodLockGuard;
+use App\Support\Accounting\PeriodLockedException;
 use App\Support\Agent\AgentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,10 +17,13 @@ use Illuminate\Support\Facades\Auth;
  * Agent API surface over the GenAI import pipeline (/api/agent/v1/imports).
  *
  * Thin wrapper over GenAiImportService — the same workflow the web UI uses —
- * with two agent-specific tightenings:
+ * with three agent-specific tightenings:
  * - only finance job types are reachable (PHR / class-action types → 403);
  * - the job-type permission map is enforced through AgentContext::can(), so
- *   module-scoped token restrictions apply on top of user permissions.
+ *   module-scoped token restrictions apply on top of user permissions;
+ * - import-confirm paths (job create/retry) pass the accounting-period lock
+ *   guard, so imports that would feed a locked partnership-basis year are
+ *   rejected with a structured 409 instead of silently mutating basis data.
  */
 class AgentImportController extends Controller
 {
@@ -29,7 +35,10 @@ class AgentImportController extends Controller
         'document_extract',
     ];
 
-    public function __construct(private readonly GenAiImportService $importService) {}
+    public function __construct(
+        private readonly GenAiImportService $importService,
+        private readonly AccountingPeriodLockGuard $lockGuard,
+    ) {}
 
     /** @return callable(string): bool */
     private function permissionChecker(): callable
@@ -42,6 +51,38 @@ class AgentImportController extends Controller
     private function user(): User
     {
         return Auth::user();
+    }
+
+    /**
+     * Lock-guard hook for import-confirm paths. An import targeting an
+     * account that holds a partnership interest can feed basis data, so when
+     * the job carries both an account and a tax year (e.g. K-1
+     * document_extract jobs) the partnership-basis year lock must be
+     * respected. Jobs without an account or a determinable year cannot be
+     * attributed to a lockable period and pass through.
+     *
+     * @param  array<string, mixed>|null  $context
+     *
+     * @throws PeriodLockedException
+     */
+    private function assertBasisPeriodUnlocked(?int $acctId, ?array $context): void
+    {
+        if ($acctId === null) {
+            return;
+        }
+
+        $taxYear = $context['tax_year'] ?? null;
+        if (! is_numeric($taxYear)) {
+            return;
+        }
+
+        $this->lockGuard->assertEditable(
+            (int) $this->user()->id,
+            AccountingPeriodLockGuard::DOMAIN_PARTNERSHIP_BASIS,
+            (int) $taxYear,
+            $acctId,
+            $context,
+        );
     }
 
     /** POST /api/agent/v1/imports/request-upload */
@@ -63,6 +104,7 @@ class AgentImportController extends Controller
             $request,
             $this->permissionChecker(),
             self::AGENT_JOB_TYPES,
+            fn (string $jobType, ?int $acctId, ?array $context) => $this->assertBasisPeriodUnlocked($acctId, $context),
         );
     }
 
@@ -96,6 +138,10 @@ class AgentImportController extends Controller
             $id,
             $this->permissionChecker(),
             self::AGENT_JOB_TYPES,
+            fn (GenAiImportJob $job) => $this->assertBasisPeriodUnlocked(
+                $job->acct_id !== null ? (int) $job->acct_id : null,
+                $job->getContextArray(),
+            ),
         );
     }
 
