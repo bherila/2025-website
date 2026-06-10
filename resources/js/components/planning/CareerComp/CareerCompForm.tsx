@@ -343,9 +343,14 @@ function optionGrantFullyDilutedAsOfGrantDate(job: JobSpec, startYear: number, g
   const yearsSinceStart = Math.max(0, asOfYear - startYear)
   // Dilution only applies to private companies, matching the valuation engine
   // (CareerCompLtvDetailColumn); public companies carry no modeled dilution.
+  // Dilution issues new shares over time, so the fully diluted share *count* grows
+  // year over year: a later grant date implies a larger denominator than the base
+  // count. (The valuation engine applies the inverse factor to per-share price, which
+  // falls as the count rises.) Multiplying by (1 - rate) here would shrink the
+  // denominator and overstate the share count a given ownership percentage buys.
   const dilutionRate = job.company.type === 'private' ? Math.max(0, job.company.annualDilutionPct) / 100 : 0
   const dilutedShares = currency(job.company.fullyDilutedShares)
-    .multiply((1 - dilutionRate) ** yearsSinceStart)
+    .multiply((1 + dilutionRate) ** yearsSinceStart)
     .value
 
   return Math.max(0, Math.round(dilutedShares))
@@ -993,20 +998,28 @@ function RsuGrantFields({ grant, onChange }: { grant: RsuGrant; onChange: (patch
 function OptionGrantFields({ grant, job, startYear, onChange }: { grant: OptionGrant; job: JobSpec; startYear: number; onChange: (patch: Partial<OptionGrant>) => void }): ReactElement {
   const shareInputModeId = useId()
   const asOfShareCount = optionGrantFullyDilutedAsOfGrantDate(job, startYear, grant.grantDate)
+  // Without a positive fully diluted share count there is no denominator to convert a
+  // percentage into shares; percent mode is disabled so we never silently write
+  // shareCount: 0 from a missing/zero denominator.
+  const percentModeAvailable = asOfShareCount > 0
   const [shareInputMode, setShareInputMode] = useState<OptionGrantShareInputMode>('count')
   const [sharePercent, setSharePercent] = useState<number>(() => optionGrantShareCountToPercent(grant.shareCount, asOfShareCount))
+  const usingPercentMode = shareInputMode === 'percent' && percentModeAvailable
 
   useEffect(() => {
-    if (shareInputMode === 'percent') {
+    if (usingPercentMode) {
       const nextShareCount = optionGrantSharePercentToCount(sharePercent, asOfShareCount)
 
       if (nextShareCount !== grant.shareCount) {
         onChange({ shareCount: nextShareCount })
       }
     }
-  }, [onChange, shareInputMode, sharePercent, asOfShareCount, grant.shareCount])
+  }, [onChange, usingPercentMode, sharePercent, asOfShareCount, grant.shareCount])
 
   function setPercentMode(usePercent: boolean): void {
+    if (usePercent && !percentModeAvailable) {
+      return
+    }
     setShareInputMode(usePercent ? 'percent' : 'count')
     if (usePercent) {
       setSharePercent(optionGrantShareCountToPercent(grant.shareCount, asOfShareCount))
@@ -1015,14 +1028,13 @@ function OptionGrantFields({ grant, job, startYear, onChange }: { grant: OptionG
 
   function updateSharePercent(percent: number): void {
     setSharePercent(percent)
-    onChange({ shareCount: optionGrantSharePercentToCount(percent, asOfShareCount) })
+    if (percentModeAvailable) {
+      onChange({ shareCount: optionGrantSharePercentToCount(percent, asOfShareCount) })
+    }
   }
 
-  const shareCountField = shareInputMode === 'count'
+  const shareCountField = usingPercentMode
     ? (
-      <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => onChange({ shareCount: value })} />
-    )
-    : (
       <NumberField
         label="% of fully diluted shares as of grant date"
         value={sharePercent}
@@ -1032,6 +1044,9 @@ function OptionGrantFields({ grant, job, startYear, onChange }: { grant: OptionG
         onChange={updateSharePercent}
       />
     )
+    : (
+      <NumberField label="Share count" value={grant.shareCount} min={0} onChange={(value) => onChange({ shareCount: value })} />
+    )
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -1039,9 +1054,9 @@ function OptionGrantFields({ grant, job, startYear, onChange }: { grant: OptionG
       <SelectField label="Option type" value={grant.type} options={OPTION_TYPE_OPTIONS} onChange={(type) => onChange({ type })} />
       <DateField label="Grant date" value={grant.grantDate} onChange={(value) => onChange({ grantDate: value })} />
       <DateField label="Vesting start" value={grant.vestingStartDate ?? ''} onChange={(value) => onChange({ vestingStartDate: value || null })} />
-      <label htmlFor={shareInputModeId} className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Checkbox id={shareInputModeId} checked={shareInputMode === 'percent'} onCheckedChange={(next) => setPercentMode(next === true)} />
-        <span>Input shares by percentage of fully diluted shares</span>
+      <label htmlFor={shareInputModeId} className={percentModeAvailable ? 'flex items-center gap-2 text-sm text-muted-foreground' : 'flex items-center gap-2 text-sm text-muted-foreground opacity-50'}>
+        <Checkbox id={shareInputModeId} checked={usingPercentMode} disabled={!percentModeAvailable} onCheckedChange={(next) => setPercentMode(next === true)} />
+        <span>Input shares by percentage of fully diluted shares{percentModeAvailable ? '' : ' (set fully diluted shares first)'}</span>
       </label>
       {shareCountField}
       <MoneyField label="Strike price" value={grant.strike} onChange={(value) => onChange({ strike: value })} />

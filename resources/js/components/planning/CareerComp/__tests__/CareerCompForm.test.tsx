@@ -304,6 +304,8 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
   it('lets option shares be entered as a percent of fully diluted shares as of grant date', () => {
     // Private company so as-of-grant-date dilution applies (public companies are not diluted).
+    // 2026 -> 2028 is two years of 10% annual dilution, which *grows* the fully diluted
+    // share count: 1000 * (1.1)^2 = 1210. A 10% grant is therefore 121 shares, not 81.
     const baseInputs = makeInputs('private')
     const baseOffer = baseInputs.hypotheticalJobs[0]!
     const inputs: CareerCompInputs = {
@@ -323,10 +325,48 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
     fireEvent.change(screen.getByLabelText('Grant date'), { target: { value: '2028-01-01' } })
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Input shares by percentage of fully diluted shares' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Input shares by percentage of fully diluted shares/ }))
     fireEvent.change(screen.getByLabelText('% of fully diluted shares as of grant date'), { target: { value: '10' } })
 
-    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('81 sh')
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('121 sh')
+  })
+
+  it('disables option percent mode when fully diluted shares are missing and never writes shareCount 0', () => {
+    // No fully diluted share count means there is no denominator to convert a percentage,
+    // so percent mode is disabled rather than silently producing a zero share count.
+    const baseInputs = makeInputs('private')
+    const baseOffer = baseInputs.hypotheticalJobs[0]!
+    const inputs: CareerCompInputs = {
+      ...baseInputs,
+      startYear: 2026,
+      hypotheticalJobs: [{
+        ...baseOffer,
+        company: {
+          ...baseOffer.company,
+          fullyDilutedShares: 0,
+          annualDilutionPct: 10,
+        },
+      }],
+    }
+
+    render(<Harness initial={inputs} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
+    const originalSummary = screen.getByRole('button', { name: /^Option grant 1/ }).textContent
+
+    const percentToggle = screen.getByRole('checkbox', { name: /Input shares by percentage of fully diluted shares/ })
+    expect(percentToggle).toHaveAttribute('aria-disabled', 'true')
+
+    fireEvent.click(percentToggle)
+
+    // The toggle stays in count mode, the percent input never appears, and the existing
+    // share count is left untouched (not overwritten with 0).
+    expect(percentToggle).not.toBeChecked()
+    expect(screen.queryByLabelText('% of fully diluted shares as of grant date')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Share count')).toBeInTheDocument()
+    // The default 4,000-share grant is preserved verbatim; it is not overwritten with 0.
+    expect(originalSummary).toContain('4,000 sh')
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent(originalSummary ?? '')
   })
 
   it('opens and edits markdown notes in a dedicated column', () => {
