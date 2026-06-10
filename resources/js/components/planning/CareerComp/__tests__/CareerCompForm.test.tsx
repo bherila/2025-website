@@ -304,8 +304,9 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
 
   it('lets option shares be entered as a percent of fully diluted shares as of grant date', () => {
     // Private company so as-of-grant-date dilution applies (public companies are not diluted).
-    // 2026 -> 2028 is two years of 10% annual dilution, which *grows* the fully diluted
-    // share count: 1000 * (1.1)^2 = 1210. A 10% grant is therefore 121 shares, not 81.
+    // The valuation engine reduces per-share price by (1 − d)^n, so the consistent fully
+    // diluted denominator is the reciprocal: 1000 / (0.9)^2 ≈ 1234.57, rounded to 1235
+    // shares. A 10% grant is therefore round(123.5) = 124 shares.
     const baseInputs = makeInputs('private')
     const baseOffer = baseInputs.hypotheticalJobs[0]!
     const inputs: CareerCompInputs = {
@@ -328,7 +329,7 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Input shares by percentage of fully diluted shares/ }))
     fireEvent.change(screen.getByLabelText('% of fully diluted shares as of grant date'), { target: { value: '10' } })
 
-    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('121 sh')
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('124 sh')
   })
 
   it('disables option percent mode when fully diluted shares are missing and never writes shareCount 0', () => {
@@ -367,6 +368,47 @@ describe('CareerCompForm public/private gating + grant column entry', () => {
     // The default 4,000-share grant is preserved verbatim; it is not overwritten with 0.
     expect(originalSummary).toContain('4,000 sh')
     expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent(originalSummary ?? '')
+  })
+
+  it('resets option percent mode to count when the denominator disappears so a restored denominator does not clobber a count edit', () => {
+    // No dilution and grant date in the start year, so the denominator is exactly 1000.
+    const baseInputs = makeInputs('private')
+    const baseOffer = baseInputs.hypotheticalJobs[0]!
+    const inputs: CareerCompInputs = {
+      ...baseInputs,
+      startYear: 2026,
+      hypotheticalJobs: [{
+        ...baseOffer,
+        company: {
+          ...baseOffer.company,
+          fullyDilutedShares: 1000,
+          annualDilutionPct: 0,
+        },
+      }],
+    }
+
+    render(<Harness initial={inputs} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Option grant 1' }))
+    fireEvent.change(screen.getByLabelText('Grant date'), { target: { value: '2026-01-01' } })
+
+    // Enter percent mode: 10% of 1000 = 100 shares.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Input shares by percentage of fully diluted shares/ }))
+    fireEvent.change(screen.getByLabelText('% of fully diluted shares as of grant date'), { target: { value: '10' } })
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('100 sh')
+
+    // Denominator disappears → mode falls back to count and the percent input is gone.
+    const fdShares = screen.getAllByLabelText('Fully diluted shares')[0]!
+    fireEvent.change(fdShares, { target: { value: '0' } })
+    expect(screen.queryByLabelText('% of fully diluted shares as of grant date')).not.toBeInTheDocument()
+
+    // Edit the count directly while the denominator is unavailable.
+    fireEvent.change(screen.getByLabelText('Share count'), { target: { value: '250' } })
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('250 sh')
+
+    // Restoring the denominator must NOT overwrite the edited count from the stale 10%.
+    fireEvent.change(fdShares, { target: { value: '1000' } })
+    expect(screen.getByRole('button', { name: /^Option grant 1/ })).toHaveTextContent('250 sh')
   })
 
   it('opens and edits markdown notes in a dedicated column', () => {

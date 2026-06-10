@@ -342,16 +342,19 @@ function optionGrantFullyDilutedAsOfGrantDate(job: JobSpec, startYear: number, g
 
   const yearsSinceStart = Math.max(0, asOfYear - startYear)
   // Dilution only applies to private companies, matching the valuation engine
-  // (CareerCompLtvDetailColumn); public companies carry no modeled dilution.
-  // Dilution issues new shares over time, so the fully diluted share *count* grows
-  // year over year: a later grant date implies a larger denominator than the base
-  // count. (The valuation engine applies the inverse factor to per-share price, which
-  // falls as the count rises.) Multiplying by (1 - rate) here would shrink the
-  // denominator and overstate the share count a given ownership percentage buys.
+  // (CareerCompLtvDetailColumn), which reduces per-share price by (1 − d)^n.
+  // To keep a percentage grant consistent with that engine, the fully diluted
+  // denominator is the reciprocal of the price factor: fullyDilutedShares / (1 − d)^n.
+  // (As price falls by (1 − d)^n, the share count a fixed ownership % buys rises by
+  // 1 / (1 − d)^n.) A dilution rate at or above 100% would zero/invert the factor,
+  // so fall back to the base count in that degenerate case.
   const dilutionRate = job.company.type === 'private' ? Math.max(0, job.company.annualDilutionPct) / 100 : 0
-  const dilutedShares = currency(job.company.fullyDilutedShares)
-    .multiply((1 + dilutionRate) ** yearsSinceStart)
-    .value
+  const retentionFactor = dilutionRate >= 1 ? 0 : (1 - dilutionRate) ** yearsSinceStart
+  if (retentionFactor <= 0) {
+    return Math.max(0, Math.round(job.company.fullyDilutedShares))
+  }
+
+  const dilutedShares = currency(job.company.fullyDilutedShares).divide(retentionFactor).value
 
   return Math.max(0, Math.round(dilutedShares))
 }
@@ -1004,6 +1007,17 @@ function OptionGrantFields({ grant, job, startYear, onChange }: { grant: OptionG
   const percentModeAvailable = asOfShareCount > 0
   const [shareInputMode, setShareInputMode] = useState<OptionGrantShareInputMode>('count')
   const [sharePercent, setSharePercent] = useState<number>(() => optionGrantShareCountToPercent(grant.shareCount, asOfShareCount))
+
+  // When the denominator disappears (fully diluted shares drops to zero), fall
+  // back to count mode rather than just masking percent mode. Otherwise the user
+  // edits the visible count field while masked, and a restored denominator would
+  // flip percent mode back on and overwrite that edit from the stale sharePercent.
+  // Adjusting state during render is React's recommended pattern for resetting
+  // state in response to a changed input.
+  if (!percentModeAvailable && shareInputMode === 'percent') {
+    setShareInputMode('count')
+  }
+
   const usingPercentMode = shareInputMode === 'percent' && percentModeAvailable
 
   useEffect(() => {
