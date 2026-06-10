@@ -184,6 +184,8 @@ class FinanceRsuController extends Controller
         ]);
         $this->settlementService->assertLinkTargetsBelongToSettlement((int) Auth::id(), $settlement, $data);
 
+        $data = $this->settlementService->deriveAllocationAwardId($settlement, $data);
+
         $link = FinRsuLink::query()->create($data + [
             'uid' => Auth::id(),
             'settlement_id' => $settlement->id,
