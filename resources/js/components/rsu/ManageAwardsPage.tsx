@@ -59,6 +59,9 @@ export default function ManageAwardsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [deleteAward, setDeleteAward] = useState<IAward | null>(null)
+  const [deleteSchedule, setDeleteSchedule] = useState<AwardSchedule | null>(null)
+  const [bulkPriceSchedule, setBulkPriceSchedule] = useState<AwardSchedule | null>(null)
+  const [bulkVestPrice, setBulkVestPrice] = useState('')
   const [expandedSchedules, setExpandedSchedules] = useState<Record<string, boolean>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -127,6 +130,42 @@ export default function ManageAwardsPage() {
     } catch (e) {
       console.error(e)
       setErrorMessage('Failed to delete award.')
+    }
+  }
+
+  const handleDeleteSchedule = async () => {
+    if (!deleteSchedule) return
+
+    try {
+      await Promise.all(deleteSchedule.rows.filter((award) => award.id).map((award) => fetchWrapper.delete(`/api/rsu/${award.id}`, {})))
+      setDeleteSchedule(null)
+      loadData()
+    } catch (e) {
+      console.error(e)
+      setErrorMessage('Failed to delete award schedule.')
+    }
+  }
+
+  const handleBulkVestPrice = async () => {
+    if (!bulkPriceSchedule) return
+
+    const vestPrice = nullableNumber(bulkVestPrice)
+    try {
+      await fetchWrapper.post('/api/rsu', bulkPriceSchedule.rows.map((award) => ({
+        ...award,
+        share_count: getShareCount(award),
+        grant_price: nullableNumber(award.grant_price),
+        vest_price: vestPrice,
+        clear_grant_price: award.grant_price == null,
+        clear_vest_price: vestPrice == null,
+        vest_price_source: vestPrice == null ? null : 'manual',
+      })))
+      setBulkPriceSchedule(null)
+      setBulkVestPrice('')
+      loadData()
+    } catch (e) {
+      console.error(e)
+      setErrorMessage('Failed to update schedule vest prices.')
     }
   }
 
@@ -229,7 +268,24 @@ export default function ManageAwardsPage() {
                       <TableCell>{schedule.grantDate}</TableCell>
                       <TableCell className="text-right">{schedule.totalShares}</TableCell>
                       <TableCell>{schedule.rows.length} vest events</TableCell>
-                      <TableCell className="text-right">—</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setBulkPriceSchedule(schedule)
+                              setBulkVestPrice('')
+                            }}
+                          >
+                            Bulk set vest price
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setDeleteSchedule(schedule)}>
+                            <Trash2 className="h-4 w-4" />
+                            Schedule
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>,
                     expanded && schedule.rows.map((award) => (
                       <TableRow key={award.id ?? `${schedule.key}-${award.vest_date}`}>
@@ -319,6 +375,31 @@ export default function ManageAwardsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={bulkPriceSchedule !== null} onOpenChange={(open) => !open && setBulkPriceSchedule(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk set vest price</DialogTitle>
+            <DialogDescription>
+              Updates every vesting event in {bulkPriceSchedule?.awardId || 'this schedule'}. Leave blank to clear the vest price.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-4">
+            <Label htmlFor="bulk_vest_price">Vest price</Label>
+            <Input
+              id="bulk_vest_price"
+              type="number"
+              step="0.000001"
+              value={bulkVestPrice}
+              onChange={(event) => setBulkVestPrice(event.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkPriceSchedule(null)}>Cancel</Button>
+            <Button onClick={handleBulkVestPrice}>Apply to schedule</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={deleteAward !== null} onOpenChange={(open) => !open && setDeleteAward(null)}>
         <DialogContent>
           <DialogHeader>
@@ -328,6 +409,21 @@ export default function ManageAwardsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteAward(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteSchedule !== null} onOpenChange={(open) => !open && setDeleteSchedule(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete award schedule?</DialogTitle>
+            <DialogDescription>
+              This deletes {deleteSchedule?.rows.length ?? 0} vesting event{deleteSchedule?.rows.length === 1 ? '' : 's'} for {deleteSchedule?.awardId || 'this schedule'}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteSchedule(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteSchedule}>Delete schedule</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

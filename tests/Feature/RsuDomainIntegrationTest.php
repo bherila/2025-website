@@ -308,6 +308,37 @@ class RsuDomainIntegrationTest extends TestCase
         ])->assertNotFound();
     }
 
+    public function test_payslip_rsu_links_include_settlement_level_payslips(): void
+    {
+        $user = $this->grantFeatures(User::factory()->create(), ['finance.rsu.view']);
+        $this->actingAs($user);
+        $payslip = FinPayslips::query()->create([
+            'uid' => $user->id,
+            'pay_date' => '2026-06-15',
+            'earnings_rsu' => 1000,
+        ]);
+        $settlement = FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'META',
+            'gross_shares' => 10,
+            'gross_income' => 1000,
+            'payslip_id' => $payslip->payslip_id,
+            'refund_payslip_id' => $payslip->payslip_id,
+            'status' => 'confirmed',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/payslips/{$payslip->payslip_id}/rsu-links")
+            ->assertOk();
+
+        $this->assertEqualsCanonicalizing(
+            ['payslip_rsu_excess_refund', 'payslip_rsu_income'],
+            collect($response->json())->pluck('link_type')->all()
+        );
+        $this->assertSame($settlement->id, $response->json('0.settlement.id'));
+    }
+
     public function test_settlement_confirmation_rejects_invalid_domain_values_and_other_user_targets(): void
     {
         $user = User::factory()->create();

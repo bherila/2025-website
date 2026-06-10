@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useFinanceTags } from '@/components/finance/useFinanceTags'
+import RsuReciprocalLinksPanel from '@/components/rsu/RsuReciprocalLinksPanel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -299,6 +300,15 @@ export default function TransactionDetailsModal({ transaction, isOpen, onClose, 
               rows={3}
               className="col-span-3"
             />
+          </div>
+          <div className="grid grid-cols-4 gap-4">
+            <Label className="text-right pt-2">RSU</Label>
+            <div className="col-span-3">
+              <RsuReciprocalLinksPanel
+                endpoint={transaction.t_id ? `/api/finance/transactions/${transaction.t_id}/rsu-links` : null}
+                compact
+              />
+            </div>
           </div>
           {/* Tags section */}
           <div className="grid grid-cols-4 gap-4">

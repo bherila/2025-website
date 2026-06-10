@@ -11,6 +11,7 @@ jest.mock('sonner', () => ({ toast: { error: jest.fn() } }))
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
+    get: jest.fn(),
     post: jest.fn(),
   },
 }))
@@ -65,11 +66,14 @@ describe('TransactionDetailsModal', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    document.body.innerHTML = '<script id="app-initial-data" type="application/json">{"isAdmin":false,"permissions":["finance.rsu.view"]}</script>'
+    jest.mocked(fetchWrapper.get).mockResolvedValue([])
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
   })
 
   afterEach(() => {
     consoleErrorSpy.mockRestore()
+    document.body.innerHTML = ''
   })
 
   it('optimistically shows a tag while it is being added', async () => {
@@ -79,6 +83,7 @@ describe('TransactionDetailsModal', () => {
     }))
 
     render(<TransactionDetailsModal transaction={transaction} isOpen onClose={jest.fn()} />)
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/transactions/123/rsu-links'))
     fireEvent.click(screen.getByText('+ Groceries'))
 
     expect(screen.getByTitle('Adding tag...')).toBeInTheDocument()
@@ -123,5 +128,14 @@ describe('TransactionDetailsModal', () => {
       transaction_ids: '123',
       tag_id: 20,
     })
+  })
+
+  it('does not fetch RSU links without RSU permission', () => {
+    document.body.innerHTML = '<script id="app-initial-data" type="application/json">{"isAdmin":false,"permissions":[]}</script>'
+
+    render(<TransactionDetailsModal transaction={transaction} isOpen onClose={jest.fn()} />)
+
+    expect(fetchWrapper.get).not.toHaveBeenCalled()
+    expect(screen.queryByText('RSU links')).not.toBeInTheDocument()
   })
 })

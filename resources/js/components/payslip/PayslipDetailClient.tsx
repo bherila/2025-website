@@ -31,6 +31,7 @@ import { deletePayslip, savePayslip } from '@/lib/api'
 import { parseDate } from '@/lib/DateHelper'
 
 import FinanceNavbar from '../finance/FinanceNavbar'
+import RsuReciprocalLinksPanel from '../rsu/RsuReciprocalLinksPanel'
 import type { fin_payslip, fin_payslip_deposit, fin_payslip_state_data } from './payslipDbCols'
 import { fin_payslip_schema } from './payslipDbCols'
 import PayslipJsonModal from './PayslipJsonModal'
@@ -666,6 +667,16 @@ export default function PayrollForm({ initialPayslip }: PayslipDetailClientProps
                 <NumericField label="Statutory PTO Available" field="pto_statutory_available" control={form.control} />
               </FormSection>
             </div>
+
+            {initialPayslip?.payslip_id && (
+              <RsuReciprocalLinksPanel
+                endpoint={`/api/payslips/${initialPayslip.payslip_id}/rsu-links`}
+                title="Linked RSU settlements"
+                localRsuIncome={initialPayslip.earnings_rsu}
+                localTaxOffset={initialPayslip.ps_rsu_tax_offset}
+                localExcessRefund={initialPayslip.ps_rsu_excess_refund}
+              />
+            )}
 
             {/* ── State tax data & deposits (edit mode only) ──────────────── */}
             {initialPayslip?.payslip_id && (
