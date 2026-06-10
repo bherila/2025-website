@@ -107,6 +107,15 @@ final class FinanceCapabilities
                     'availableYears' => ['type' => 'array', 'items' => ['type' => 'integer']],
                 ],
             ],
+            pathParameters: [
+                [
+                    'name' => 'year',
+                    'in' => 'path',
+                    'required' => true,
+                    'schema' => ['type' => 'integer'],
+                    'description' => 'Tax preview year',
+                ],
+            ],
             examples: ['GET /api/agent/v1/finance/tax-preview/2024?include_tax_facts=1'],
             routeName: 'agent.finance.tax-preview',
         ));
@@ -161,6 +170,15 @@ final class FinanceCapabilities
                     'tax_year' => ['type' => 'integer'],
                     'form_type' => ['type' => 'string'],
                     'parsed_data' => ['type' => ['object', 'null']],
+                ],
+            ],
+            pathParameters: [
+                [
+                    'name' => 'id',
+                    'in' => 'path',
+                    'required' => true,
+                    'schema' => ['type' => 'integer'],
+                    'description' => 'Tax document ID',
                 ],
             ],
             examples: ['GET /api/agent/v1/finance/tax-documents/42'],

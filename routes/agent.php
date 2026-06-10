@@ -41,7 +41,7 @@ Route::middleware(OptionalAgentRequest::class)->group(function (): void {
  * per-route feature permission — RequireFeaturePermission also enforces the
  * agent token's scope, so module-scoped tokens cannot reach other features.
  */
-Route::middleware(AuthenticateAgentRequest::class)->prefix('finance')->name('finance.')->group(function (): void {
+Route::middleware(AuthenticateAgentRequest::class.':finance')->prefix('finance')->name('finance.')->group(function (): void {
     Route::get('/accounts', AgentFinanceAccountsController::class)
         ->middleware('feature:finance.accounts.basic')
         ->name('accounts');

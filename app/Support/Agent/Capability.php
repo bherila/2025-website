@@ -16,6 +16,7 @@ final readonly class Capability
     /**
      * @param  array<string, mixed>|null  $requestSchema  OpenAPI schema fragment
      * @param  array<string, mixed>|null  $responseSchema  OpenAPI schema fragment
+     * @param  list<array<string, mixed>>  $pathParameters  OpenAPI path parameter definitions
      * @param  list<string>  $examples
      */
     public function __construct(
@@ -31,6 +32,7 @@ final readonly class Capability
         public string $openApiTag = '',
         public ?array $requestSchema = null,
         public ?array $responseSchema = null,
+        public array $pathParameters = [],
         public array $examples = [],
         public ?string $routeName = null,
     ) {

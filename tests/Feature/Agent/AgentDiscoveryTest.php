@@ -261,6 +261,82 @@ class AgentDiscoveryTest extends TestCase
         $this->assertArrayHasKey('200', $operation['responses']);
     }
 
+    public function test_openapi_declares_path_parameters_for_templated_paths(): void
+    {
+        app(CapabilityRegistry::class)->register(new Capability(
+            id: 'finance.tax_preview.get',
+            module: 'finance',
+            label: 'Get tax preview',
+            description: 'Get a tax preview by year.',
+            requiredPermission: 'finance.tax-preview.view',
+            risk: 'read',
+            restMethod: 'GET',
+            restPath: '/finance/tax-preview/{year}',
+            openApiTag: 'finance',
+            pathParameters: [
+                [
+                    'name' => 'year',
+                    'in' => 'path',
+                    'required' => true,
+                    'schema' => ['type' => 'integer'],
+                    'description' => 'Tax preview year',
+                ],
+            ],
+        ));
+
+        app(CapabilityRegistry::class)->register(new Capability(
+            id: 'finance.tax_documents.get',
+            module: 'finance',
+            label: 'Get tax document',
+            description: 'Get a tax document by ID.',
+            requiredPermission: 'finance.tax-documents.view',
+            risk: 'read',
+            restMethod: 'GET',
+            restPath: '/finance/tax-documents/{id}',
+            openApiTag: 'finance',
+            pathParameters: [
+                [
+                    'name' => 'id',
+                    'in' => 'path',
+                    'required' => true,
+                    'schema' => ['type' => 'integer'],
+                    'description' => 'Tax document ID',
+                ],
+            ],
+        ));
+
+        ['token' => $rawToken] = $this->createTokenForUser([
+            'finance.tax-preview.view',
+            'finance.tax-documents.view',
+        ]);
+
+        $document = $this->getJson('/api/agent/v1/openapi.json', ['Authorization' => 'Bearer '.$rawToken])
+            ->assertStatus(200)
+            ->json();
+
+        $taxPreview = $document['paths']['/finance/tax-preview/{year}']['get'];
+        $this->assertSame([
+            [
+                'name' => 'year',
+                'in' => 'path',
+                'required' => true,
+                'schema' => ['type' => 'integer'],
+                'description' => 'Tax preview year',
+            ],
+        ], $taxPreview['parameters']);
+
+        $taxDocument = $document['paths']['/finance/tax-documents/{id}']['get'];
+        $this->assertSame([
+            [
+                'name' => 'id',
+                'in' => 'path',
+                'required' => true,
+                'schema' => ['type' => 'integer'],
+                'description' => 'Tax document ID',
+            ],
+        ], $taxDocument['parameters']);
+    }
+
     public function test_openapi_token_scope_filters_paths(): void
     {
         ['token' => $rawToken] = $this->createTokenForUser(['finance.payslips.view'], 'tax');

@@ -55,6 +55,22 @@ class FinanceAgentReadTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_finance_endpoints_reject_tokens_scoped_to_other_modules(): void
+    {
+        $user = $this->grantFeatures($this->createUser(), ['finance.tax-documents.view']);
+        $rawToken = 'bha_'.bin2hex(random_bytes(32));
+
+        AgentApiToken::factory()->create([
+            'user_id' => $user->id,
+            'module' => 'tax',
+            'token_hash' => hash('sha256', $rawToken),
+            'allowed_permissions' => ['finance.tax-documents.view'],
+        ]);
+
+        $this->getJson('/api/agent/v1/finance/tax-documents', $this->bearer($rawToken))
+            ->assertStatus(401);
+    }
+
     public function test_accounts_returns_basic_fields_without_detail_permission(): void
     {
         ['user' => $user, 'token' => $token] = $this->createUserWithToken(['finance.accounts.basic']);

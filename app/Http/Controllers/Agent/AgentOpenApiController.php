@@ -89,6 +89,10 @@ class AgentOpenApiController extends Controller
             ];
         }
 
+        if ($capability->pathParameters !== []) {
+            $operation['parameters'] = $capability->pathParameters;
+        }
+
         $responseContent = $capability->responseSchema === null
             ? []
             : ['content' => [
