@@ -266,6 +266,63 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(32_00, $basisYear->ending_outside_basis_cents);
     }
 
+    public function test_k3_foreign_taxes_read_canonical_nested_shape(): void
+    {
+        // The canonical K-3 Part III Section 4 shape nests the totals under a
+        // foreign-tax sub-object (data.line1_foreignTaxesPaid.grandTotalUSD /
+        // .countries). The basis service must read it the same way Form 1116
+        // does, otherwise no foreign_tax event is created and basis is overstated.
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'line1_foreignTaxesPaid' => [
+                        'countries' => [
+                            ['country' => 'Germany', 'amount_usd' => 22.0],
+                            ['country' => 'France', 'amount_usd' => 13.0],
+                        ],
+                        'grandTotalUSD' => 35.0,
+                    ],
+                ],
+                'notes' => '',
+            ],
+        ];
+        $basisYear = $this->basisFromK1(2024, 'K3 Nested LP', ['5' => '100'], [], [], null, [], $k3Sections);
+
+        $this->assertSame(35_00, $basisYear->foreign_taxes_decrease_cents, 'Nested K-3 grandTotalUSD should roll into foreign_taxes_decrease_cents');
+        $this->assertSame(65_00, $basisYear->ending_outside_basis_cents);
+
+        $event = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', 'foreign_tax')
+            ->first();
+        $this->assertNotNull($event, 'A foreign_tax event must be created from the nested K-3 shape');
+    }
+
+    public function test_k3_foreign_taxes_sum_countries_in_nested_shape_when_grand_total_absent(): void
+    {
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'line1_foreignTaxesPaid' => [
+                        'countries' => [
+                            ['country' => 'Canada', 'amount_usd' => 9.0],
+                            ['country' => 'Japan', 'amount_usd' => 7.0],
+                        ],
+                    ],
+                ],
+                'notes' => '',
+            ],
+        ];
+        $basisYear = $this->basisFromK1(2024, 'K3 Nested Sum LP', ['5' => '50'], [], [], null, [], $k3Sections);
+
+        $this->assertSame(16_00, $basisYear->foreign_taxes_decrease_cents);
+        $this->assertSame(34_00, $basisYear->ending_outside_basis_cents);
+    }
+
     public function test_box21_takes_priority_over_k3_foreign_taxes_and_no_double_count(): void
     {
         // When both Box 21 and K-3 Part III Section 4 are present, Box 21 takes priority

@@ -1059,6 +1059,69 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(1, $eventCount);
     }
 
+    public function test_distinct_line_items_sharing_a_statement_seed_independently(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Shared Statement Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Shared Statement LP',
+            'normalized_partnership_name' => 'shared statement lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 500_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $contribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-02-01',
+            't_type' => 'Contribution',
+            't_amt' => 30_00,
+            't_description' => 'Capital call',
+        ]);
+        $distribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-03-01',
+            't_type' => 'Distribution',
+            't_amt' => -20_00,
+            't_description' => 'Cash distribution',
+        ]);
+
+        // Both candidates originate from the same imported statement but are
+        // distinct line items; each must seed its own event.
+        $first = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'capital_contribution_cash',
+            'amount_cents' => 30_00,
+            'line_item_id' => $contribution->t_id,
+            'statement_id' => 7777,
+        ])->assertCreated();
+
+        $second = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 20_00,
+            'line_item_id' => $distribution->t_id,
+            'statement_id' => 7777,
+        ])->assertCreated();
+
+        $this->assertNotSame($first->json('id'), $second->json('id'), 'A shared statement_id must not suppress a distinct line item');
+
+        $events = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('source_type', 'account_transaction')
+            ->get();
+        $this->assertCount(2, $events);
+        $this->assertEqualsCanonicalizing(
+            [(int) $contribution->t_id, (int) $distribution->t_id],
+            $events->pluck('line_item_id')->map(fn ($id): int => (int) $id)->all(),
+        );
+    }
+
     public function test_accept_reconciliation_requires_valid_event_type(): void
     {
         $user = User::factory()->create();

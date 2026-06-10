@@ -497,11 +497,14 @@ class PartnershipBasisService
         $statementId = $payload['statement_id'] ?? null;
         $statementInvestmentId = $payload['statement_investment_id'] ?? null;
 
+        // A line item id uniquely identifies the source row, so when it is
+        // present match on it alone. Falling back to the coarser statement-level
+        // keys here would let a later candidate with a different line_item_id be
+        // suppressed by an already-seeded event that merely shares a statement.
         if ($lineItemId !== null) {
             $match = (clone $query)->where('line_item_id', (int) $lineItemId)->first();
-            if ($match instanceof FinPartnershipBasisEvent) {
-                return $match;
-            }
+
+            return $match instanceof FinPartnershipBasisEvent ? $match : null;
         }
 
         if ($statementInvestmentId !== null) {
@@ -2042,16 +2045,50 @@ class PartnershipBasisService
             return null;
         }
 
-        // grandTotalUSD is pre-computed by K3SectionAssembler; prefer it over summing countries.
-        $grandTotal = $sectionData['grandTotalUSD'] ?? null;
+        // Prefer the top-level pre-computed total / country list (the shape
+        // emitted by K3SectionAssembler).
+        $cents = $this->k3ForeignTaxCentsFromTaxData($sectionData);
+        if ($cents !== null) {
+            return $cents;
+        }
+
+        // Fall back to the canonical nested shape, where the totals live under a
+        // foreign-tax sub-object (e.g. data.line1_foreignTaxesPaid.grandTotalUSD
+        // / .countries), mirroring how Form1116FactsBuilder reads K-3 Part III
+        // Section 4. Without this, a nested-only payload yields no foreign_tax
+        // basis-decrease event and outside basis is overstated.
+        foreach ($sectionData as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+            if (! str_contains((string) $key, 'foreignTax') && ! str_contains((string) $key, 'foreign_tax')) {
+                continue;
+            }
+            $cents = $this->k3ForeignTaxCentsFromTaxData($value);
+            if ($cents !== null) {
+                return $cents;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract foreign-tax cents from a K-3 tax-data array, preferring the
+     * pre-computed grandTotalUSD and falling back to summing per-country amounts.
+     *
+     * @param  array<string, mixed>  $taxData
+     */
+    private function k3ForeignTaxCentsFromTaxData(array $taxData): ?int
+    {
+        $grandTotal = $taxData['grandTotalUSD'] ?? null;
         if (is_numeric($grandTotal) && (float) $grandTotal !== 0.0) {
             return $this->moneyToCents($grandTotal);
         }
 
-        // Fall back to summing per-country amounts when grandTotalUSD is absent or zero.
-        if (is_array($sectionData['countries'] ?? null)) {
+        if (is_array($taxData['countries'] ?? null)) {
             $total = 0.0;
-            foreach ($sectionData['countries'] as $country) {
+            foreach ($taxData['countries'] as $country) {
                 if (! is_array($country)) {
                     continue;
                 }
