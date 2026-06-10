@@ -3,7 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
-use App\Models\FinanceTool\FinPayslips;
+use App\Services\Finance\Agent\PayslipsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -16,35 +16,24 @@ class ListPayslips extends Tool
 {
     use AuthorizesFeatureAccess;
 
+    public function __construct(
+        private PayslipsQueryService $payslips,
+    ) {}
+
     public function handle(Request $request): Response
     {
         if (($denied = $this->requireFeaturePermission('finance.payslips.view')) !== null) {
             return $denied;
         }
 
-        $uid = Auth::id();
-
-        $query = FinPayslips::where('uid', $uid)
-            ->with(['stateData', 'deposits'])
-            ->orderBy('pay_date', 'desc');
-
-        if ($request->has('year')) {
-            $year = (int) $request->input('year');
-            $query->whereBetween('pay_date', ["{$year}-01-01", "{$year}-12-31"]);
-        }
-
-        if ($request->boolean('has_rsu')) {
-            $query->where('earnings_rsu', '>', 0);
-        }
-
-        if ($request->boolean('has_bonus')) {
-            $query->where('earnings_bonus', '>', 0);
-        }
-
-        $payslips = $query->get()->map(function ($payslip) {
+        $payslips = $this->payslips->listForUser(
+            (int) Auth::id(),
+            $request->has('year') ? (int) $request->input('year') : null,
+            $request->boolean('has_rsu'),
+            $request->boolean('has_bonus'),
+        )->map(function ($payslip) {
             $arr = $payslip->toArray();
 
-            // Decode other field
             if (is_string($arr['other'] ?? null)) {
                 $arr['other'] = json_decode($arr['other'], true);
             }

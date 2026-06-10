@@ -3,7 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
-use App\Models\Files\FileForTaxDocument;
+use App\Services\Finance\Agent\TaxDocumentsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -16,23 +16,17 @@ class GetTaxDocument extends Tool
 {
     use AuthorizesFeatureAccess;
 
+    public function __construct(
+        private TaxDocumentsQueryService $taxDocuments,
+    ) {}
+
     public function handle(Request $request): Response
     {
         if (($denied = $this->requireFeaturePermission('finance.tax-documents.view')) !== null) {
             return $denied;
         }
 
-        $userId = Auth::id();
-        $id = (int) $request->input('id');
-
-        $doc = FileForTaxDocument::where('id', $id)
-            ->where('user_id', $userId)
-            ->with([
-                'uploader:id,name',
-                'employmentEntity:id,display_name',
-                'account:acct_id,acct_name',
-            ])
-            ->firstOrFail();
+        $doc = $this->taxDocuments->findForUser((int) Auth::id(), (int) $request->input('id'));
 
         return Response::json($doc);
     }

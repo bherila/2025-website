@@ -3,8 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
-use App\Models\FinanceTool\FinAccountLineItems;
-use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\Agent\TransactionsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -17,37 +16,25 @@ class ListTransactions extends Tool
 {
     use AuthorizesFeatureAccess;
 
+    public function __construct(
+        private TransactionsQueryService $transactions,
+    ) {}
+
     public function handle(Request $request): Response
     {
         if (($denied = $this->requireFeaturePermission('finance.transactions.view')) !== null) {
             return $denied;
         }
 
-        $uid = Auth::id();
         $accountId = $request->input('account_id');
         $limit = min((int) ($request->input('limit') ?? 100), 500);
 
-        if ($accountId !== null) {
-            $account = FinAccounts::where('acct_id', (int) $accountId)
-                ->where('acct_owner', $uid)
-                ->firstOrFail();
-            $query = FinAccountLineItems::where('t_account', $account->acct_id);
-        } else {
-            $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-            $query = FinAccountLineItems::whereIn('t_account', $accountIds);
-        }
-
-        $query->with(['tags'])
-            ->orderBy('t_date', 'desc');
-
-        if ($request->has('year')) {
-            $query->whereYear('t_date', (int) $request->input('year'));
-        }
-
-        if ($request->has('tag')) {
-            $tagLabel = $request->input('tag');
-            $query->whereHas('tags', fn ($q) => $q->where('fin_account_tag.tag_label', $tagLabel));
-        }
+        $query = $this->transactions->queryForUser(
+            (int) Auth::id(),
+            $accountId !== null ? (int) $accountId : null,
+            $request->has('year') ? (int) $request->input('year') : null,
+            $request->has('tag') ? (string) $request->input('tag') : null,
+        );
 
         return Response::json($query->limit($limit)->get());
     }

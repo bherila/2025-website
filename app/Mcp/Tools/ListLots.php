@@ -3,8 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
-use App\Models\FinanceTool\FinAccountLot;
-use App\Models\FinanceTool\FinAccounts;
+use App\Services\Finance\Agent\LotsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -17,35 +16,24 @@ class ListLots extends Tool
 {
     use AuthorizesFeatureAccess;
 
+    public function __construct(
+        private LotsQueryService $lots,
+    ) {}
+
     public function handle(Request $request): Response
     {
         if (($denied = $this->requireFeaturePermission('finance.lots.view')) !== null) {
             return $denied;
         }
 
-        $uid = Auth::id();
         $accountId = $request->input('account_id');
-
-        if ($accountId !== null) {
-            $accountIds = FinAccounts::where('acct_owner', $uid)
-                ->where('acct_id', (int) $accountId)
-                ->pluck('acct_id');
-        } else {
-            $accountIds = FinAccounts::where('acct_owner', $uid)->pluck('acct_id');
-        }
-
-        $query = FinAccountLot::whereIn('acct_id', $accountIds)
-            ->select(['acct_id', 'cost_basis', 'purchase_date', 'sale_date', 'symbol', 'quantity', 'cost_per_unit']);
-
         $asOf = $request->input('as_of');
-        if ($asOf) {
-            $query->where('purchase_date', '<=', $asOf)
-                ->where(fn ($q) => $q->whereNull('sale_date')->orWhere('sale_date', '>', $asOf));
-        } else {
-            $query->whereNull('sale_date');
-        }
 
-        $lots = $query->orderBy('purchase_date', 'desc')->get();
+        $lots = $this->lots->listForUser(
+            (int) Auth::id(),
+            $accountId !== null ? (int) $accountId : null,
+            $asOf ? (string) $asOf : null,
+        );
 
         return Response::json(['lots' => $lots]);
     }

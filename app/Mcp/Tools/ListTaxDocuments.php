@@ -3,7 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
-use App\Models\Files\FileForTaxDocument;
+use App\Services\Finance\Agent\TaxDocumentsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -16,37 +16,29 @@ class ListTaxDocuments extends Tool
 {
     use AuthorizesFeatureAccess;
 
+    public function __construct(
+        private TaxDocumentsQueryService $taxDocuments,
+    ) {}
+
     public function handle(Request $request): Response
     {
         if (($denied = $this->requireFeaturePermission('finance.tax-documents.view')) !== null) {
             return $denied;
         }
 
-        $userId = Auth::id();
-
-        $query = FileForTaxDocument::where('user_id', $userId)
-            ->with([
-                'uploader:id,name',
-                'employmentEntity:id,display_name',
-                'account:acct_id,acct_name',
-            ])
-            ->orderBy('tax_year', 'desc')
-            ->orderBy('created_at', 'desc');
-
-        if ($request->has('year')) {
-            $query->where('tax_year', (int) $request->input('year'));
-        }
-
+        $formTypes = null;
         if ($request->has('form_type')) {
-            $types = array_filter(array_map('trim', explode(',', (string) $request->input('form_type'))));
-            $query->whereIn('form_type', $types);
+            $formTypes = array_values(array_filter(array_map('trim', explode(',', (string) $request->input('form_type')))));
         }
 
-        if ($request->has('is_reviewed')) {
-            $query->where('is_reviewed', filter_var($request->input('is_reviewed'), FILTER_VALIDATE_BOOLEAN));
-        }
+        $docs = $this->taxDocuments->listForUser(
+            (int) Auth::id(),
+            $request->has('year') ? (int) $request->input('year') : null,
+            $formTypes,
+            $request->has('is_reviewed') ? filter_var($request->input('is_reviewed'), FILTER_VALIDATE_BOOLEAN) : null,
+        );
 
-        return Response::json($query->get());
+        return Response::json($docs);
     }
 
     /**
