@@ -55,12 +55,49 @@ class RsuAwardService
             ? FinEquityAwards::query()->where('uid', $userId)->findOrFail($data['id'])
             : FinEquityAwards::query()->firstOrNew($identity);
 
+        $originalVestDate = $award->exists ? $this->dateString($award->getOriginal('vest_date')) : null;
+        $originalSymbol = $award->exists ? (string) $award->getOriginal('symbol') : null;
+
         $award->fill($identity + ['share_count' => $data['share_count']]);
         $this->applyNullablePrice($award, $data, 'grant_price', 'grant_price_source', 'grant_price_fetched_at', $priceSource);
         $this->applyNullablePrice($award, $data, 'vest_price', 'vest_price_source', 'vest_price_fetched_at', $priceSource);
         $award->save();
 
+        $this->reconcileAffectedSettlements($userId, $award, $originalVestDate, $originalSymbol);
+
         return $award;
+    }
+
+    /**
+     * After an award is created or edited, re-reconcile the settlement(s) it
+     * affects. An edit that moves the award to a different vest_date/symbol must
+     * also reconcile the settlement it left behind.
+     */
+    private function reconcileAffectedSettlements(int $userId, FinEquityAwards $award, ?string $originalVestDate, ?string $originalSymbol): void
+    {
+        $newVestDate = $this->dateString($award->vest_date);
+        $newSymbol = (string) $award->symbol;
+
+        $buckets = [[$newVestDate, $newSymbol]];
+        if ($originalVestDate !== null && ($originalVestDate !== $newVestDate || $originalSymbol !== $newSymbol)) {
+            $buckets[] = [$originalVestDate, (string) $originalSymbol];
+        }
+
+        foreach ($buckets as [$vestDate, $symbol]) {
+            if ($vestDate === null || $symbol === '') {
+                continue;
+            }
+            $this->settlementService->reconcileAfterAwardChange($userId, $vestDate, $symbol);
+        }
+    }
+
+    private function dateString(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return Carbon::parse((string) $value)->format('Y-m-d');
     }
 
     public function deleteForUser(int $userId, int $awardId): bool
@@ -105,7 +142,7 @@ class RsuAwardService
 
         $validator = Validator::make($payload, [
             'id' => ['sometimes', 'integer'],
-            'award_id' => ['required', 'string', 'max:64'],
+            'award_id' => ['required', 'string', 'max:20'],
             'grant_date' => ['required', 'date_format:Y-m-d'],
             'vest_date' => ['required', 'date_format:Y-m-d'],
             'share_count' => ['required', 'numeric', 'gt:0'],

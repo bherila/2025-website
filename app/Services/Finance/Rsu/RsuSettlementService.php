@@ -138,6 +138,108 @@ class RsuSettlementService
         $settlement->save();
     }
 
+    /**
+     * Re-reconcile any settlement affected by an award create/edit for the given
+     * vest_date+symbol. Confirmed settlements (with allocations) have their gross
+     * totals and per-award allocations recomputed from the current awards while
+     * preserving allocation links; suggested settlements have their headline
+     * totals refreshed. Empty settlements are removed.
+     */
+    public function reconcileAfterAwardChange(int $userId, string $vestDate, string $symbol): void
+    {
+        $symbol = strtoupper($symbol);
+        $settlement = FinRsuVestSettlement::query()
+            ->where('uid', $userId)
+            ->whereDate('vest_date', $vestDate)
+            ->where('symbol', $symbol)
+            ->with('allocations')
+            ->first();
+
+        if ($settlement === null || $settlement->status === 'ignored') {
+            return;
+        }
+
+        $awards = FinEquityAwards::query()
+            ->where('uid', $userId)
+            ->whereDate('vest_date', $vestDate)
+            ->where('symbol', $symbol)
+            ->whereNotNull('vest_price')
+            ->get();
+
+        if ($awards->isEmpty()) {
+            // No priced awards remain in this bucket (the award moved to another
+            // vest date/symbol, or had its vest price cleared). Any allocations
+            // left behind reference awards that no longer belong here, so remove
+            // them (cascading their links) and drop the now-empty settlement
+            // instead of recomputing gross income from stale allocations.
+            $settlement->allocations()->delete();
+            $settlement->delete();
+
+            return;
+        }
+
+        $summary = $this->summary($awards);
+        $settlement->fill([
+            'vest_price' => $summary['vestPrice'],
+            'vest_price_source' => $summary['vestPriceSource'],
+            'gross_shares' => $summary['grossShares'],
+            'gross_income' => $summary['grossIncome'],
+        ]);
+        $settlement->save();
+
+        if ($settlement->allocations->isEmpty()) {
+            return;
+        }
+
+        // The vest price and/or gross share count may have changed; recompute
+        // the stored withholding fields from the current values and re-enforce
+        // the confirm-time invariants (withheld shares <= gross vested shares;
+        // actual tax <= withheld value) before re-allocating.
+        $withholding = $this->recomputeWithholding($settlement, $summary['vestPrice'], $summary['grossShares']);
+        $settlement->fill($withholding);
+        $settlement->save();
+
+        $this->replaceAllocations(
+            $settlement,
+            $awards,
+            $withholding['withheld_shares_whole'],
+            $withholding['withheld_value'],
+            $withholding['actual_tax_remitted'],
+            $withholding['excess_refund'],
+        );
+    }
+
+    /**
+     * Backfill the link's equity_award_id from its allocation when a link is
+     * attached only at the allocation level. Each allocation belongs to exactly
+     * one award, so deriving the award id makes allocation-only links visible on
+     * the award-level RSU response (which loads links by equity_award_id).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function deriveAllocationAwardId(FinRsuVestSettlement $settlement, array $data): array
+    {
+        if (($data['equity_award_id'] ?? null) !== null) {
+            return $data;
+        }
+
+        if (($data['settlement_allocation_id'] ?? null) === null) {
+            return $data;
+        }
+
+        $allocation = FinRsuVestSettlementAllocation::query()
+            ->where('settlement_id', $settlement->id)
+            ->where('id', $data['settlement_allocation_id'])
+            ->first();
+
+        if ($allocation !== null) {
+            $data['equity_award_id'] = $allocation->equity_award_id;
+        }
+
+        return $data;
+    }
+
     /** @param array<string, mixed> $data */
     public function assertLinkTargetsBelongToSettlement(int $userId, FinRsuVestSettlement $settlement, array $data): void
     {
@@ -253,17 +355,65 @@ class RsuSettlementService
         return ['grossShares' => $grossShares, 'vestPrice' => $vestPrice, 'vestPriceSource' => $first?->vest_price_source, 'grossIncome' => round($grossIncome, 4)];
     }
 
-    /** @param Collection<int, FinEquityAwards> $awards */
+    /**
+     * Recompute the settlement's stored withholding fields from the current
+     * vest price and gross share count, re-enforcing the confirm-time
+     * invariants. An award edit can change the vest price (so withheld value
+     * and refund must be re-derived) or reduce gross shares below the recorded
+     * withheld share count (which must be clamped, since you cannot withhold
+     * more shares than vested). The derivation mirrors confirm():
+     * withheld_value = withheld_shares * vest_price and
+     * excess_refund = withheld_value - actual_tax_remitted.
+     *
+     * @return array{withheld_shares_whole: ?float, withheld_value: ?float, actual_tax_remitted: ?float, excess_refund: ?float}
+     */
+    private function recomputeWithholding(FinRsuVestSettlement $settlement, ?float $vestPrice, float $grossShares): array
+    {
+        $withheldShares = $settlement->withheld_shares_whole !== null ? (float) $settlement->withheld_shares_whole : null;
+        if ($withheldShares !== null && $withheldShares > $grossShares) {
+            $withheldShares = $grossShares;
+        }
+
+        $withheldValue = ($withheldShares === null || $vestPrice === null)
+            ? null
+            : round($withheldShares * $vestPrice, 4);
+
+        $actualTaxRemitted = $settlement->actual_tax_remitted !== null ? (float) $settlement->actual_tax_remitted : null;
+        if ($actualTaxRemitted !== null && $withheldValue !== null && $actualTaxRemitted > $withheldValue) {
+            $actualTaxRemitted = $withheldValue;
+        }
+
+        $excessRefund = ($withheldValue === null || $actualTaxRemitted === null)
+            ? null
+            : round($withheldValue - $actualTaxRemitted, 4);
+
+        return [
+            'withheld_shares_whole' => $withheldShares,
+            'withheld_value' => $withheldValue,
+            'actual_tax_remitted' => $actualTaxRemitted,
+            'excess_refund' => $excessRefund,
+        ];
+    }
+
+    /**
+     * Reconcile a settlement's allocations against the supplied awards without
+     * deleting-and-recreating rows. Existing allocations are updated in place
+     * (keyed by equity_award_id) so that fin_rsu_links rows that reference a
+     * settlement_allocation_id survive an edit; only allocations whose award is
+     * no longer part of the settlement are removed.
+     *
+     * @param  Collection<int, FinEquityAwards>  $awards
+     */
     private function replaceAllocations(FinRsuVestSettlement $settlement, Collection $awards, ?float $withheldShares, ?float $withheldValue, ?float $actualTaxRemitted, ?float $excessRefund): void
     {
-        $settlement->allocations()->delete();
         $grossShares = (float) $settlement->gross_shares;
+        $existing = $settlement->allocations()->get()->keyBy(fn (FinRsuVestSettlementAllocation $allocation): int => (int) $allocation->equity_award_id);
+        $retainedAwardIds = [];
 
         foreach ($awards as $award) {
+            $retainedAwardIds[] = (int) $award->id;
             $ratio = $grossShares === 0.0 ? 0.0 : (float) $award->share_count / $grossShares;
-            FinRsuVestSettlementAllocation::query()->create([
-                'settlement_id' => $settlement->id,
-                'equity_award_id' => $award->id,
+            $attributes = [
                 'vested_shares' => $award->share_count,
                 'gross_income' => round((float) $award->share_count * (float) $award->vest_price, 4),
                 'allocation_ratio' => round($ratio, 10),
@@ -271,8 +421,21 @@ class RsuSettlementService
                 'allocated_withheld_value' => $withheldValue === null ? null : round($withheldValue * $ratio, 4),
                 'allocated_tax_remitted' => $actualTaxRemitted === null ? null : round($actualTaxRemitted * $ratio, 4),
                 'allocated_excess_refund' => $excessRefund === null ? null : round($excessRefund * $ratio, 4),
-            ]);
+            ];
+
+            $allocation = $existing->get((int) $award->id);
+            if ($allocation instanceof FinRsuVestSettlementAllocation) {
+                $allocation->update($attributes);
+
+                continue;
+            }
+
+            $settlement->allocations()->create($attributes + ['equity_award_id' => $award->id]);
         }
+
+        $settlement->allocations()
+            ->whereNotIn('equity_award_id', $retainedAwardIds === [] ? [0] : $retainedAwardIds)
+            ->delete();
     }
 
     private function reconcileAllocatedSettlement(FinRsuVestSettlement $settlement): void
@@ -288,25 +451,19 @@ class RsuSettlementService
         $grossIncome = (float) $settlement->allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->gross_income);
         $vestPrice = $grossShares === 0.0 ? null : round($grossIncome / $grossShares, 6);
 
+        $withholding = $this->recomputeWithholding($settlement, $vestPrice, $grossShares);
+
         $settlement->fill([
             'vest_price' => $vestPrice,
             'gross_shares' => round($grossShares, 6),
             'gross_income' => round($grossIncome, 4),
-        ]);
+        ] + $withholding);
         $settlement->save();
 
-        $withheldShares = $settlement->withheld_shares_whole !== null
-            ? (float) $settlement->withheld_shares_whole
-            : null;
-        $withheldValue = $settlement->withheld_value !== null
-            ? (float) $settlement->withheld_value
-            : null;
-        $actualTaxRemitted = $settlement->actual_tax_remitted !== null
-            ? (float) $settlement->actual_tax_remitted
-            : null;
-        $excessRefund = $settlement->excess_refund !== null
-            ? (float) $settlement->excess_refund
-            : null;
+        $withheldShares = $withholding['withheld_shares_whole'];
+        $withheldValue = $withholding['withheld_value'];
+        $actualTaxRemitted = $withholding['actual_tax_remitted'];
+        $excessRefund = $withholding['excess_refund'];
 
         foreach ($settlement->allocations as $allocation) {
             $ratio = $grossShares === 0.0 ? 0.0 : (float) $allocation->vested_shares / $grossShares;
@@ -327,15 +484,17 @@ class RsuSettlementService
      */
     private function validateConfirmationData(int $userId, array $data, array $summary): array
     {
-        $withheldShares = $this->nullableFloat($data['withheldSharesWhole'] ?? $data['withheld_shares_whole'] ?? null);
-        $actualTaxRemitted = $this->nullableFloat($data['actualTaxRemitted'] ?? $data['actual_tax_remitted'] ?? null);
+        $rawWithheldShares = $this->blankToNull($data['withheldSharesWhole'] ?? $data['withheld_shares_whole'] ?? null);
+        $rawActualTaxRemitted = $this->blankToNull($data['actualTaxRemitted'] ?? $data['actual_tax_remitted'] ?? null);
+
+        $withheldShares = $this->nullableFloat($rawWithheldShares);
         $withheldValue = $withheldShares === null || $summary['vestPrice'] === null ? null : round($withheldShares * $summary['vestPrice'], 4);
         $normalized = [
-            'withheld_shares_whole' => $withheldShares,
-            'actual_tax_remitted' => $actualTaxRemitted,
-            'brokerage_account_id' => $this->nullableInt($data['brokerageAccountId'] ?? $data['brokerage_account_id'] ?? null),
-            'payslip_id' => $this->nullableInt($data['payslipId'] ?? $data['payslip_id'] ?? null),
-            'refund_payslip_id' => $this->nullableInt($data['refundPayslipId'] ?? $data['refund_payslip_id'] ?? null),
+            'withheld_shares_whole' => $rawWithheldShares,
+            'actual_tax_remitted' => $rawActualTaxRemitted,
+            'brokerage_account_id' => $this->blankToNull($data['brokerageAccountId'] ?? $data['brokerage_account_id'] ?? null),
+            'payslip_id' => $this->blankToNull($data['payslipId'] ?? $data['payslip_id'] ?? null),
+            'refund_payslip_id' => $this->blankToNull($data['refundPayslipId'] ?? $data['refund_payslip_id'] ?? null),
             'notes' => isset($data['notes']) ? (string) $data['notes'] : null,
         ];
 
@@ -370,8 +529,16 @@ class RsuSettlementService
             'notes' => ['nullable', 'string'],
         ]);
 
-        /** @var array{withheld_shares_whole: ?float, actual_tax_remitted: ?float, brokerage_account_id: ?int, payslip_id: ?int, refund_payslip_id: ?int, notes: ?string} $validated */
-        $validated = $validator->validate();
+        $validator->validate();
+
+        $validated = [
+            'withheld_shares_whole' => $this->nullableFloat($rawWithheldShares),
+            'actual_tax_remitted' => $this->nullableFloat($rawActualTaxRemitted),
+            'brokerage_account_id' => $this->nullableInt($normalized['brokerage_account_id']),
+            'payslip_id' => $this->nullableInt($normalized['payslip_id']),
+            'refund_payslip_id' => $this->nullableInt($normalized['refund_payslip_id']),
+            'notes' => $normalized['notes'],
+        ];
         $this->assertExternalTargetsBelongToUser($userId, $validated);
 
         return $validated;
@@ -398,6 +565,15 @@ class RsuSettlementService
         if (($data['brokerage_account_id'] ?? null) !== null) {
             FinAccounts::query()->withoutGlobalScopes()->where('acct_owner', $userId)->where('acct_id', $data['brokerage_account_id'])->firstOrFail();
         }
+    }
+
+    private function blankToNull(mixed $value): mixed
+    {
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            return null;
+        }
+
+        return $value;
     }
 
     private function nullableFloat(mixed $value): ?float
