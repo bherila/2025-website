@@ -10,6 +10,8 @@ use App\Models\AgentApiToken;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\User;
 use App\Services\FileStorageService;
+use App\Services\Finance\Locks\PartnershipBasisLockGuard;
+use App\Support\Accounting\AccountingPeriodLockGuard;
 use App\Support\Agent\AgentTokenService;
 use App\Support\Agent\Capability;
 use App\Support\Agent\CapabilityRegistry;
@@ -30,6 +32,10 @@ class AgentImportTest extends TestCase
         // User ID 1 is always treated as admin; occupy it so the users under
         // test are genuinely non-admin.
         $this->createAdminUser();
+
+        // Mirror the AgentServiceProvider chokepoint binding (the integrator
+        // wires the identical bind() into the provider).
+        $this->app->bind(AccountingPeriodLockGuard::class, PartnershipBasisLockGuard::class);
 
         // Mirror the routes/agent.php chokepoint registration (the vertical
         // branch does not edit shared route files; the integrator wires the
