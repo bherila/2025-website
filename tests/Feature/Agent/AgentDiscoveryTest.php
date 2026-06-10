@@ -19,7 +19,12 @@ class AgentDiscoveryTest extends TestCase
         // test are genuinely non-admin.
         $this->createAdminUser();
 
-        $registry = app(CapabilityRegistry::class);
+        // Swap in a fresh registry so these synthetic capabilities fully
+        // control the manifests under test (the real module registrations —
+        // e.g. FinanceCapabilities — are covered by their own tests and would
+        // otherwise collide on ids).
+        $registry = new CapabilityRegistry;
+        app()->instance(CapabilityRegistry::class, $registry);
 
         $registry->register(new Capability(
             id: 'finance.payslips.list',
