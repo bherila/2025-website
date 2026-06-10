@@ -112,6 +112,15 @@ describe('rsuUiHelpers', () => {
     expect(firstPayslipHref(award)).toBe('/finance/payslips/entry?id=44')
   })
 
+  it('does not count type-only payslip links as linked payslips', () => {
+    const award: IAward = {
+      rsu_links: [{ id: 1, link_type: 'payslip_rsu_income', payslip_id: null }],
+    }
+
+    expect(hasPayslipLink(award)).toBe(false)
+    expect(firstPayslipHref(award)).toBeNull()
+  })
+
   it('flags settlements with an unreconciled excess refund', () => {
     const award: IAward = {
       settlement_allocations: [{ settlement: { id: 9, excess_refund: '42.00', status: 'confirmed' } }],
@@ -123,5 +132,9 @@ describe('rsuUiHelpers', () => {
       ...award,
       rsu_links: [{ id: 2, link_type: 'payslip_rsu_excess_refund', payslip_id: 6 }],
     })).toBe(false)
+    expect(needsRefundReconciliation({
+      ...award,
+      rsu_links: [{ id: 3, link_type: 'payslip_rsu_excess_refund', payslip_id: null }],
+    })).toBe(true)
   })
 })

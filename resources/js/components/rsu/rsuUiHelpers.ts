@@ -54,7 +54,7 @@ export function hasPayslipLink(award: Pick<IAward, 'rsu_links' | 'settlement_all
   return Boolean(
     settlement?.payslip_id
     || settlement?.refund_payslip_id
-    || award.rsu_links?.some((link) => link.payslip_id || link.link_type.startsWith('payslip_')),
+    || award.rsu_links?.some((link) => link.payslip_id),
   )
 }
 
@@ -63,7 +63,10 @@ export function needsRefundReconciliation(award: Pick<IAward, 'settlement_alloca
   if (!settlement) return false
   const excessRefund = Number(settlement.excess_refund ?? 0)
   if (excessRefund <= 0) return false
-  const linkedRefund = award.rsu_links?.some((link) => link.link_type === 'excess_refund' || link.link_type === 'payslip_rsu_excess_refund')
+  const linkedRefund = award.rsu_links?.some((link) => (
+    link.link_type === 'excess_refund'
+    || (link.link_type === 'payslip_rsu_excess_refund' && link.payslip_id)
+  ))
   return !linkedRefund && !settlement.refund_payslip_id
 }
 
