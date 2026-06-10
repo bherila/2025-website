@@ -119,7 +119,8 @@ function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: 
 
   const cadence = Math.max(1, Math.round(job.refresher.cadenceYears))
   const firstOffset = Math.max(0, Math.round(job.refresher.firstYearOffset))
-  const anchorYear = Math.max(startYear, yearFromIsoDate(job.startDate) ?? startYear)
+  const jobStartYear = yearFromIsoDate(job.startDate)
+  const anchorYear = Math.max(startYear, jobStartYear ?? startYear)
   const horizonEndYear = startYear + horizonYears
   const sharePrice = Math.max(0, Number(job.company.currentSharePrice ?? 0))
   const rows: IAward[] = []
@@ -127,7 +128,8 @@ function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: 
   for (let offset = firstOffset; anchorYear + offset < horizonEndYear; offset += cadence) {
     const year = anchorYear + offset
     const projectionOffset = Math.max(0, year - startYear)
-    const raiseFactor = (1 + (job.comp.annualRaisePct / 100)) ** projectionOffset
+    const raiseOffset = cashCompRaiseOffset(jobStartYear, projectionOffset, year)
+    const raiseFactor = (1 + (job.comp.annualRaisePct / 100)) ** raiseOffset
     const targetValue = currency(job.comp.baseSalary).multiply(raiseFactor).multiply(job.refresher.pctOfBase / 100).value
     const shareCount = sharePrice > 0 ? currency(targetValue).divide(sharePrice).value : undefined
     const vestEvents = shareCount !== undefined
@@ -159,6 +161,15 @@ function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: 
   }
 
   return rows
+}
+
+function cashCompRaiseOffset(jobStartYear: number | null, projectionOffset: number, year: number): number {
+  if (jobStartYear === null) return projectionOffset
+
+  const projectionStartYear = year - projectionOffset
+  if (jobStartYear <= projectionStartYear) return projectionOffset
+
+  return Math.max(0, year - jobStartYear)
 }
 
 function yearFromIsoDate(value: string | null | undefined): number | null {

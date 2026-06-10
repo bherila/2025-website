@@ -469,6 +469,7 @@ function RsuLinkWorkflow({
   const effectiveCandidateKey = selectedCandidate ? candidateKey(linkTarget, selectedCandidate.id) : ''
   const linkTypeOptions = linkTarget === 'transaction' ? TRANSACTION_LINK_TYPES : PAYSLIP_LINK_TYPES
   const selectedAllocation = allocationChoices.find((choice) => choice.key === selectedAllocationKey) ?? null
+  const linkTargetCount = selectedAllocation ? 1 : Math.max(1, allocationChoices.length)
 
   useEffect(() => {
     if (!selectedCandidateKey && rows[0]) {
@@ -488,29 +489,34 @@ function RsuLinkWorkflow({
   const createLink = async () => {
     if (!selectedCandidate) return
 
-    const payload: Record<string, unknown> = {
+    const targetAllocations = selectedAllocation
+      ? [selectedAllocation]
+      : allocationChoices.length > 0 ? allocationChoices : [null]
+
+    const basePayload: Record<string, unknown> = {
       link_type: linkType,
       status: 'confirmed',
       confidence: numericValue(selectedCandidate.confidence),
       confidence_reasons: [`Selected from RSU ${linkTarget} candidates UI`],
     }
 
-    if (selectedAllocation) {
-      if (selectedAllocation.allocationId) payload.settlement_allocation_id = selectedAllocation.allocationId
-      if (selectedAllocation.equityAwardId) payload.equity_award_id = selectedAllocation.equityAwardId
-    }
-
     if (linkTarget === 'transaction') {
-      payload.transaction_id = selectedCandidate.id
+      basePayload.transaction_id = selectedCandidate.id
     } else {
-      payload.payslip_id = selectedCandidate.id
+      basePayload.payslip_id = selectedCandidate.id
     }
 
     setSaving(true)
     setMessage(null)
     try {
-      await fetchWrapper.post(`/api/rsu/settlements/${settlementId}/links`, payload)
-      setMessage('RSU link created.')
+      await Promise.all(targetAllocations.map((allocation) => {
+        const payload = { ...basePayload }
+        if (allocation?.allocationId) payload.settlement_allocation_id = allocation.allocationId
+        if (allocation?.equityAwardId) payload.equity_award_id = allocation.equityAwardId
+
+        return fetchWrapper.post(`/api/rsu/settlements/${settlementId}/links`, payload)
+      }))
+      setMessage(linkTargetCount === 1 ? 'RSU link created.' : `RSU links created for ${linkTargetCount} awards.`)
       onLinked()
     } catch (error) {
       console.error('Failed to create RSU settlement link', error)
@@ -574,7 +580,7 @@ function RsuLinkWorkflow({
               <label className="grid gap-1 text-xs font-medium text-muted-foreground sm:col-span-2">
                 Apply to
                 <select className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground" value={selectedAllocationKey} onChange={(event) => setSelectedAllocationKey(event.target.value)}>
-                  <option value="settlement">Settlement-level link</option>
+                  <option value="settlement">All settlement awards</option>
                   {allocationChoices.map((choice) => (
                     <option key={choice.key} value={choice.key}>{choice.label}</option>
                   ))}

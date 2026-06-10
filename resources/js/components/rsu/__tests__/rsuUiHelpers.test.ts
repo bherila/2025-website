@@ -95,9 +95,9 @@ describe('rsuUiHelpers', () => {
     expect(rows[0]).toMatchObject({
       award_id: 'Projected refresher 2028',
       vest_date: '2028-04-01',
-      virtualValue: 55125,
+      virtualValue: 52500,
     })
-    expect(rows[0]?.share_count).toBe(34.453125)
+    expect(rows[0]?.share_count).toBe(32.8125)
   })
 
   it('classifies brokerage and payslip links separately', () => {
