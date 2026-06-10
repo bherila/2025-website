@@ -218,8 +218,62 @@ class FinanceRsuController extends Controller
     public function payslipRsuLinks(int $payslip): JsonResponse
     {
         $row = FinPayslips::query()->where('uid', Auth::id())->where('payslip_id', $payslip)->firstOrFail();
+        $userId = (int) Auth::id();
+        $payslipId = (int) $row->payslip_id;
 
-        return response()->json(FinRsuLink::query()->where('payslip_id', $row->payslip_id)->with('settlement')->get());
+        $links = FinRsuLink::query()
+            ->where('uid', $userId)
+            ->where('payslip_id', $payslipId)
+            ->with('settlement')
+            ->get();
+
+        $existingSettlementLinkKeys = $links
+            ->filter(fn (FinRsuLink $link): bool => $link->settlement_id !== null)
+            ->mapWithKeys(fn (FinRsuLink $link): array => [
+                "{$link->settlement_id}:{$link->link_type}:{$link->payslip_id}" => true,
+            ]);
+
+        $settlementLinks = FinRsuVestSettlement::query()
+            ->where('uid', $userId)
+            ->where(function ($query) use ($payslipId): void {
+                $query->where('payslip_id', $payslipId)
+                    ->orWhere('refund_payslip_id', $payslipId);
+            })
+            ->get()
+            ->flatMap(function (FinRsuVestSettlement $settlement) use ($existingSettlementLinkKeys, $payslipId): array {
+                $rows = [];
+                if ((int) $settlement->payslip_id === $payslipId) {
+                    $rows[] = $this->settlementPayslipLinkRow($settlement, 'payslip_rsu_income', -($settlement->id * 10 + 1), $payslipId);
+                }
+                if ((int) $settlement->refund_payslip_id === $payslipId) {
+                    $rows[] = $this->settlementPayslipLinkRow($settlement, 'payslip_rsu_excess_refund', -($settlement->id * 10 + 2), $payslipId);
+                }
+
+                return array_values(array_filter($rows, static fn (array $link): bool => ! isset($existingSettlementLinkKeys["{$link['settlement_id']}:{$link['link_type']}:{$link['payslip_id']}"])));
+            });
+
+        return response()->json($links->concat($settlementLinks)->values());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function settlementPayslipLinkRow(FinRsuVestSettlement $settlement, string $linkType, int $id, int $payslipId): array
+    {
+        return [
+            'id' => $id,
+            'settlement_id' => $settlement->id,
+            'settlement_allocation_id' => null,
+            'equity_award_id' => null,
+            'link_type' => $linkType,
+            'transaction_id' => null,
+            'account_id' => null,
+            'lot_id' => null,
+            'payslip_id' => $payslipId,
+            'status' => $settlement->status,
+            'notes' => null,
+            'settlement' => $settlement,
+        ];
     }
 
     public function taxProjection(Request $request): JsonResponse

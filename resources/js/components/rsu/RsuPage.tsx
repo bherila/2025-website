@@ -184,6 +184,7 @@ export default function RsuPage() {
                     const transactionLink = firstTransactionLink(r.rsu_links)
                     const transactionUrl = transactionLink ? transactionHref(transactionLink) : null
                     const payslipUrl = firstPayslipHref(r)
+                    const refundReconciliationNeeded = needsRefundReconciliation(r)
                     const focused = settlement?.id === focusQuery.settlementId
                     return (
                       <TableRow key={r.isVirtual ? `virtual-${r.virtualYear}-${i}` : r.id ?? i} className={focused ? 'bg-primary/10' : vested && !r.isVirtual ? 'opacity-50 line-through' : r.isVirtual ? 'bg-muted/30' : ''}>
@@ -214,7 +215,7 @@ export default function RsuPage() {
                                 <span>{settlementLabel(settlement)}</span>
                                 <span>{hasBrokerageLink(r) ? 'Brokerage linked' : 'Missing brokerage link'}</span>
                                 <span>{hasPayslipLink(r) ? 'Payslip linked' : 'Missing payslip link'}</span>
-                                {needsRefundReconciliation(r) && <span className="text-destructive">Needs refund reconciliation</span>}
+                                {refundReconciliationNeeded && <span className="text-destructive">Needs refund reconciliation</span>}
                               </>
                             )}
                           </div>
@@ -254,11 +255,11 @@ export default function RsuPage() {
                                     </a>
                                   </Button>
                                 )}
-                                {settlement?.id && !payslipUrl && (
+                                {settlement?.id && (!payslipUrl || refundReconciliationNeeded) && (
                                   <Button asChild variant="outline" size="sm">
                                     <a href={settlementLinkHref(settlement.id, 'payslip')}>
                                       <ReceiptText className="h-3.5 w-3.5" />
-                                      Payslip
+                                      {refundReconciliationNeeded ? 'Refund payslip' : 'Payslip'}
                                     </a>
                                   </Button>
                                 )}

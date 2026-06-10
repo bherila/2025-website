@@ -23,6 +23,7 @@ export interface IRsuSettlement {
   withheld_value?: string | number | null
   actual_tax_remitted?: string | number | null
   excess_refund?: string | number | null
+  brokerage_account_id?: number | null
   payslip_id?: number | null
   refund_payslip_id?: number | null
 }

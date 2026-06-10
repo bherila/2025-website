@@ -94,6 +94,14 @@ describe('rsuUiHelpers', () => {
     expect(transactionHref(award.rsu_links![0]!)).toBe('/finance/account/5/transactions#t_id=10')
   })
 
+  it('uses canonical all-account transaction links and settlement-level brokerage links', () => {
+    expect(transactionHref({ transaction_id: 10, account_id: null })).toBe('/finance/account/all/transactions#t_id=10')
+    expect(hasBrokerageLink({
+      settlement_allocations: [{ settlement: { id: 9, brokerage_account_id: 5, status: 'confirmed' } }],
+      rsu_links: [],
+    })).toBe(true)
+  })
+
   it('recognizes settlement-level payslip links', () => {
     const award: IAward = {
       settlement_allocations: [{ settlement: { id: 9, payslip_id: 44, status: 'confirmed' } }],

@@ -30,7 +30,7 @@ export function settlementLinkHref(settlementId: number, target: 'transaction' |
 
 export function transactionHref(link: Pick<IRsuLink, 'transaction_id' | 'account_id'>): string | null {
   if (!link.transaction_id) return null
-  const base = link.account_id ? `/finance/account/${link.account_id}/transactions` : '/finance/all-transactions'
+  const base = link.account_id ? `/finance/account/${link.account_id}/transactions` : '/finance/account/all/transactions'
   return `${base}#t_id=${link.transaction_id}`
 }
 
@@ -42,8 +42,11 @@ export function primarySettlement(award: Pick<IAward, 'settlement_allocations'>)
   return award.settlement_allocations?.find((allocation) => allocation.settlement)?.settlement ?? null
 }
 
-export function hasBrokerageLink(award: Pick<IAward, 'rsu_links'>): boolean {
-  return Boolean(award.rsu_links?.some((link) => link.transaction_id || link.lot_id || link.account_id))
+export function hasBrokerageLink(award: Pick<IAward, 'rsu_links' | 'settlement_allocations'>): boolean {
+  return Boolean(
+    primarySettlement(award)?.brokerage_account_id
+    || award.rsu_links?.some((link) => link.transaction_id || link.lot_id || link.account_id),
+  )
 }
 
 export function hasPayslipLink(award: Pick<IAward, 'rsu_links' | 'settlement_allocations'>): boolean {
