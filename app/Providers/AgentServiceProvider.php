@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Support\Agent\AgentContext;
+use App\Support\Agent\CapabilityRegistry;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -17,5 +18,11 @@ class AgentServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(AgentContext::class, fn (): AgentContext => new AgentContext(null, null));
+
+        $this->app->singleton(CapabilityRegistry::class, function (): CapabilityRegistry {
+            // Module capability registrations (FinanceCapabilities, etc.)
+            // are added here in later PRs.
+            return new CapabilityRegistry;
+        });
     }
 }
