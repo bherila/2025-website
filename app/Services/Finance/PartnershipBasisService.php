@@ -536,8 +536,30 @@ class PartnershipBasisService
      */
     public function seedOutsideBasisFromTransactions(FinAccounts $account, int $userId, int $year): array
     {
+        // resolveManualInterest() already blocks accounts holding more than one
+        // partnership interest (bulk seed has no way to pick a target), so the
+        // multi-interest case is rejected before we touch any candidates.
         $interest = $this->resolveManualInterest($account, $userId, null);
         $this->assertYearEditable($interest, $year);
+
+        // Bulk seed writes reviewed account_transaction events with only same-source
+        // idempotency; it cannot tell whether a transaction already corresponds to a
+        // K-1-reported contribution/distribution. If the year already carries any
+        // K-1-sourced contribution/distribution event, seeding could reduce/increase
+        // outside basis twice, so disable bulk seed and require per-candidate review.
+        $hasK1ContributionOrDistribution = FinPartnershipBasisEvent::query()
+            ->where('user_id', $userId)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->whereIn('source_type', ['k1_field', 'k1_code'])
+            ->whereIn('event_type', $this->contributionDistributionEventTypes())
+            ->exists();
+
+        if ($hasK1ContributionOrDistribution) {
+            throw ValidationException::withMessages([
+                'seed' => 'Bulk seed is disabled because this year already contains K-1-sourced contribution/distribution events. Accept candidates individually to avoid double-counting outside basis.',
+            ]);
+        }
 
         $basisYears = FinPartnershipBasisYear::query()
             ->where('user_id', $userId)
@@ -1613,13 +1635,39 @@ class PartnershipBasisService
         }
     }
 
+    /**
+     * Event types that represent a capital contribution or a distribution — the
+     * categories a bank-transaction candidate could duplicate against a K-1.
+     *
+     * @return array<int, string>
+     */
+    private function contributionDistributionEventTypes(): array
+    {
+        return [
+            PartnershipBasisEventType::InitialCashContribution->value,
+            PartnershipBasisEventType::InitialPropertyContributionBasis->value,
+            PartnershipBasisEventType::CapitalContributionCash->value,
+            PartnershipBasisEventType::CapitalContributionPropertyBasis->value,
+            PartnershipBasisEventType::CashDistribution->value,
+            PartnershipBasisEventType::PropertyDistributionBasis->value,
+            PartnershipBasisEventType::MarketableSecuritiesDistribution->value,
+            PartnershipBasisEventType::DeemedDistributionLiabilityDecrease->value,
+            PartnershipBasisEventType::LiquidationDistributionCash->value,
+            PartnershipBasisEventType::LiquidationDistributionProperty->value,
+        ];
+    }
+
     private function basisSideFor(PartnershipBasisEventType $type): string
     {
         return match ($type) {
             PartnershipBasisEventType::InitialTaxBasisCapital, PartnershipBasisEventType::InitialCapitalAccountValue,
             PartnershipBasisEventType::ManualIncreaseToTaxCapital, PartnershipBasisEventType::ManualDecreaseToTaxCapital,
             PartnershipBasisEventType::ManualIncreaseToBookCapital, PartnershipBasisEventType::ManualDecreaseToBookCapital => 'inside',
-            PartnershipBasisEventType::Memorandum, PartnershipBasisEventType::ReconciliationAdjustment, PartnershipBasisEventType::ManualReconciliationNote => 'memorandum',
+            // §754/§743(b) step-up amortization adjusts the partner's share of
+            // inside basis in partnership assets and flows through income/loss
+            // allocations; it is a memorandum detail with no direct outside-basis
+            // effect, so it must not sit on the outside-basis side.
+            PartnershipBasisEventType::Memorandum, PartnershipBasisEventType::ReconciliationAdjustment, PartnershipBasisEventType::ManualReconciliationNote, PartnershipBasisEventType::Section754StepUpAmortization => 'memorandum',
             PartnershipBasisEventType::PriorYearRollforward => 'both',
             default => 'outside',
         };
@@ -2028,6 +2076,14 @@ class PartnershipBasisService
      */
     private function k3ForeignTaxCents(array $data): ?int
     {
+        // A reviewer correction to the K-3 foreign-tax total must win over the
+        // raw extraction, mirroring Form1116FactsBuilder, so outside basis and
+        // Form 1116 stay aligned after the override.
+        $override = $this->sourceOverrideCents($data, 'k3:foreign-tax-total');
+        if ($override !== null) {
+            return $override;
+        }
+
         $sections = $data['k3']['sections'] ?? null;
         if (! is_array($sections)) {
             return null;
