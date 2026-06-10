@@ -758,6 +758,7 @@ class FinanceLotsController extends Controller
             if (! $canReadTransactions) {
                 $t->t_description = null;
                 $t->t_amt = null;
+                $t->t_type = null;
             }
 
             return $t;

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\UtilityBillTracker;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\UtilityBillTracker\Concerns\RedactsLinkedTransactions;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\User;
 use App\Models\UtilityBillTracker\UtilityAccount;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Auth;
 
 class UtilityBillLinkingController extends Controller
 {
+    use RedactsLinkedTransactions;
+
     public function __construct(private readonly FeatureAccess $featureAccess) {}
 
     /**
@@ -135,7 +138,7 @@ class UtilityBillLinkingController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Bill linked to transaction successfully',
-            'bill' => $bill->fresh()->load('linkedTransaction:t_id,t_description,t_amt,t_date'),
+            'bill' => $this->redactLinkedTransactions($bill->fresh()->load('linkedTransaction:t_id,t_description,t_amt,t_date')),
         ]);
     }
 

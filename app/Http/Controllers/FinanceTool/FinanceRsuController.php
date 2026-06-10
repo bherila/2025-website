@@ -40,7 +40,13 @@ class FinanceRsuController extends Controller
     public function getRsuData(Request $request): JsonResponse
     {
         $userId = (int) Auth::id();
-        $this->backfillService->backfillMissingVestPrices($userId);
+
+        // Backfilling persists vest prices, so only run it for users who can
+        // manage RSUs. View-only users get a read-only snapshot.
+        $user = $request->user();
+        if ($user !== null && $this->featureAccess->can($user, 'finance.rsu.manage')) {
+            $this->backfillService->backfillMissingVestPrices($userId);
+        }
 
         $awards = FinEquityAwards::query()
             ->where('uid', $userId)

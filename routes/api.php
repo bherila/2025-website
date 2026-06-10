@@ -603,7 +603,7 @@ Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-co
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/reconciliation-summary', [ReconciliationSummaryController::class, 'show']);
-Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view,finance.tax-documents.view'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-years/{year}/lots-match', [TaxYearLotsMatchController::class, 'store']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);

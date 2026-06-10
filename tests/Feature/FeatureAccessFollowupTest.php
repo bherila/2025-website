@@ -11,6 +11,7 @@ use App\Models\FinanceTool\FinRsuVestSettlement;
 use App\Models\User;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
+use App\Services\Finance\Rsu\RsuVestPriceBackfillService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -206,6 +207,7 @@ class FeatureAccessFollowupTest extends TestCase
         $this->assertNotNull($tx);
         $this->assertNull($tx['t_description']);
         $this->assertNull($tx['t_amt']);
+        $this->assertNull($tx['t_type']);
         $this->assertSame('META', $tx['t_symbol']);
     }
 
@@ -306,22 +308,38 @@ class FeatureAccessFollowupTest extends TestCase
 
     // Item 7: lots-view users can load all-line-items without transactions.view.
 
-    public function test_lots_view_can_load_all_line_items(): void
+    public function test_lots_view_all_line_items_redacts_transaction_detail(): void
     {
         $user = $this->grantFeatures($this->makeUser(), ['finance.lots.view']);
         $account = $this->makeAccount($user);
-        $this->makeTransaction($account);
+        // A non-security cash transaction must not reach a lots-only user at all.
+        $this->makeTransaction($account, ['t_symbol' => null, 't_description' => 'PAYCHECK', 't_type' => 'Credit']);
+        $this->makeTransaction($account, ['t_description' => 'SECRET PAYEE', 't_comment' => 'memo']);
 
-        $this->actingAs($user)->getJson('/api/finance/all-line-items')->assertOk();
+        $items = $this->actingAs($user)->getJson('/api/finance/all-line-items')->assertOk()->json();
+
+        $this->assertCount(1, $items, 'lots-only users should only receive security trade rows');
+        $tx = $items[0];
+        // Trade economics required by the lot/wash-sale engine are preserved.
+        $this->assertSame('META', $tx['t_symbol']);
+        $this->assertSame('Buy', $tx['t_type']);
+        $this->assertSame(100.0, (float) $tx['t_amt']);
+        // Ledger detail is redacted.
+        $this->assertNull($tx['t_description']);
+        $this->assertNull($tx['t_comment']);
+        $this->assertArrayNotHasKey('tags', $tx);
     }
 
-    public function test_transactions_view_can_still_load_all_line_items(): void
+    public function test_transactions_view_all_line_items_exposes_full_detail(): void
     {
         $user = $this->grantFeatures($this->makeUser(), ['finance.transactions.view']);
         $account = $this->makeAccount($user);
-        $this->makeTransaction($account);
+        $this->makeTransaction($account, ['t_symbol' => null, 't_description' => 'PAYCHECK', 't_type' => 'Credit']);
 
-        $this->actingAs($user)->getJson('/api/finance/all-line-items')->assertOk();
+        $items = $this->actingAs($user)->getJson('/api/finance/all-line-items')->assertOk()->json();
+
+        $this->assertCount(1, $items);
+        $this->assertSame('PAYCHECK', $items[0]['t_description']);
     }
 
     public function test_all_line_items_denied_without_lots_or_transactions_view(): void
@@ -329,6 +347,86 @@ class FeatureAccessFollowupTest extends TestCase
         $user = $this->grantFeatures($this->makeUser(), ['finance.tax-preview.view']);
 
         $this->actingAs($user)->getJson('/api/finance/all-line-items')->assertForbidden();
+    }
+
+    // Item 2b: the read-only lot-reconciliation health endpoint backs a widget
+    // the tax-preview dashboard always mounts, so tax-preview viewers must keep
+    // access to it even though the rest of the route group moved to tax-documents.
+
+    public function test_lot_reconciliation_year_allows_tax_preview_viewer(): void
+    {
+        $viewer = $this->grantFeatures($this->makeUser(), ['finance.tax-preview.view']);
+        $this->actingAs($viewer)->getJson('/api/finance/tax-years/2026/lot-reconciliation')->assertOk();
+    }
+
+    public function test_lot_reconciliation_year_allows_tax_documents_viewer(): void
+    {
+        $viewer = $this->grantFeatures($this->makeUser(), ['finance.tax-documents.view']);
+        $this->actingAs($viewer)->getJson('/api/finance/tax-years/2026/lot-reconciliation')->assertOk();
+    }
+
+    public function test_lot_reconciliation_year_denied_without_either_permission(): void
+    {
+        $denied = $this->grantFeatures($this->makeUser(), ['finance.rsu.view']);
+        $this->actingAs($denied)->getJson('/api/finance/tax-years/2026/lot-reconciliation')->assertForbidden();
+    }
+
+    // Item 2c: GET /api/rsu must not run the persisting vest-price backfill for
+    // view-only users; only finance.rsu.manage triggers it.
+
+    public function test_rsu_data_view_does_not_backfill_vest_prices(): void
+    {
+        $viewer = $this->grantFeatures($this->makeUser(), ['finance.rsu.view']);
+        $mock = $this->mock(RsuVestPriceBackfillService::class);
+        $mock->shouldNotReceive('backfillMissingVestPrices');
+
+        $this->actingAs($viewer)->getJson('/api/rsu')->assertOk();
+    }
+
+    public function test_rsu_data_manage_runs_backfill(): void
+    {
+        $manager = $this->grantFeatures($this->makeUser(), ['finance.rsu.manage']);
+        $mock = $this->mock(RsuVestPriceBackfillService::class);
+        $mock->shouldReceive('backfillMissingVestPrices')->once();
+
+        $this->actingAs($manager)->getJson('/api/rsu')->assertOk();
+    }
+
+    // Item 5b: utility-bill list/show responses redact linked-transaction
+    // detail for users without finance.transactions.view.
+
+    public function test_utility_bill_list_redacts_linked_transaction_without_transactions_view(): void
+    {
+        $user = $this->grantFeatures($this->makeUser(), ['utility-bills.view']);
+        [$account, $bill] = $this->utilityBill($user);
+        $txAccount = $this->makeAccount($user);
+        $transaction = $this->makeTransaction($txAccount, ['t_description' => 'SECRET PAYEE', 't_amt' => 150.00]);
+        $bill->update(['t_id' => $transaction->t_id]);
+
+        $bills = $this->actingAs($user)
+            ->getJson("/api/utility-bill-tracker/accounts/{$account->id}/bills")
+            ->assertOk()
+            ->json();
+
+        $this->assertNotNull($bills[0]['linked_transaction']);
+        $this->assertNull($bills[0]['linked_transaction']['t_description']);
+        $this->assertNull($bills[0]['linked_transaction']['t_amt']);
+    }
+
+    public function test_utility_bill_list_exposes_linked_transaction_with_transactions_view(): void
+    {
+        $user = $this->grantFeatures($this->makeUser(), ['utility-bills.view', 'finance.transactions.view']);
+        [$account, $bill] = $this->utilityBill($user);
+        $txAccount = $this->makeAccount($user);
+        $transaction = $this->makeTransaction($txAccount, ['t_description' => 'SECRET PAYEE', 't_amt' => 150.00]);
+        $bill->update(['t_id' => $transaction->t_id]);
+
+        $bills = $this->actingAs($user)
+            ->getJson("/api/utility-bill-tracker/accounts/{$account->id}/bills")
+            ->assertOk()
+            ->json();
+
+        $this->assertSame('SECRET PAYEE', $bills[0]['linked_transaction']['t_description']);
     }
 
     // Item 8: tag CRUD aligned with finance.rules.manage.
