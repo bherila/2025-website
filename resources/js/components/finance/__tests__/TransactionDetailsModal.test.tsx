@@ -11,6 +11,7 @@ jest.mock('sonner', () => ({ toast: { error: jest.fn() } }))
 
 jest.mock('@/fetchWrapper', () => ({
   fetchWrapper: {
+    get: jest.fn(),
     post: jest.fn(),
   },
 }))
@@ -65,6 +66,7 @@ describe('TransactionDetailsModal', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    jest.mocked(fetchWrapper.get).mockResolvedValue([])
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
   })
 
@@ -79,6 +81,7 @@ describe('TransactionDetailsModal', () => {
     }))
 
     render(<TransactionDetailsModal transaction={transaction} isOpen onClose={jest.fn()} />)
+    await waitFor(() => expect(fetchWrapper.get).toHaveBeenCalledWith('/api/finance/transactions/123/rsu-links'))
     fireEvent.click(screen.getByText('+ Groceries'))
 
     expect(screen.getByTitle('Adding tag...')).toBeInTheDocument()
