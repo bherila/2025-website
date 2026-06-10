@@ -12,12 +12,11 @@ import { RsuByVestDate } from '@/components/rsu/RsuByVestDate'
 import RsuChart from '@/components/rsu/RsuChart'
 import RsuSubNav from '@/components/rsu/RsuSubNav'
 import {
-  firstPayslipLink,
+  firstPayslipHref,
   firstTransactionLink,
   hasBrokerageLink,
   hasPayslipLink,
   needsRefundReconciliation,
-  payslipHref,
   primarySettlement,
   type RsuDashboardFilter,
   settlementHref,
@@ -40,6 +39,16 @@ export default function RsuPage() {
   const [careerWorkflow, setCareerWorkflow] = useState<CareerCompWorkflow | null>(null)
   const [chartMode, setChartMode] = useState<'shares' | 'value'>('shares')
   const [filter, setFilter] = useState<RsuDashboardFilter>('actual')
+  const focusQuery = useMemo(() => {
+    if (typeof window === 'undefined') return { settlementId: null, linkTarget: null }
+    const params = new URLSearchParams(window.location.search)
+    const settlementParam = params.get('settlement_id')
+    const linkParam = params.get('link')
+    return {
+      settlementId: settlementParam ? Number(settlementParam) : null,
+      linkTarget: linkParam === 'transaction' || linkParam === 'payslip' ? linkParam : null,
+    }
+  }, [])
   useEffect(() => {
     Promise.all([
       fetchWrapper.get('/api/rsu'),
@@ -56,6 +65,11 @@ export default function RsuPage() {
   const now = todayIso()
   const virtualRsu = useMemo(() => virtualRefreshersFromCareerComp(careerWorkflow?.inputs), [careerWorkflow])
   const actualAndVirtual = useMemo(() => [...rsu, ...virtualRsu], [rsu, virtualRsu])
+  const focusedAwards = useMemo(
+    () => rsu.filter((award) => primarySettlement(award)?.id === focusQuery.settlementId),
+    [focusQuery.settlementId, rsu],
+  )
+  const focusedSettlement = focusedAwards.length > 0 ? primarySettlement(focusedAwards[0]!) : null
   const filteredRsu = useMemo(() => {
     const rows = filter === 'actual-and-virtual' ? actualAndVirtual : rsu
     if (filter === 'unvested') return rsu.filter((r) => !isVested(r, now))
@@ -90,6 +104,36 @@ export default function RsuPage() {
         </Tabs>
         <RsuChart rsu={rsu} mode={chartMode} />
       </div>
+      {focusQuery.settlementId && (
+        <Card className="mb-4">
+          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-semibold">
+                {focusedSettlement ? settlementLabel(focusedSettlement) : `Settlement #${focusQuery.settlementId}`}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {focusedAwards.length > 0
+                  ? `${focusedAwards.length} vest event${focusedAwards.length === 1 ? '' : 's'} highlighted below.`
+                  : 'No loaded vest events reference this settlement.'}
+                {focusQuery.linkTarget ? ` Link target: ${focusQuery.linkTarget}.` : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href={`/api/rsu/settlements/${focusQuery.settlementId}/candidates`}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Candidates
+                </a>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <a href="/finance/rsu">
+                  Clear focus
+                </a>
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
       <Tabs defaultValue="all-vests">
         <div className="mb-4 flex items-center justify-between">
           <TabsList>
@@ -139,10 +183,10 @@ export default function RsuPage() {
                     const settlement = primarySettlement(r)
                     const transactionLink = firstTransactionLink(r.rsu_links)
                     const transactionUrl = transactionLink ? transactionHref(transactionLink) : null
-                    const payslipLink = firstPayslipLink(r.rsu_links)
-                    const payslipUrl = payslipHref(payslipLink?.payslip_id)
+                    const payslipUrl = firstPayslipHref(r)
+                    const focused = settlement?.id === focusQuery.settlementId
                     return (
-                      <TableRow key={r.isVirtual ? `virtual-${r.virtualYear}-${i}` : r.id ?? i} className={vested && !r.isVirtual ? 'opacity-50 line-through' : r.isVirtual ? 'bg-muted/30' : ''}>
+                      <TableRow key={r.isVirtual ? `virtual-${r.virtualYear}-${i}` : r.id ?? i} className={focused ? 'bg-primary/10' : vested && !r.isVirtual ? 'opacity-50 line-through' : r.isVirtual ? 'bg-muted/30' : ''}>
                         <TableCell>
                           {vested && !r.isVirtual && '✔ '}
                           {r.vest_date}

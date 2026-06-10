@@ -158,6 +158,7 @@ export default function ManageAwardsPage() {
         vest_price: vestPrice,
         clear_grant_price: award.grant_price == null,
         clear_vest_price: vestPrice == null,
+        vest_price_source: vestPrice == null ? null : 'manual',
       })))
       setBulkPriceSchedule(null)
       setBulkVestPrice('')

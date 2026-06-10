@@ -5,6 +5,7 @@ import {
   hasBrokerageLink,
   hasPayslipLink,
   needsRefundReconciliation,
+  firstPayslipHref,
   transactionHref,
   virtualRefreshersFromCareerComp,
 } from '../rsuUiHelpers'
@@ -68,15 +69,16 @@ describe('rsuUiHelpers', () => {
   it('projects current-job RSU refreshers as virtual rows', () => {
     const rows = virtualRefreshersFromCareerComp(inputs)
 
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(48)
     expect(rows[0]).toMatchObject({
       award_id: 'Projected refresher 2027',
+      vest_date: '2027-04-01',
       symbol: 'ABC',
       isVirtual: true,
       virtualKind: 'current_job_refresher',
       virtualValue: 52500,
     })
-    expect(rows[0]?.share_count).toBe(525)
+    expect(rows[0]?.share_count).toBe(32.8125)
   })
 
   it('classifies brokerage and payslip links separately', () => {
@@ -90,6 +92,16 @@ describe('rsuUiHelpers', () => {
     expect(hasBrokerageLink(award)).toBe(true)
     expect(hasPayslipLink(award)).toBe(true)
     expect(transactionHref(award.rsu_links![0]!)).toBe('/finance/account/5/transactions#t_id=10')
+  })
+
+  it('recognizes settlement-level payslip links', () => {
+    const award: IAward = {
+      settlement_allocations: [{ settlement: { id: 9, payslip_id: 44, status: 'confirmed' } }],
+      rsu_links: [],
+    }
+
+    expect(hasPayslipLink(award)).toBe(true)
+    expect(firstPayslipHref(award)).toBe('/finance/payslips/entry?id=44')
   })
 
   it('flags settlements with an unreconciled excess refund', () => {

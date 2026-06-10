@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
+import { hasPermission } from '@/lib/permissions'
 import type { IRsuLink } from '@/types/finance'
 
 import { linkTypeLabel, reconciliationRows, settlementHref, settlementLabel } from './rsuUiHelpers'
@@ -28,12 +29,13 @@ export default function RsuReciprocalLinksPanel({
   localTaxOffset,
   localExcessRefund,
 }: RsuReciprocalLinksPanelProps) {
+  const canViewRsu = hasPermission('finance.rsu.view')
   const [links, setLinks] = useState<IRsuLink[]>([])
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    if (!endpoint) {
+    if (!endpoint || !canViewRsu) {
       setLinks([])
       return
     }
@@ -57,9 +59,9 @@ export default function RsuReciprocalLinksPanel({
     return () => {
       cancelled = true
     }
-  }, [endpoint])
+  }, [canViewRsu, endpoint])
 
-  if (!endpoint) return null
+  if (!endpoint || !canViewRsu) return null
 
   const localRows = [
     ['Payslip RSU income', localRsuIncome],
