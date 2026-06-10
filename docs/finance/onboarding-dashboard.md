@@ -336,14 +336,16 @@ Documents           /finance/documents
 Tax Preview         /finance/tax-preview
 RSU                 /finance/rsu
 Payslips            /finance/payslips
-Categorization      /finance/categorization
+Tags                /finance/tags
 Config              /finance/config
 Financial Planning  /financial-planning
 ```
 
-5. Do not add Agent/API Access to primary nav. Config remains the place for the card owned by PR 978.
+5. Do not add links to routes owned by later PRs. The Import Center PR owns `/finance/import`; the Categorization PR owns `/finance/categorization`.
 
-6. Improve blank states:
+6. Do not add Agent/API Access to primary nav. Config remains the place for the card owned by PR 978.
+
+7. Improve blank states:
 
 - Transactions: if all-account import is supported, enable it and label it `Import multi-account statement`; otherwise remove the route in a separate decision PR.
 - Documents: offer `Import W-2, 1099, K-1, or broker tax package`.
@@ -512,6 +514,67 @@ Tests:
 - Categorization page loads with `finance.rules.manage` or the final selected permission.
 - Existing `/finance/tags` route still works.
 - Finance Home links categorization actions to the new page when permitted.
+
+## Execution Plan
+
+Every implementation PR has one common external dependency: wait until issue 976 PR3 is uploaded, rebase, and inspect shared route/nav/config conflicts before touching code. After that gate, the work can be split into independent lanes.
+
+### Dependency Matrix
+
+| PR | Internal dependencies | Can run in parallel with | Merge notes |
+|---|---|---|---|
+| PR A: Finance Home Skeleton | None after PR3 gate. | PR B, PR E, PR F, PR G, PR H. | Should merge before PR C and PR D. Keep the route/page skeleton minimal. |
+| PR B: Browser Onboarding Summary API | None after PR3 gate. | PR A, PR E, PR F, PR G, PR H. | Should merge before PR C. No frontend dependency. |
+| PR C: Finance Home Data Integration | PR A and PR B. | PR E, PR F, PR G, PR H if those avoid `FinanceHomePage`. | Merge after A+B. Owns only dashboard data fetching/rendering. |
+| PR D: Navigation and Blank-State Cleanup | PR A. | PR B and PR G. Can run beside PR E only if the file split is agreed first. | Merge after A. Do not add Import Center or Categorization links unless PR F/H have already landed. |
+| PR E: Account Navigation Deduplication | None after PR3 gate. | PR A, PR B, PR F, PR G, PR H. | Avoid `FinanceNavbar` changes already owned by PR D where possible; focus on `AccountNavigation`. |
+| PR F: Browser Import Center | None after PR3 gate. | PR A, PR B, PR E, PR G, PR H. | Can merge independently as a route/page. Add top-level nav/home links only after PR A/D are present or keep those links inside this PR after rebasing. |
+| PR G: Account Setup Metadata | None after PR3 gate. | PR A, PR B, PR D, PR E, PR F, PR H. | Avoid schema changes unless existing columns are insufficient. Summary usage can be a later enhancement. |
+| PR H: Categorization Page | None after PR3 gate. | PR A, PR B, PR E, PR F, PR G. | Can merge independently as a route/page. Add nav/home links after PR A/D/C are present or keep those links inside this PR after rebasing. |
+
+### Parallel Work Waves
+
+Wave 1 can start immediately after the PR3 gate:
+
+```text
+PR A: Finance Home Skeleton
+PR B: Browser Onboarding Summary API
+PR E: Account Navigation Deduplication
+PR F: Browser Import Center
+PR G: Account Setup Metadata
+PR H: Categorization Page
+```
+
+Wave 2 starts after its blockers merge:
+
+```text
+PR C: Finance Home Data Integration
+  depends on PR A + PR B
+
+PR D: Navigation and Blank-State Cleanup
+  depends on PR A
+```
+
+Recommended merge order:
+
+```text
+1. PR A and PR B first, in either order.
+2. PR C after PR A and PR B.
+3. PR D after PR A; rebase after PR F/H if it wants to point nav at those new pages.
+4. PR E, PR F, PR G, and PR H can merge whenever clean, subject to route/nav conflict checks.
+```
+
+### Isolation Rules
+
+- PR A owns the `/finance` route, Finance Home Blade page, React entry point, and static dashboard component.
+- PR B owns the browser summary controller, service, DTO/type contract, and backend tests.
+- PR C owns only Finance Home data fetching and rendering against the PR B contract.
+- PR D owns Finance navigation cleanup, command palette discoverability, canonical existing links, and blank states for existing pages.
+- PR E owns `AccountNavigation` deduplication and related tests.
+- PR F owns `/finance/import` and the Import Center UI. It must only deep-link into existing browser flows.
+- PR G owns account creation/maintenance metadata and backward-compatible account API handling.
+- PR H owns `/finance/categorization` and compatibility with `/finance/tags`.
+- No PR in this workstream owns Agent/API Access UI, Finance Config token surfaces, Agent API, MCP, OpenAPI, TOON, signed agent workflows, CPA-return comparison, or lock guards.
 
 ## Readiness Section Matrix
 
