@@ -347,6 +347,26 @@ describe('CareerCompPage', () => {
     expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument()
   })
 
+  it('shows the agent access card for an authenticated user on the private tool', () => {
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
+
+    expect(screen.getByText('Agent Access (AI clients)')).toBeInTheDocument()
+    expect(screen.getByText('Copy Claude setup')).toBeInTheDocument()
+    expect(screen.getByText(/Connect Claude, Codex, or other AI clients to the Career Comparison module/)).toBeInTheDocument()
+  })
+
+  it('hides the agent access card for anonymous visitors of the public tool', () => {
+    render(<CareerCompPage initialData={baseInitialData()} />)
+
+    expect(screen.queryByText('Agent Access (AI clients)')).not.toBeInTheDocument()
+  })
+
+  it('hides the agent access card on a shared link view even when authenticated', () => {
+    render(<CareerCompPage initialData={baseInitialData({ authenticated: true, comparison: { ...sharedFork, isCreator: true }, canEdit: true })} />)
+
+    expect(screen.queryByText('Agent Access (AI clients)')).not.toBeInTheDocument()
+  })
+
   it('creates and copies a share link from the share dialog', async () => {
     render(<CareerCompPage initialData={baseInitialData({ authenticated: true })} />)
 

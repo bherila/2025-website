@@ -29,7 +29,7 @@ Discovery surfaces (MCP `tools/list`, OpenAPI, capability manifests) **omit** an
 
 ## Getting connected (UI happy path)
 
-1. Open the module's page (e.g. **Finance → Config**) and find the **Agent Access (AI clients)** card.
+1. Open the module's page and find the **Agent Access (AI clients)** card: **Finance → Config** (finance), **Finance → Tax Preview** dock home (tax), or **Financial Planning → Career Comparison** home column (career-comparison; shown when logged in on your private scenario).
 2. Click **Copy Claude setup** (MCP JSON config) or **Copy REST/TOON setup** (curl snippet). The card transparently issues a temporary 4-hour module-scoped token and copies a ready-to-paste snippet — with the raw token embedded — to your clipboard.
 3. Manage or revoke tokens any time from **My Account → Agent API Tokens**.
 
@@ -100,5 +100,7 @@ curl -H 'Authorization: Bearer bha_…' \
 ## Related docs
 
 - [docs/finance/mcp-server.md](finance/mcp-server.md) — Finance MCP server tools/resources and client config.
+- [docs/finance/tax-reconciliation-agent.md](finance/tax-reconciliation-agent.md) — Tax module: CPA-return line reconciliation (the return PDF is never uploaded).
+- [docs/financial-planning/career-comparison-agent.md](financial-planning/career-comparison-agent.md) — Career Comparison module: public share read/compute + private CRUD.
 - `.mcp.example.json` — example MCP client configuration (stdio + HTTP).
-- `.claude/skills/finance-mcp.md` — Claude Code skill for the finance MCP tools.
+- `.claude/skills/finance-mcp.md`, `.claude/skills/tax-mcp.md`, `.claude/skills/career-comparison-mcp.md` — Claude Code skills for the module MCP tools.
