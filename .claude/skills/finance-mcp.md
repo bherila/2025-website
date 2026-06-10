@@ -55,8 +55,9 @@ Add to your MCP configuration:
 
 ### Production (HTTP transport)
 
-First generate an MCP API key from the **My Account → MCP API Key** section of the app.
-Then configure your MCP client:
+Easiest: use the **Agent Access (AI clients)** card on the Finance Config page — **Copy Claude setup**
+issues a temporary 4-hour Finance-scoped token and copies this config with the token embedded.
+Alternatively, generate a legacy MCP API key from **My Account → MCP API Key** and configure manually:
 
 ```json
 {
@@ -64,9 +65,14 @@ Then configure your MCP client:
     "bh-finance": {
       "url": "https://your-domain.com/mcp/finance",
       "headers": {
-        "Authorization": "Bearer <your-mcp-api-key>"
+        "Authorization": "Bearer <your-token>"
       }
     }
   }
 }
 ```
+
+Note: with a Finance-scoped agent token, `tools/list` only shows tools the user (and token scope)
+can access; hidden tools are also uninvokable. A repo-root example config is at `.mcp.example.json`,
+and the full agent-access model (REST/TOON, capability manifests, OpenAPI) is documented in
+`docs/agent-access.md`.

@@ -1,0 +1,18 @@
+{
+  "$comment": "Example MCP client configuration for this project. Copy to .mcp.json (Claude Code) or merge into ~/.config/claude/mcp.json. For HTTP transport, generate a token from the module's 'Agent Access (AI clients)' card (temporary, module-scoped) or use a legacy MCP API key from My Account. Never commit real tokens. See docs/agent-access.md.",
+  "mcpServers": {
+    "bh-finance-local": {
+      "$comment": "Local development over stdio — no token required; runs as the app itself.",
+      "command": "php",
+      "args": ["artisan", "mcp:start", "finance"],
+      "cwd": "/path/to/2025-website"
+    },
+    "bh-finance": {
+      "$comment": "Production over HTTP — replace <your-token> with an agent setup token (bha_...) or legacy MCP API key.",
+      "url": "https://your-domain.com/mcp/finance",
+      "headers": {
+        "Authorization": "Bearer <your-token>"
+      }
+    }
+  }
+}
