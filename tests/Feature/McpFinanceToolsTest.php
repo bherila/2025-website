@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Mcp\Servers\Finance;
+use App\Mcp\Tools\ListAccounts;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinAccountTag;
 use App\Services\Finance\DocumentIngestionService;
+use App\Support\Agent\AgentContext;
 use App\Support\Agent\AgentTokenService;
 use Tests\TestCase;
 
@@ -159,6 +162,19 @@ class McpFinanceToolsTest extends TestCase
         ]);
 
         $response->assertStatus(401);
+    }
+
+    public function test_mcp_tool_authorization_enforces_agent_token_permission_scope(): void
+    {
+        $user = $this->grantFeatures($this->createUser(), ['finance.accounts.basic', 'finance.payslips.view']);
+        $result = app(AgentTokenService::class)->createQuickSetupToken($user, 'finance', 'claude');
+
+        $result['model']->forceFill(['allowed_permissions' => ['finance.payslips.view']])->save();
+        app()->instance(AgentContext::class, new AgentContext($user, $result['model']->refresh()));
+
+        Finance::actingAs($user)
+            ->tool(ListAccounts::class)
+            ->assertHasErrors(['Forbidden: missing required feature permission [finance.accounts.basic].']);
     }
 
     public function test_mcp_http_endpoint_rejects_token_for_disabled_user(): void

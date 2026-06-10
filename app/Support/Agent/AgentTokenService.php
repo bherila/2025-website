@@ -6,6 +6,7 @@ use App\Models\AgentApiToken;
 use App\Models\User;
 use App\Support\Access\FeatureAccess;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Issues, authenticates, and revokes agent API tokens.
@@ -39,31 +40,35 @@ class AgentTokenService
             $this->featureAccess->effectivePermissions($user),
         ));
 
-        AgentApiToken::query()
-            ->where('user_id', $user->id)
-            ->where('purpose', AgentApiToken::PURPOSE_QUICK_SETUP)
-            ->where('module', $module)
-            ->when(
-                $clientHint === null,
-                fn (Builder $query): Builder => $query->whereNull('client_hint'),
-                fn (Builder $query): Builder => $query->where('client_hint', $clientHint),
-            )
-            ->whereNull('revoked_at')
-            ->update(['revoked_at' => now()]);
+        return DB::transaction(function () use ($user, $module, $clientHint, $ttlMinutes, $rawToken, $allowedPermissions): array {
+            User::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail();
 
-        $model = AgentApiToken::query()->create([
-            'user_id' => $user->id,
-            'name' => sprintf('Quick setup: %s', $module),
-            'purpose' => AgentApiToken::PURPOSE_QUICK_SETUP,
-            'client_hint' => $clientHint,
-            'module' => $module,
-            'token_hash' => hash('sha256', $rawToken),
-            'token_prefix' => substr($rawToken, 0, 12),
-            'allowed_permissions' => $allowedPermissions,
-            'expires_at' => now()->addMinutes($ttlMinutes),
-        ]);
+            AgentApiToken::query()
+                ->where('user_id', $user->id)
+                ->where('purpose', AgentApiToken::PURPOSE_QUICK_SETUP)
+                ->where('module', $module)
+                ->when(
+                    $clientHint === null,
+                    fn (Builder $query): Builder => $query->whereNull('client_hint'),
+                    fn (Builder $query): Builder => $query->where('client_hint', $clientHint),
+                )
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
 
-        return ['token' => $rawToken, 'model' => $model];
+            $model = AgentApiToken::query()->create([
+                'user_id' => $user->id,
+                'name' => sprintf('Quick setup: %s', $module),
+                'purpose' => AgentApiToken::PURPOSE_QUICK_SETUP,
+                'client_hint' => $clientHint,
+                'module' => $module,
+                'token_hash' => hash('sha256', $rawToken),
+                'token_prefix' => substr($rawToken, 0, 12),
+                'allowed_permissions' => $allowedPermissions,
+                'expires_at' => now()->addMinutes($ttlMinutes),
+            ]);
+
+            return ['token' => $rawToken, 'model' => $model];
+        });
     }
 
     /**
