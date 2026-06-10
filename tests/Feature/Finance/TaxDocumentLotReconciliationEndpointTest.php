@@ -23,7 +23,7 @@ class TaxDocumentLotReconciliationEndpointTest extends TestCase
     public function test_document_endpoint_is_scoped_to_owner(): void
     {
         $owner = $this->createUser();
-        $attacker = $this->createUser();
+        $attacker = $this->grantFeatures($this->createUser(), ['finance.tax-documents.view']);
         $account = $this->makeAccount($owner->id);
         $document = $this->makeBrokerDocument($owner->id, $account);
 

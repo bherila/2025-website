@@ -10,9 +10,11 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\FinanceTool\FinStatement;
+use App\Models\User;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\TransactionDeletionTombstoneService;
 use App\Services\Finance\TransactionImportService;
+use App\Support\Access\FeatureAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +29,7 @@ class FinanceTransactionsApiController extends Controller
 
     public function __construct(
         private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
+        private readonly FeatureAccess $featureAccess,
     ) {}
 
     /**
@@ -48,6 +51,18 @@ class FinanceTransactionsApiController extends Controller
 
         $query->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
             ->orderBy('t_date', 'desc');
+
+        // This endpoint also backs the lots view, which can be reached with
+        // finance.lots.view alone. Such users must not receive the full
+        // transaction ledger: restrict the payload to security trade rows
+        // (the only rows lot/wash-sale analysis consumes) and redact the
+        // ledger-detail fields that lots do not need.
+        $redactTransactionDetails = false;
+        $user = $request->user();
+        if ($user instanceof User && ! $this->featureAccess->can($user, 'finance.transactions.view')) {
+            $redactTransactionDetails = true;
+            $query->whereNotNull('t_symbol')->where('t_symbol', '!=', '');
+        }
 
         if ($request->filled('source_document_id')) {
             $this->applySourceDocumentFilter($query, (int) $request->query('source_document_id'));
@@ -83,7 +98,7 @@ class FinanceTransactionsApiController extends Controller
             }
         }
 
-        return $this->streamLineItems($query);
+        return $this->streamLineItems($query, $redactTransactionDetails);
     }
 
     /**
@@ -169,10 +184,10 @@ class FinanceTransactionsApiController extends Controller
     /**
      * @param  Builder<FinAccountLineItems>  $query
      */
-    private function streamLineItems(Builder $query): StreamedResponse
+    private function streamLineItems(Builder $query, bool $redactTransactionDetails = false): StreamedResponse
     {
-        return response()->stream(function () use ($query): void {
-            $this->writeJsonArray($query->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item));
+        return response()->stream(function () use ($query, $redactTransactionDetails): void {
+            $this->writeJsonArray($query->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item, $redactTransactionDetails));
         }, 200, $this->streamJsonHeaders());
     }
 
@@ -453,9 +468,27 @@ class FinanceTransactionsApiController extends Controller
      *
      * @return array<string, mixed>
      */
-    protected function transformLineItem(FinAccountLineItems $item): array
+    protected function transformLineItem(FinAccountLineItems $item, bool $redactTransactionDetails = false): array
     {
         $itemArray = $item->toArray();
+
+        // Lots-view-only users receive trade economics needed for lot and
+        // wash-sale analysis (symbol/type/qty/price/amount/fees/date) but not
+        // the surrounding transaction-ledger detail.
+        if ($redactTransactionDetails) {
+            foreach (['t_description', 't_comment', 't_from', 't_to', 't_account_balance'] as $field) {
+                $itemArray[$field] = null;
+            }
+
+            unset(
+                $itemArray['tags'],
+                $itemArray['parent_transactions'],
+                $itemArray['child_transactions'],
+                $itemArray['client_expense'],
+            );
+
+            return $itemArray;
+        }
 
         // Add parent_of_t_ids array (IDs of child transactions)
         $itemArray['parent_of_t_ids'] = $item->childTransactions->pluck('t_id')->toArray();

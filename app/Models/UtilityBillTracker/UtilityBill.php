@@ -70,6 +70,8 @@ class UtilityBill extends Model
 
     /**
      * Get the linked finance transaction.
+     *
+     * @return BelongsTo<FinAccountLineItems, $this>
      */
     public function linkedTransaction(): BelongsTo
     {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\UtilityBillTracker;
 use App\GenAiProcessor\Models\GenAiImportJob;
 use App\GenAiProcessor\Models\GenAiImportResult;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\UtilityBillTracker\Concerns\RedactsLinkedTransactions;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
 use App\Services\FileStorageService;
@@ -26,6 +27,8 @@ use Throwable;
  */
 class UtilityBillImportController extends Controller
 {
+    use RedactsLinkedTransactions;
+
     public function __construct(
         private FileStorageService $fileService,
     ) {}
@@ -124,7 +127,7 @@ class UtilityBillImportController extends Controller
         $this->maybeMarkJobImported($job);
 
         return response()->json([
-            'bill' => $bill->load('linkedTransaction:t_id,t_description,t_amt,t_date'),
+            'bill' => $this->redactLinkedTransactions($bill->load('linkedTransaction:t_id,t_description,t_amt,t_date')),
             'result' => $result->refresh(),
             'job_status' => $job->refresh()->status,
         ], 201);

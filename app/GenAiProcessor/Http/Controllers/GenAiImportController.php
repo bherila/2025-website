@@ -77,7 +77,7 @@ class GenAiImportController extends Controller
             'filename' => 'required|string|max:255',
             'content_type' => 'required|string|max:128',
             'file_size' => 'required|integer|min:1|max:52428800', // 50MB max
-            'job_type' => 'nullable|string|in:'.implode(',', GenAiImportJob::VALID_JOB_TYPES),
+            'job_type' => 'required|string|in:'.implode(',', GenAiImportJob::VALID_JOB_TYPES),
         ]);
 
         if ($validator->fails()) {
@@ -85,8 +85,8 @@ class GenAiImportController extends Controller
         }
 
         $user = Auth::user();
-        $jobType = $request->input('job_type');
-        if (is_string($jobType) && ($denied = $this->authorizeJobType($user, $jobType)) !== null) {
+        $jobType = (string) $request->input('job_type');
+        if (($denied = $this->authorizeJobType($user, $jobType)) !== null) {
             return $denied;
         }
 

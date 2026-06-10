@@ -22,7 +22,7 @@ class TaxDocumentLotsRebuildEndpointTest extends TestCase
     public function test_endpoint_is_scoped_to_document_owner(): void
     {
         $owner = $this->createUser();
-        $attacker = $this->createUser();
+        $attacker = $this->grantFeatures($this->createUser(), ['finance.tax-documents.manage']);
         $account = $this->makeAccount($owner->id);
         $document = $this->makeBrokerDocument($owner->id, $account);
 

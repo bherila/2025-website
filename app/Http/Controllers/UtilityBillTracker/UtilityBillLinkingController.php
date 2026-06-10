@@ -3,14 +3,21 @@
 namespace App\Http\Controllers\UtilityBillTracker;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\UtilityBillTracker\Concerns\RedactsLinkedTransactions;
 use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\User;
 use App\Models\UtilityBillTracker\UtilityAccount;
 use App\Models\UtilityBillTracker\UtilityBill;
+use App\Support\Access\FeatureAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class UtilityBillLinkingController extends Controller
 {
+    use RedactsLinkedTransactions;
+
+    public function __construct(private readonly FeatureAccess $featureAccess) {}
+
     /**
      * Find potential transactions to link to a utility bill.
      * Searches for transactions within 90 days after the bill end date
@@ -57,18 +64,17 @@ class UtilityBillLinkingController extends Controller
             ->limit(50)
             ->get(['t_id', 't_account', 't_date', 't_description', 't_amt', 't_type']);
 
+        // Users without finance.transactions.view may link bills but must not
+        // see the underlying transaction descriptions/amounts; redact those
+        // fields while keeping enough metadata to pick a candidate.
+        $user = Auth::user();
+        $canReadTransactions = $user instanceof User
+            && $this->featureAccess->can($user, 'finance.transactions.view');
+
         // Add account name to each match
-        $potentialMatches = $potentialMatches->map(function ($item) {
-            return [
-                't_id' => $item->t_id,
-                't_account' => $item->t_account,
-                'acct_name' => $item->account?->acct_name,
-                't_date' => $item->t_date,
-                't_description' => $item->t_description,
-                't_amt' => $item->t_amt,
-                't_type' => $item->t_type,
-            ];
-        });
+        $potentialMatches = $potentialMatches->map(
+            fn (FinAccountLineItems $item): array => $this->mapLinkableTransaction($item, $canReadTransactions)
+        );
 
         return response()->json([
             'bill' => [
@@ -80,6 +86,25 @@ class UtilityBillLinkingController extends Controller
             'potential_matches' => $potentialMatches,
             'current_link' => $bill->t_id,
         ]);
+    }
+
+    /**
+     * Shape a candidate transaction for the linker UI, redacting the
+     * description/amount/type for users without finance.transactions.view.
+     *
+     * @return array<string, mixed>
+     */
+    public function mapLinkableTransaction(FinAccountLineItems $item, bool $canReadTransactions): array
+    {
+        return [
+            't_id' => $item->t_id,
+            't_account' => $item->t_account,
+            'acct_name' => $item->account?->acct_name,
+            't_date' => $item->t_date,
+            't_description' => $canReadTransactions ? $item->t_description : null,
+            't_amt' => $canReadTransactions ? $item->t_amt : null,
+            't_type' => $canReadTransactions ? $item->t_type : null,
+        ];
     }
 
     /**
@@ -113,7 +138,7 @@ class UtilityBillLinkingController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Bill linked to transaction successfully',
-            'bill' => $bill->fresh()->load('linkedTransaction:t_id,t_description,t_amt,t_date'),
+            'bill' => $this->redactLinkedTransactions($bill->fresh()->load('linkedTransaction:t_id,t_description,t_amt,t_date')),
         ]);
     }
 

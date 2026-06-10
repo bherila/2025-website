@@ -131,7 +131,7 @@ Route::middleware(['web', 'auth', 'feature:finance.accounts.manage'])->post('/fi
 Route::middleware(['web', 'auth', 'feature:finance.accounts.manage'])->post('/finance/accounts/{account}/basis/unlock', [PartnershipBasisController::class, 'unlock']);
 Route::middleware(['web', 'auth', 'feature:finance.accounts.detail'])->get('/finance/chart', [FinanceApiController::class, 'chartData']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu', [FinanceRsuController::class, 'getRsuData']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->post('/rsu/backfill-vest-prices', [FinanceRsuController::class, 'backfillVestPrices']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/backfill-vest-prices', [FinanceRsuController::class, 'backfillVestPrices']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu/settlements', [FinanceRsuController::class, 'settlements']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/suggest', [FinanceRsuController::class, 'suggestSettlements']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/{settlement}/confirm', [FinanceRsuController::class, 'confirmSettlement']);
@@ -151,7 +151,7 @@ Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/gen
 
 // Transaction routes (FinanceTransactionsApiController)
 // /finance/all/... routes must come before /finance/{account_id}/... to avoid conflicts
-Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getLineItems']);
+Route::middleware(['web', 'auth', 'feature:finance.lots.view,finance.transactions.view'])->get('/finance/all-line-items', [FinanceTransactionsApiController::class, 'getLineItems']);
 Route::middleware(['web', 'auth', 'feature:finance.accounts.detail'])->get('/finance/all/fees', [FinanceFeesController::class, 'all']);
 Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/finance/all/line_items/sync', [FinanceTransactionsApiController::class, 'syncLineItems']);
 Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/finance/all/line_items', [FinanceTransactionsApiController::class, 'getLineItems']);
@@ -165,9 +165,9 @@ Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/f
 Route::middleware(['web', 'auth', 'feature:finance.transactions.view'])->get('/finance/tags', [FinanceTransactionTaggingApiController::class, 'getUserTags']);
 Route::middleware(['web', 'auth', 'feature:finance.transactions.manage'])->post('/finance/tags/apply', [FinanceTransactionTaggingApiController::class, 'applyTagToTransactions']);
 Route::middleware(['web', 'auth', 'feature:finance.transactions.manage'])->post('/finance/tags/remove', [FinanceTransactionTaggingApiController::class, 'removeTagsFromTransactions']);
-Route::middleware(['web', 'auth', 'feature:finance.transactions.manage'])->post('/finance/tags', [FinanceTransactionTaggingApiController::class, 'createTag']);
-Route::middleware(['web', 'auth', 'feature:finance.transactions.manage'])->put('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'updateTag']);
-Route::middleware(['web', 'auth', 'feature:finance.transactions.manage'])->delete('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'deleteTag']);
+Route::middleware(['web', 'auth', 'feature:finance.rules.manage'])->post('/finance/tags', [FinanceTransactionTaggingApiController::class, 'createTag']);
+Route::middleware(['web', 'auth', 'feature:finance.rules.manage'])->put('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'updateTag']);
+Route::middleware(['web', 'auth', 'feature:finance.rules.manage'])->delete('/finance/tags/{tag_id}', [FinanceTransactionTaggingApiController::class, 'deleteTag']);
 
 // Finance Rules Engine
 Route::middleware(['web', 'auth', 'feature:finance.rules.manage'])->get('/finance/rules', [FinanceRulesApiController::class, 'index']);
@@ -603,38 +603,38 @@ Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-co
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/reconciliation-summary', [ReconciliationSummaryController::class, 'show']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-years/{year}/lots-match', [TaxYearLotsMatchController::class, 'store']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/manual', [TaxDocumentController::class, 'storeManual']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/multi-account', [TaxDocumentController::class, 'storeMultiAccount']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'show']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/lot-reconciliation-links', [TaxDocumentLotReconciliationController::class, 'links']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/lot-match-runs', [TaxDocumentLotMatchRunController::class, 'index']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-rebuild', [TaxDocumentLotsRebuildController::class, 'store']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-match', [TaxDocumentLotsMatchController::class, 'store']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/lots-match/full-rebuild', [TaxDocumentLotsMatchController::class, 'fullRebuild']);
-Route::middleware(['web', 'auth'])->post('/finance/lot-reconciliation-links/{id}/accept-broker', [LotReconciliationLinkController::class, 'acceptBroker']);
-Route::middleware(['web', 'auth'])->post('/finance/lot-reconciliation-links/{id}/accept-account-override', [LotReconciliationLinkController::class, 'acceptAccountOverride']);
-Route::middleware(['web', 'auth'])->post('/finance/lot-reconciliation-links/{id}/mark-duplicate', [LotReconciliationLinkController::class, 'markDuplicate']);
-Route::middleware(['web', 'auth'])->post('/finance/lot-reconciliation-links/{id}/unlink', [LotReconciliationLinkController::class, 'unlink']);
-Route::middleware(['web', 'auth'])->post('/finance/lot-reconciliation-links/relink', [LotReconciliationLinkController::class, 'relink']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}', [TaxDocumentController::class, 'show']);
-Route::middleware(['web', 'auth'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
-Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
-Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
-Route::middleware(['web', 'auth'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/convert-broker-format', [TaxDocumentController::class, 'convertBrokerFormat']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/repair-format', [TaxDocumentController::class, 'repairBrokerFormat']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/reprocess', [TaxDocumentController::class, 'reprocessBrokerDocument']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts', [TaxDocumentController::class, 'confirmAccountLinks']);
-Route::middleware(['web', 'auth'])->post('/finance/tax-documents/{id}/accounts/bulk-update', [TaxDocumentAccountBulkUpdateController::class, 'store']);
-Route::middleware(['web', 'auth'])->patch('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'updateAccountLink']);
-Route::middleware(['web', 'auth'])->delete('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'destroyAccountLink']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view,finance.tax-documents.view'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-years/{year}/lots-match', [TaxYearLotsMatchController::class, 'store']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents', [TaxDocumentController::class, 'index']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/prompt', [TaxDocumentController::class, 'getPromptInfo']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/request-upload', [TaxDocumentController::class, 'requestUpload']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/manual', [TaxDocumentController::class, 'storeManual']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/multi-account', [TaxDocumentController::class, 'storeMultiAccount']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents', [TaxDocumentController::class, 'store']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/all-reviewed', [TaxDocumentController::class, 'getAllReviewed']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'show']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/{id}/lot-reconciliation-links', [TaxDocumentLotReconciliationController::class, 'links']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/{id}/lot-match-runs', [TaxDocumentLotMatchRunController::class, 'index']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/lots-rebuild', [TaxDocumentLotsRebuildController::class, 'store']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/lots-match', [TaxDocumentLotsMatchController::class, 'store']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/lots-match/full-rebuild', [TaxDocumentLotsMatchController::class, 'fullRebuild']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/lot-reconciliation-links/{id}/accept-broker', [LotReconciliationLinkController::class, 'acceptBroker']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/lot-reconciliation-links/{id}/accept-account-override', [LotReconciliationLinkController::class, 'acceptAccountOverride']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/lot-reconciliation-links/{id}/mark-duplicate', [LotReconciliationLinkController::class, 'markDuplicate']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/lot-reconciliation-links/{id}/unlink', [LotReconciliationLinkController::class, 'unlink']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/lot-reconciliation-links/relink', [LotReconciliationLinkController::class, 'relink']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/{id}', [TaxDocumentController::class, 'show']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.view'])->get('/finance/tax-documents/{id}/download', [TaxDocumentController::class, 'download']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->delete('/finance/tax-documents/{id}', [TaxDocumentController::class, 'destroy']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->put('/finance/tax-documents/{id}', [TaxDocumentController::class, 'update']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->put('/finance/tax-documents/{id}/mark-reviewed', [TaxDocumentController::class, 'markReviewed']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/convert-broker-format', [TaxDocumentController::class, 'convertBrokerFormat']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/repair-format', [TaxDocumentController::class, 'repairBrokerFormat']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/reprocess', [TaxDocumentController::class, 'reprocessBrokerDocument']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/accounts', [TaxDocumentController::class, 'confirmAccountLinks']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->post('/finance/tax-documents/{id}/accounts/bulk-update', [TaxDocumentAccountBulkUpdateController::class, 'store']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->patch('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'updateAccountLink']);
+Route::middleware(['web', 'auth', 'feature:finance.tax-documents.manage'])->delete('/finance/tax-documents/{id}/accounts/{linkId}', [TaxDocumentController::class, 'destroyAccountLink']);
 
 // GenAI Import routes
 Route::middleware(['web', 'auth'])->post('/genai/import/request-upload', [GenAiImportController::class, 'requestUpload']);

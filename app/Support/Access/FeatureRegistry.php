@@ -30,7 +30,7 @@ class FeatureRegistry
             'finance.rsu.manage' => ['label' => 'RSU: manage', 'description' => 'Upsert/delete RSU grants and confirm/skip RSU GenAI imports.', 'depends' => ['finance.rsu.view'], 'category' => 'Finance / RSU'],
             'finance.payslips.view' => ['label' => 'Payslips: view', 'description' => 'Payslip pages and read APIs.', 'depends' => ['finance.access'], 'category' => 'Finance / Payslips'],
             'finance.payslips.manage' => ['label' => 'Payslips: manage', 'description' => 'Payslip entry, bulk save, delete, deposits, state data, and GenAI confirmation.', 'depends' => ['finance.payslips.view'], 'category' => 'Finance / Payslips'],
-            'finance.rules.manage' => ['label' => 'Rules and tags: manage', 'description' => 'Tags/rules pages and rules CRUD.', 'depends' => ['finance.transactions.view'], 'category' => 'Finance / Transactions'],
+            'finance.rules.manage' => ['label' => 'Rules and tags: manage', 'description' => 'Tags/rules pages plus tag and rule CRUD. Applying tags to transactions still requires Transactions: manage.', 'depends' => ['finance.transactions.view'], 'category' => 'Finance / Transactions'],
             'finance.config.manage' => ['label' => 'Finance config: manage', 'description' => 'Finance configuration and settings page.', 'depends' => ['finance.access'], 'category' => 'Finance / Config'],
             'utility-bills.view' => ['label' => 'Utility Bills: view', 'description' => 'Utility Bill Tracker read access.', 'depends' => [], 'category' => 'Utility Bills'],
             'utility-bills.manage' => ['label' => 'Utility Bills: manage', 'description' => 'Create, edit, delete, import, and link utility bills.', 'depends' => ['utility-bills.view'], 'category' => 'Utility Bills'],

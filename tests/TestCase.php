@@ -36,6 +36,26 @@ abstract class TestCase extends SafeTestCase
     }
 
     /**
+     * Grant a non-admin user a specific set of feature permissions.
+     *
+     * Dependencies are resolved at authorization time by FeatureAccess, so only
+     * the directly granted keys need to be stored here.
+     *
+     * @param  list<string>  $permissions
+     */
+    protected function grantFeatures(User $user, array $permissions): User
+    {
+        foreach ($permissions as $permission) {
+            UserFeaturePermission::query()->firstOrCreate([
+                'user_id' => $user->id,
+                'permission' => $permission,
+            ]);
+        }
+
+        return $user->refresh();
+    }
+
+    /**
      * Create a user with admin role for testing.
      *
      * @param  array  $attributes  Additional attributes for the user

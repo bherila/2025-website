@@ -11,8 +11,10 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
+use App\Models\User;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
 use App\Services\Finance\TaxLotReconciliationService;
+use App\Support\Access\FeatureAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,6 +33,7 @@ class FinanceLotsController extends Controller
 
     public function __construct(
         private readonly LotMatcherAutoDispatchService $lotMatcherAutoDispatchService,
+        private readonly FeatureAccess $featureAccess,
     ) {}
 
     /**
@@ -740,10 +743,23 @@ class FinanceLotsController extends Controller
         // Cap at 200 results to keep the search modal responsive
         $transactions = $query->limit(200)->get();
 
+        // Lots-view users without finance.transactions.view may match lots but
+        // must not see raw transaction descriptions/amounts; redact those fields
+        // while keeping the symbol/qty/price/date needed to assign a lot.
+        $user = Auth::user();
+        $canReadTransactions = $user instanceof User
+            && $this->featureAccess->can($user, 'finance.transactions.view');
+
         // Enrich with account name
         $accounts = FinAccounts::whereIn('acct_id', $accountIds)->pluck('acct_name', 'acct_id');
-        $transactions->transform(function ($t) use ($accounts) {
+        $transactions->transform(function ($t) use ($accounts, $canReadTransactions) {
             $t->acct_name = $accounts[$t->t_account] ?? null;
+
+            if (! $canReadTransactions) {
+                $t->t_description = null;
+                $t->t_amt = null;
+                $t->t_type = null;
+            }
 
             return $t;
         });

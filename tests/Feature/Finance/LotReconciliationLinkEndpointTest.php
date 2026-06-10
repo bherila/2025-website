@@ -22,7 +22,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
     public function test_match_endpoint_is_scoped_to_document_owner(): void
     {
         [$document] = $this->documentAndAccount();
-        $attacker = $this->createUser();
+        $attacker = $this->grantFeatures($this->createUser(), ['finance.tax-documents.manage']);
 
         $this->actingAs($attacker)
             ->postJson("/api/finance/tax-documents/{$document->id}/lots-match")
@@ -58,7 +58,7 @@ class LotReconciliationLinkEndpointTest extends TestCase
         $accountLot = $this->makeAccountLot($account);
         $link = $this->makeLink($document, $brokerLot, $accountLot);
         $owner = User::query()->findOrFail($userId);
-        $attacker = $this->createUser();
+        $attacker = $this->grantFeatures($this->createUser(), ['finance.tax-documents.manage']);
 
         $this->actingAs($attacker)
             ->postJson("/api/finance/lot-reconciliation-links/{$link->id}/accept-broker")
