@@ -167,11 +167,13 @@ class RsuSettlementService
             ->get();
 
         if ($awards->isEmpty()) {
-            if ($settlement->allocations->isEmpty()) {
-                $settlement->delete();
-            } else {
-                $this->reconcileAllocatedSettlement($settlement);
-            }
+            // No priced awards remain in this bucket (the award moved to another
+            // vest date/symbol, or had its vest price cleared). Any allocations
+            // left behind reference awards that no longer belong here, so remove
+            // them (cascading their links) and drop the now-empty settlement
+            // instead of recomputing gross income from stale allocations.
+            $settlement->allocations()->delete();
+            $settlement->delete();
 
             return;
         }
@@ -189,12 +191,22 @@ class RsuSettlementService
             return;
         }
 
-        $withheldShares = $settlement->withheld_shares_whole !== null ? (float) $settlement->withheld_shares_whole : null;
-        $withheldValue = $settlement->withheld_value !== null ? (float) $settlement->withheld_value : null;
-        $actualTaxRemitted = $settlement->actual_tax_remitted !== null ? (float) $settlement->actual_tax_remitted : null;
-        $excessRefund = $settlement->excess_refund !== null ? (float) $settlement->excess_refund : null;
+        // The vest price and/or gross share count may have changed; recompute
+        // the stored withholding fields from the current values and re-enforce
+        // the confirm-time invariants (withheld shares <= gross vested shares;
+        // actual tax <= withheld value) before re-allocating.
+        $withholding = $this->recomputeWithholding($settlement, $summary['vestPrice'], $summary['grossShares']);
+        $settlement->fill($withholding);
+        $settlement->save();
 
-        $this->replaceAllocations($settlement, $awards, $withheldShares, $withheldValue, $actualTaxRemitted, $excessRefund);
+        $this->replaceAllocations(
+            $settlement,
+            $awards,
+            $withholding['withheld_shares_whole'],
+            $withholding['withheld_value'],
+            $withholding['actual_tax_remitted'],
+            $withholding['excess_refund'],
+        );
     }
 
     /**
@@ -344,6 +356,46 @@ class RsuSettlementService
     }
 
     /**
+     * Recompute the settlement's stored withholding fields from the current
+     * vest price and gross share count, re-enforcing the confirm-time
+     * invariants. An award edit can change the vest price (so withheld value
+     * and refund must be re-derived) or reduce gross shares below the recorded
+     * withheld share count (which must be clamped, since you cannot withhold
+     * more shares than vested). The derivation mirrors confirm():
+     * withheld_value = withheld_shares * vest_price and
+     * excess_refund = withheld_value - actual_tax_remitted.
+     *
+     * @return array{withheld_shares_whole: ?float, withheld_value: ?float, actual_tax_remitted: ?float, excess_refund: ?float}
+     */
+    private function recomputeWithholding(FinRsuVestSettlement $settlement, ?float $vestPrice, float $grossShares): array
+    {
+        $withheldShares = $settlement->withheld_shares_whole !== null ? (float) $settlement->withheld_shares_whole : null;
+        if ($withheldShares !== null && $withheldShares > $grossShares) {
+            $withheldShares = $grossShares;
+        }
+
+        $withheldValue = ($withheldShares === null || $vestPrice === null)
+            ? null
+            : round($withheldShares * $vestPrice, 4);
+
+        $actualTaxRemitted = $settlement->actual_tax_remitted !== null ? (float) $settlement->actual_tax_remitted : null;
+        if ($actualTaxRemitted !== null && $withheldValue !== null && $actualTaxRemitted > $withheldValue) {
+            $actualTaxRemitted = $withheldValue;
+        }
+
+        $excessRefund = ($withheldValue === null || $actualTaxRemitted === null)
+            ? null
+            : round($withheldValue - $actualTaxRemitted, 4);
+
+        return [
+            'withheld_shares_whole' => $withheldShares,
+            'withheld_value' => $withheldValue,
+            'actual_tax_remitted' => $actualTaxRemitted,
+            'excess_refund' => $excessRefund,
+        ];
+    }
+
+    /**
      * Reconcile a settlement's allocations against the supplied awards without
      * deleting-and-recreating rows. Existing allocations are updated in place
      * (keyed by equity_award_id) so that fin_rsu_links rows that reference a
@@ -399,25 +451,19 @@ class RsuSettlementService
         $grossIncome = (float) $settlement->allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->gross_income);
         $vestPrice = $grossShares === 0.0 ? null : round($grossIncome / $grossShares, 6);
 
+        $withholding = $this->recomputeWithholding($settlement, $vestPrice, $grossShares);
+
         $settlement->fill([
             'vest_price' => $vestPrice,
             'gross_shares' => round($grossShares, 6),
             'gross_income' => round($grossIncome, 4),
-        ]);
+        ] + $withholding);
         $settlement->save();
 
-        $withheldShares = $settlement->withheld_shares_whole !== null
-            ? (float) $settlement->withheld_shares_whole
-            : null;
-        $withheldValue = $settlement->withheld_value !== null
-            ? (float) $settlement->withheld_value
-            : null;
-        $actualTaxRemitted = $settlement->actual_tax_remitted !== null
-            ? (float) $settlement->actual_tax_remitted
-            : null;
-        $excessRefund = $settlement->excess_refund !== null
-            ? (float) $settlement->excess_refund
-            : null;
+        $withheldShares = $withholding['withheld_shares_whole'];
+        $withheldValue = $withholding['withheld_value'];
+        $actualTaxRemitted = $withholding['actual_tax_remitted'];
+        $excessRefund = $withholding['excess_refund'];
 
         foreach ($settlement->allocations as $allocation) {
             $ratio = $grossShares === 0.0 ? 0.0 : (float) $allocation->vested_shares / $grossShares;

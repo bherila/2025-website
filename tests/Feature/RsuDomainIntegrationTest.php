@@ -708,6 +708,155 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertSame('16.000000', $editedAllocation->vested_shares);
     }
 
+    public function test_moving_only_award_out_of_bucket_removes_stale_settlement(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-MOVE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 3,
+        ])->assertOk();
+
+        // Move the only priced award to a different vest date (a new bucket).
+        $this->actingAs($user)->postJson('/api/rsu', [[
+            'id' => $award->id,
+            'award_id' => 'RSU-MOVE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-07-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+        ]])->assertOk();
+
+        // The old settlement and its allocations must be gone, not recomputed
+        // from the stale allocation tied to the moved award.
+        $this->assertDatabaseMissing('fin_rsu_vest_settlements', ['id' => $settlementId]);
+        $this->assertDatabaseMissing('fin_rsu_vest_settlement_allocations', ['settlement_id' => $settlementId]);
+    }
+
+    public function test_clearing_only_vest_price_removes_settlement(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-CLEAR',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm")->assertOk();
+
+        $this->actingAs($user)->postJson('/api/rsu', [[
+            'id' => $award->id,
+            'award_id' => 'RSU-CLEAR',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'clear_vest_price' => true,
+        ]])->assertOk();
+
+        $this->assertDatabaseMissing('fin_rsu_vest_settlements', ['id' => $settlementId]);
+        $this->assertDatabaseMissing('fin_rsu_vest_settlement_allocations', ['settlement_id' => $settlementId]);
+    }
+
+    public function test_editing_vest_price_recomputes_withheld_value_and_refund(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-PRICE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 3,
+            'actualTaxRemitted' => 250,
+        ])->assertOk()->assertJsonPath('withheld_value', '300.0000');
+
+        // Correct the vest price upward; withheld value/refund must follow.
+        $this->actingAs($user)->postJson('/api/rsu', [[
+            'id' => $award->id,
+            'award_id' => 'RSU-PRICE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 200,
+        ]])->assertOk();
+
+        $settlement = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId);
+        $this->assertSame('2000.0000', $settlement->gross_income);
+        $this->assertSame('600.0000', $settlement->withheld_value);
+        $this->assertSame('350.0000', $settlement->excess_refund);
+        $this->assertSame('600.0000', $settlement->allocations->first()->allocated_withheld_value);
+    }
+
+    public function test_reducing_shares_below_withheld_clamps_withheld_shares(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-REDUCE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 8,
+            'actualTaxRemitted' => 300,
+        ])->assertOk();
+
+        // Reduce vested shares below the recorded withheld share count.
+        $this->actingAs($user)->postJson('/api/rsu', [[
+            'id' => $award->id,
+            'award_id' => 'RSU-REDUCE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 5,
+            'symbol' => 'META',
+            'vest_price' => 100,
+        ]])->assertOk();
+
+        $settlement = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId);
+        $this->assertSame('5.000000', $settlement->gross_shares);
+        // Withheld shares clamped to gross; you cannot withhold more than vested.
+        $this->assertSame('5.000000', $settlement->withheld_shares_whole);
+        $this->assertSame('500.0000', $settlement->withheld_value);
+        $this->assertSame('200.0000', $settlement->excess_refund);
+        $allocation = $settlement->allocations->first();
+        $this->assertLessThanOrEqual(
+            (float) $allocation->vested_shares,
+            (float) $allocation->allocated_withheld_shares,
+        );
+    }
+
     public function test_allocation_only_link_appears_on_award_level_response(): void
     {
         $user = User::factory()->create();
