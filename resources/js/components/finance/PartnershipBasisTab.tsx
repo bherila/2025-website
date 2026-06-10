@@ -479,21 +479,65 @@ export default function PartnershipBasisTab({ accountId }: PartnershipBasisTabPr
       ))}
 
       {data?.reconciliation?.hasReconcilableData ? (
-        <ReconciliationCard reconciliation={data.reconciliation} />
+        <ReconciliationCard reconciliation={data.reconciliation} accountId={accountId} year={year} onSeeded={load} />
       ) : null}
     </div>
   )
 }
 
-function ReconciliationCard({ reconciliation }: { reconciliation: ReconciliationData }): ReactElement {
+function ReconciliationCard({
+  reconciliation,
+  accountId,
+  year,
+  onSeeded,
+}: {
+  reconciliation: ReconciliationData
+  accountId: number
+  year: number
+  onSeeded: () => Promise<void> | void
+}): ReactElement {
   const candidates = [...reconciliation.contributionCandidates, ...reconciliation.distributionCandidates]
+  const hasLineItemCandidates = candidates.some((c) => c.lineItemId !== null)
+  const [isSeeding, setIsSeeding] = useState(false)
+  const [seedError, setSeedError] = useState<string | null>(null)
+
+  const seedFromTransactions = async () => {
+    if (
+      !window.confirm(
+        `Seed ${candidates.filter((c) => c.lineItemId !== null).length} contribution/distribution event(s) from account transactions? ` +
+          'Each line item will create a reviewed basis event. Re-running is a no-op for already-seeded items.',
+      )
+    ) {
+      return
+    }
+    setIsSeeding(true)
+    setSeedError(null)
+    try {
+      await fetchWrapper.post(`/api/finance/accounts/${accountId}/basis/reconciliation/seed?year=${year}`, {})
+      await onSeeded()
+    } catch (caught) {
+      setSeedError(caught instanceof Error ? caught.message : 'Seed failed.')
+    } finally {
+      setIsSeeding(false)
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-1">
-          Transaction &amp; statement reconciliation
-          <InfoTooltip>Read-only candidates and comparisons from this account&rsquo;s transactions and statements. Nothing here changes outside basis until you review it and add an event.</InfoTooltip>
-        </CardTitle>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <CardTitle className="flex items-center gap-1">
+            Transaction &amp; statement reconciliation
+            <InfoTooltip>Read-only candidates and comparisons from this account&rsquo;s transactions and statements. Nothing here changes outside basis until you review it and add an event.</InfoTooltip>
+          </CardTitle>
+          {hasLineItemCandidates ? (
+            <Button variant="outline" size="sm" className="h-8 gap-1 self-start text-xs" disabled={isSeeding} onClick={() => void seedFromTransactions()}>
+              {isSeeding ? <Spinner className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+              Seed from transactions
+            </Button>
+          ) : null}
+        </div>
+        {seedError ? <p className="text-xs text-destructive">{seedError}</p> : null}
       </CardHeader>
       <CardContent className="space-y-6">
         {reconciliation.flags.length > 0 && (

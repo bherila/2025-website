@@ -70,6 +70,39 @@ class PartnershipBasisController extends Controller
         return response()->json($this->partnershipBasisService->eventToArray($event), 201);
     }
 
+    public function seedReconciliation(Request $request, int $account): JsonResponse
+    {
+        $year = $this->year($request);
+        $financeAccount = $this->account($account);
+        $result = $this->partnershipBasisService->seedOutsideBasisFromTransactions($financeAccount, (int) Auth::id(), $year);
+
+        return response()->json(array_merge(
+            $this->partnershipBasisService->accountBasisData($financeAccount, (int) Auth::id(), $year),
+            ['seed' => $result],
+        ));
+    }
+
+    public function acceptReconciliation(Request $request, int $account): JsonResponse
+    {
+        $payload = $request->validate([
+            'tax_year' => ['required', 'integer', 'min:1900', 'max:2200'],
+            'partnership_interest_id' => ['nullable', 'integer'],
+            'event_type' => ['required', 'string', 'max:60', Rule::enum(PartnershipBasisEventType::class)],
+            'amount_cents' => ['required', 'integer'],
+            'event_date' => ['nullable', 'date'],
+            'line_item_id' => ['nullable', 'integer'],
+            'statement_id' => ['nullable', 'integer'],
+            'statement_investment_id' => ['nullable', 'integer'],
+            'source_label' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'metadata' => ['nullable', 'array'],
+        ]);
+
+        $event = $this->partnershipBasisService->acceptReconciliationCandidate($this->account($account), (int) Auth::id(), $payload);
+
+        return response()->json($this->partnershipBasisService->eventToArray($event), 201);
+    }
+
     public function updateEvent(Request $request, int $account, int $event): JsonResponse
     {
         $financeAccount = $this->account($account);

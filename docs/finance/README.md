@@ -23,6 +23,7 @@ Start here when you need to orient yourself in the finance codebase. Each doc be
 | 1099-B lot reconciliation | [tax-lot-reconciliation.md](tax-lot-reconciliation.md) | `TaxLotReconciliationPanel.tsx`, `TaxLotReconciliationService.php` |
 | Public financial planning calculators | [../financial-planning.md](../financial-planning.md) | `resources/js/financial-planning/` |
 | K-1 badge system (future) | [k1-badge-system-future.md](k1-badge-system-future.md) | `K1ReviewPanel.tsx` |
+| Partnership disposition character (§731/§736/§751 spec) | [adr/partnership-disposition-character-731-736-751.md](adr/partnership-disposition-character-731-736-751.md) | `app/Services/Finance/TaxPreviewFacts/Builders/PartnershipBasisFactsBuilder.php` |
 | CLI (artisan commands) | [cli.md](cli.md) | `app/Console/Commands/Finance*` |
 | MCP server (AI tools) | [mcp-server.md](mcp-server.md) | `app/Mcp/` |
 | Access control | [../access-control.md](../access-control.md) | `app/Support/Access/` + `feature:*` route middleware |

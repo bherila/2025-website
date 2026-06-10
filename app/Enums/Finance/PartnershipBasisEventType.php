@@ -24,7 +24,11 @@ namespace App\Enums\Finance;
  *  - none      → memorandum / reconciliation rows preserved for audit but with no
  *                outside-basis effect (prior-year carryforward marker, capital-
  *                account net income used only for reconciliation, guaranteed
- *                payments, §754 step-up pending detail, AMT/credit informational
+ *                payments, §754/§743(b) step-up amortization (Section754StepUpAmortization —
+ *                tracked as its own memorandum detail row rather than lumped with other
+ *                Box 13 code-L deductions, since the partner-level outside-basis effect of
+ *                the inside-basis adjustment is offset by the income/loss it shelters),
+ *                AMT/credit informational
  *                codes, and the manual tax-capital / book-capital adjustments,
  *                which move only the capital columns — see
  *                PartnershipBasisService::endingCapitalCents() — never outside basis).
@@ -52,6 +56,7 @@ enum PartnershipBasisEventType: string
     case ForeignTax = 'foreign_tax';
     case Section179 = 'section179';
     case Depletion = 'depletion';
+    case Section754StepUpAmortization = 'section754_stepup_amortization';
     case SuspendedLossReleased = 'suspended_loss_released';
     case SaleExchange = 'sale_exchange';
     case LiquidationDistributionCash = 'liquidation_distribution_cash';
@@ -154,5 +159,14 @@ enum PartnershipBasisEventType: string
     public function isLiquidation(): bool
     {
         return $this === self::LiquidationDistributionCash || $this === self::LiquidationDistributionProperty;
+    }
+
+    /**
+     * §754/§743(b) step-up amortization (commonly Box 13 code W) tracked as its own
+     * memorandum detail row, separate from the other Box 13 code-L portfolio deductions.
+     */
+    public function isSection754StepUp(): bool
+    {
+        return $this === self::Section754StepUpAmortization;
     }
 }

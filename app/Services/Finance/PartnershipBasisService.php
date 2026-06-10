@@ -266,6 +266,12 @@ class PartnershipBasisService
      * (a prior-year rollforward proves the interest crossed a year boundary) and is indeterminate
      * in the interest's first tracked year so first-year gains stay review-only until confirmed.
      *
+     * POLICY (confirmed, issue #954): indeterminate holding period means the gain is review-only
+     * and is NEVER automatically summed into Schedule D or Form 8949. The taxpayer must set
+     * `interest_start_date` (or the system must detect a prior-year rollforward) before the gain
+     * is reported. Do not change this to a conservative short-term default — a silent automatic
+     * classification is worse than an explicit review flag when the acquisition date is unknown.
+     *
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      */
     public function holdingPeriod(FinPartnershipInterest $interest, int $year, Collection $events, ?CarbonImmutable $dispositionDate = null): string
@@ -279,6 +285,10 @@ class PartnershipBasisService
                 : self::HOLDING_PERIOD_SHORT;
         }
 
+        // Without an acquisition date, a prior-year rollforward event proves the interest crossed
+        // a December 31 boundary, which is sufficient to conclude long-term. If neither signal is
+        // present (first tracked year, no rollforward) the holding period is genuinely unknown and
+        // callers must treat the result as indeterminate and exclude it from Schedule D totals.
         $crossedYearBoundary = $events->contains(
             fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::PriorYearRollforward->value,
         );
@@ -414,6 +424,181 @@ class PartnershipBasisService
         $this->recomputeInterestYearRange($interest, $year, $year);
 
         return $event;
+    }
+
+    /**
+     * Accept a reconciliation candidate (a contribution or distribution surfaced from the account's
+     * transaction feed) and create a reviewed manual basis event carrying the candidate's source
+     * provenance. Idempotent: if an event already exists for the same source reference (line_item_id,
+     * statement_id, or statement_investment_id) the existing event is returned without creating a
+     * duplicate. The reconciliation service itself remains read-only — this is the single write path.
+     *
+     * @param  array<string, mixed>  $payload  Validated accept payload from the controller.
+     */
+    public function acceptReconciliationCandidate(FinAccounts $account, int $userId, array $payload): FinPartnershipBasisEvent
+    {
+        $year = (int) $payload['tax_year'];
+        $interest = $this->resolveManualInterest($account, $userId, isset($payload['partnership_interest_id']) ? (int) $payload['partnership_interest_id'] : null);
+        $this->assertYearEditable($interest, $year);
+
+        // Idempotency guard: return any existing event that was already created from the same
+        // source reference so that re-accepting a candidate is a no-op rather than a duplicate.
+        $existing = $this->findExistingCandidateEvent($interest, $year, $payload);
+        if ($existing instanceof FinPartnershipBasisEvent) {
+            return $existing;
+        }
+
+        $eventType = PartnershipBasisEventType::from((string) $payload['event_type']);
+
+        /** @var FinPartnershipBasisEvent $event */
+        $event = $this->appendEvent($interest, [
+            'tax_year' => $year,
+            'event_type' => $eventType->value,
+            'event_order' => $payload['event_order'] ?? $this->eventOrder($eventType->value),
+            'basis_side' => $payload['basis_side'] ?? $this->basisSideFor($eventType),
+            'amount_cents' => (int) $payload['amount_cents'],
+            'source_type' => 'account_transaction',
+            'account_id' => $account->acct_id,
+            'line_item_id' => $payload['line_item_id'] ?? null,
+            'statement_id' => $payload['statement_id'] ?? null,
+            'statement_investment_id' => $payload['statement_investment_id'] ?? null,
+            'event_date' => $payload['event_date'] ?? null,
+            'source_label' => $payload['source_label'] ?? null,
+            'notes' => $payload['notes'] ?? null,
+            // Accepted candidates are immediately marked reviewed so the rollforward reflects
+            // the partner's explicit acceptance rather than requiring a second review step.
+            'review_status' => 'reviewed',
+            'metadata' => array_merge(
+                ['accepted_from_reconciliation_candidate' => true],
+                isset($payload['metadata']) && is_array($payload['metadata']) ? $payload['metadata'] : [],
+            ),
+        ]);
+
+        $this->recomputeInterestYearRange($interest, $year, $year);
+
+        return $event;
+    }
+
+    /**
+     * Find an existing basis event that was already created from the same reconciliation candidate
+     * source reference, used to enforce idempotency on the accept path.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function findExistingCandidateEvent(FinPartnershipInterest $interest, int $year, array $payload): ?FinPartnershipBasisEvent
+    {
+        $query = FinPartnershipBasisEvent::query()
+            ->where('user_id', $interest->user_id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->where('source_type', 'account_transaction');
+
+        $lineItemId = $payload['line_item_id'] ?? null;
+        $statementId = $payload['statement_id'] ?? null;
+        $statementInvestmentId = $payload['statement_investment_id'] ?? null;
+
+        // A line item id uniquely identifies the source row, so when it is
+        // present match on it alone. Falling back to the coarser statement-level
+        // keys here would let a later candidate with a different line_item_id be
+        // suppressed by an already-seeded event that merely shares a statement.
+        if ($lineItemId !== null) {
+            $match = (clone $query)->where('line_item_id', (int) $lineItemId)->first();
+
+            return $match instanceof FinPartnershipBasisEvent ? $match : null;
+        }
+
+        if ($statementInvestmentId !== null) {
+            $match = (clone $query)->where('statement_investment_id', (int) $statementInvestmentId)->first();
+            if ($match instanceof FinPartnershipBasisEvent) {
+                return $match;
+            }
+        }
+
+        if ($statementId !== null) {
+            $match = (clone $query)->where('statement_id', (int) $statementId)->first();
+            if ($match instanceof FinPartnershipBasisEvent) {
+                return $match;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Batch-seed outside-basis contribution and distribution events from an account's transaction
+     * feed. Iterates the reconciliation candidates (contributions and distributions) produced by
+     * PartnershipBasisReconciliationService for the given account/year and creates one basis event
+     * per un-seeded line item using the same path as acceptReconciliationCandidate(). Idempotent:
+     * a second call skips every line item that already has a seeded event and only creates the
+     * remainder.
+     *
+     * @return array{created: int, skipped: int}
+     */
+    public function seedOutsideBasisFromTransactions(FinAccounts $account, int $userId, int $year): array
+    {
+        $interest = $this->resolveManualInterest($account, $userId, null);
+        $this->assertYearEditable($interest, $year);
+
+        $basisYears = FinPartnershipBasisYear::query()
+            ->where('user_id', $userId)
+            ->where('tax_year', $year)
+            ->whereHas('partnershipInterest', fn ($query) => $query->where('account_id', $account->acct_id))
+            ->get();
+
+        $reconciliation = $this->reconciliationService->reconcile((int) $account->acct_id, $year, $basisYears);
+        $candidates = array_merge($reconciliation->contributionCandidates, $reconciliation->distributionCandidates);
+
+        $created = 0;
+        $skipped = 0;
+
+        foreach ($candidates as $candidate) {
+            // Only line-item-backed candidates can be seeded (they carry a stable idempotency key).
+            if ($candidate->lineItemId === null) {
+                $skipped++;
+
+                continue;
+            }
+
+            $payload = [
+                'line_item_id' => $candidate->lineItemId,
+                'statement_id' => $candidate->statementId,
+                'statement_investment_id' => $candidate->statementInvestmentId,
+            ];
+
+            $existingEvent = $this->findExistingCandidateEvent($interest, $year, $payload);
+            if ($existingEvent instanceof FinPartnershipBasisEvent) {
+                $skipped++;
+
+                continue;
+            }
+
+            $eventType = PartnershipBasisEventType::from($candidate->suggestedEventType);
+
+            $this->appendEvent($interest, [
+                'tax_year' => $year,
+                'event_type' => $eventType->value,
+                'event_order' => $this->eventOrder($eventType->value),
+                'basis_side' => $this->basisSideFor($eventType),
+                'amount_cents' => (int) round($candidate->amount * 100),
+                'source_type' => 'account_transaction',
+                'account_id' => $account->acct_id,
+                'line_item_id' => $candidate->lineItemId,
+                'statement_id' => $candidate->statementId,
+                'statement_investment_id' => $candidate->statementInvestmentId,
+                'event_date' => $candidate->date,
+                'source_label' => $candidate->description,
+                'review_status' => 'reviewed',
+                'metadata' => ['seeded_from_transactions' => true],
+            ]);
+
+            $created++;
+        }
+
+        if ($created > 0) {
+            $this->recomputeInterestYearRange($interest, $year, $year);
+        }
+
+        return ['created' => $created, 'skipped' => $skipped];
     }
 
     /** @return EloquentCollection<int, FinPartnershipBasisYear> */
@@ -921,12 +1106,19 @@ class PartnershipBasisService
             $push(PartnershipBasisEventType::Section179, 'k1_field', 'fields.12.value', 'K-1 Box 12 Section 179 deduction', $box12, '12', null, $reviewStatus);
         }
 
-        // ── Foreign taxes paid or accrued (Box 21, the flat field the rest of the app parses for
-        //    foreign tax) — a §705(a)(2)(B) expenditure that reduces outside basis. The K-3 carries
-        //    the country detail, but Box 21 reports the partner's total, which is the basis effect. ──
+        // ── Foreign taxes paid or accrued — §705(a)(2)(B)/§901 expenditure that reduces outside
+        //    basis. Priority: Box 21 (K-1 face total) → K-3 Part III Section 4 grandTotalUSD
+        //    (country detail; used when Box 21 is absent, e.g. because the partnership omitted the
+        //    summary and moved all detail to the K-3). When neither source is parseable the item
+        //    stays memorandum / needs_review via the Box 16 coded-event path. ──
         $box21 = $this->k1FieldCents($data, '21');
         if ($box21 !== null && $box21 !== 0) {
             $push(PartnershipBasisEventType::ForeignTax, 'k1_field', 'fields.21.value', 'K-1 Box 21 foreign taxes paid or accrued', $box21, '21', null, $reviewStatus);
+        } else {
+            $k3ForeignTaxCents = $this->k3ForeignTaxCents($data);
+            if ($k3ForeignTaxCents !== null && $k3ForeignTaxCents !== 0) {
+                $push(PartnershipBasisEventType::ForeignTax, 'k1_field', 'k3.part3_section4.grandTotalUSD', 'K-3 Part III Section 4 foreign taxes paid or accrued', $k3ForeignTaxCents, 'K-3', null, $reviewStatus);
+            }
         }
 
         // ── Coded boxes ──
@@ -1111,7 +1303,7 @@ class PartnershipBasisService
     /**
      * Routing table for coded K-1 boxes → basis event type. Items whose basis treatment
      * cannot be determined from the parsed data (foreign taxes now reported on Schedule K-3,
-     * §754/§704(c) detail, AMT/credit codes) are recorded as memorandum and forced to
+     * §704(c) detail, AMT/credit codes) are recorded as memorandum and forced to
      * needs_review rather than silently adjusting basis.
      *
      * @return array{0: PartnershipBasisEventType, 1: string}
@@ -1121,10 +1313,12 @@ class PartnershipBasisService
         return match ($box) {
             // Box 11 — other income (loss): distributive share, by sign.
             '11' => [$cents > 0 ? PartnershipBasisEventType::TaxableIncome : PartnershipBasisEventType::DeductibleLoss, $reviewStatus],
-            // Box 13 — other deductions: reduce basis. Code W is commonly §754 amortization,
-            // for which we have no schedule of detail → memorandum / needs_review.
+            // Box 13 — other deductions: reduce basis. Code W is commonly §754/§743(b) step-up
+            // amortization, which is tracked as its own memorandum detail row (separate from the
+            // other code-L portfolio deductions) so each §754 item carries its own amount and
+            // source document for review. Every other code-L item is a basis deduction.
             '13' => $code === 'W'
-                ? [PartnershipBasisEventType::Memorandum, 'needs_review']
+                ? [PartnershipBasisEventType::Section754StepUpAmortization, 'needs_review']
                 : [PartnershipBasisEventType::DeductibleLoss, $reviewStatus],
             // Box 18 — A tax-exempt income (↑), B nondeductible expenses (↓), C preproductive (review).
             '18' => match ($code) {
@@ -1442,6 +1636,12 @@ class PartnershipBasisService
     }
 
     /** @param Collection<int, FinPartnershipBasisEvent> $events */
+    private function hasSaleExchangeEvent(Collection $events): bool
+    {
+        return $events->contains(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::SaleExchange->value);
+    }
+
+    /** @param Collection<int, FinPartnershipBasisEvent> $events */
     private function beginningOutsideBasisCents(Collection $events, ?FinPartnershipBasisYear $prior): int
     {
         $manual = $events->filter(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::BeginningBasis->value)->last();
@@ -1629,9 +1829,13 @@ class PartnershipBasisService
             return null;
         }
 
-        $saleAmountRealized = $this->saleExchangeAmountRealizedTotalCents($events);
-        if ($saleAmountRealized > 0) {
-            return $saleAmountRealized - $endingOutside;
+        // A sale/exchange event is authoritative for amount realized, even when selling expenses exceed
+        // proceeds plus liability relief and the amount realized is negative — that simply yields a
+        // larger capital loss. Gate on the PRESENCE of a sale/exchange event, not on a positive amount
+        // realized, so a legitimately negative amount realized flows through signed (matching the Form
+        // 8949 row) rather than being dropped to the distribution/remaining-basis fallback.
+        if ($this->hasSaleExchangeEvent($events)) {
+            return $this->saleExchangeAmountRealizedTotalCents($events) - $endingOutside;
         }
 
         return $distributionGain > 0 ? $distributionGain : -$endingOutside;
@@ -1642,25 +1846,7 @@ class PartnershipBasisService
     {
         return (int) $events
             ->where('event_type', PartnershipBasisEventType::SaleExchange->value)
-            ->sum(fn (FinPartnershipBasisEvent $event): int => $this->saleExchangeAmountRealizedCents($event));
-    }
-
-    private function saleExchangeAmountRealizedCents(FinPartnershipBasisEvent $event): int
-    {
-        $metadata = $event->getAttribute('metadata');
-        if (! is_array($metadata) || ! isset($metadata['proceeds_cents']) || ! is_numeric($metadata['proceeds_cents'])) {
-            return abs((int) $event->amount_cents);
-        }
-
-        return (int) $metadata['proceeds_cents']
-            + $this->metadataCents($metadata, 'liability_relief_cents')
-            - $this->metadataCents($metadata, 'selling_expenses_cents');
-    }
-
-    /** @param array<string, mixed> $metadata */
-    private function metadataCents(array $metadata, string $key): int
-    {
-        return isset($metadata[$key]) && is_numeric($metadata[$key]) ? (int) $metadata[$key] : 0;
+            ->sum(fn (FinPartnershipBasisEvent $event): int => PartnershipBasisSaleExchangeMath::amountRealizedCents($event));
     }
 
     public function eventOrder(string $eventType): int
@@ -1830,6 +2016,92 @@ class PartnershipBasisService
     private function k1FieldCents(array $data, string $box): ?int
     {
         return $this->sourceOverrideCents($data, "field:{$box}") ?? $this->moneyToCents($data['fields'][$box]['value'] ?? null);
+    }
+
+    /**
+     * Extract the total foreign-taxes-paid/accrued amount from K-3 Part III Section 4
+     * (sectionId = 'part3_section4') and return it in cents, or null when the K-3 section
+     * is absent or the amount cannot be parsed. Returns null (not zero) so callers can
+     * distinguish "not present" from "explicitly zero".
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function k3ForeignTaxCents(array $data): ?int
+    {
+        $sections = $data['k3']['sections'] ?? null;
+        if (! is_array($sections)) {
+            return null;
+        }
+
+        $sectionData = null;
+        foreach ($sections as $section) {
+            if (is_array($section) && ($section['sectionId'] ?? null) === 'part3_section4' && is_array($section['data'] ?? null)) {
+                $sectionData = $section['data'];
+                break;
+            }
+        }
+
+        if ($sectionData === null) {
+            return null;
+        }
+
+        // Prefer the top-level pre-computed total / country list (the shape
+        // emitted by K3SectionAssembler).
+        $cents = $this->k3ForeignTaxCentsFromTaxData($sectionData);
+        if ($cents !== null) {
+            return $cents;
+        }
+
+        // Fall back to the canonical nested shape, where the totals live under a
+        // foreign-tax sub-object (e.g. data.line1_foreignTaxesPaid.grandTotalUSD
+        // / .countries), mirroring how Form1116FactsBuilder reads K-3 Part III
+        // Section 4. Without this, a nested-only payload yields no foreign_tax
+        // basis-decrease event and outside basis is overstated.
+        foreach ($sectionData as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+            if (! str_contains((string) $key, 'foreignTax') && ! str_contains((string) $key, 'foreign_tax')) {
+                continue;
+            }
+            $cents = $this->k3ForeignTaxCentsFromTaxData($value);
+            if ($cents !== null) {
+                return $cents;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract foreign-tax cents from a K-3 tax-data array, preferring the
+     * pre-computed grandTotalUSD and falling back to summing per-country amounts.
+     *
+     * @param  array<string, mixed>  $taxData
+     */
+    private function k3ForeignTaxCentsFromTaxData(array $taxData): ?int
+    {
+        $grandTotal = $taxData['grandTotalUSD'] ?? null;
+        if (is_numeric($grandTotal) && (float) $grandTotal !== 0.0) {
+            return $this->moneyToCents($grandTotal);
+        }
+
+        if (is_array($taxData['countries'] ?? null)) {
+            $total = 0.0;
+            foreach ($taxData['countries'] as $country) {
+                if (! is_array($country)) {
+                    continue;
+                }
+                $amount = $country['amount_usd'] ?? $country['total'] ?? $country['passiveForeign'] ?? null;
+                if (is_numeric($amount)) {
+                    $total += (float) $amount;
+                }
+            }
+
+            return $total !== 0.0 ? $this->moneyToCents($total) : null;
+        }
+
+        return null;
     }
 
     private function moneyToCents(mixed $value): ?int

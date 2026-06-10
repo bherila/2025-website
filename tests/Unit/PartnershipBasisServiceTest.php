@@ -211,6 +211,182 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(85_00, $basisYear->ending_outside_basis_cents);
     }
 
+    public function test_k3_foreign_taxes_create_foreign_tax_event_when_box21_absent(): void
+    {
+        // K-3 Part III Section 4 grandTotalUSD should create a foreign_tax basis-decrease event
+        // when Box 21 is absent, rolling into foreign_taxes_decrease_cents and reducing outside basis.
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'countries' => [
+                        ['country' => 'Germany', 'amount_usd' => 25.0],
+                        ['country' => 'France', 'amount_usd' => 15.0],
+                    ],
+                    'grandTotalUSD' => 40.0,
+                ],
+                'notes' => '',
+            ],
+        ];
+        $basisYear = $this->basisFromK1(2024, 'K3 Foreign Tax LP', ['5' => '100'], [], [], null, [], $k3Sections);
+
+        $this->assertSame(40_00, $basisYear->foreign_taxes_decrease_cents, 'K-3 grandTotalUSD should roll into foreign_taxes_decrease_cents');
+        $this->assertSame(60_00, $basisYear->ending_outside_basis_cents, 'K-3 foreign tax should reduce outside basis');
+
+        $event = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', 'foreign_tax')
+            ->first();
+        $this->assertNotNull($event, 'A foreign_tax event must be created from K-3 data');
+        $this->assertSame('k3.part3_section4.grandTotalUSD', $event->source_path);
+        $this->assertSame('K-3', $event->k1_box);
+        $this->assertSame(40_00, (int) $event->amount_cents);
+    }
+
+    public function test_k3_foreign_taxes_use_country_sum_fallback_when_grand_total_absent(): void
+    {
+        // When grandTotalUSD is absent from K-3 section data, the per-country amounts are summed.
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'countries' => [
+                        ['country' => 'Canada', 'amount_usd' => 10.0],
+                        ['country' => 'Japan', 'amount_usd' => 8.0],
+                    ],
+                ],
+                'notes' => '',
+            ],
+        ];
+        $basisYear = $this->basisFromK1(2024, 'K3 Country Sum LP', ['5' => '50'], [], [], null, [], $k3Sections);
+
+        $this->assertSame(18_00, $basisYear->foreign_taxes_decrease_cents);
+        $this->assertSame(32_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_k3_foreign_taxes_read_canonical_nested_shape(): void
+    {
+        // The canonical K-3 Part III Section 4 shape nests the totals under a
+        // foreign-tax sub-object (data.line1_foreignTaxesPaid.grandTotalUSD /
+        // .countries). The basis service must read it the same way Form 1116
+        // does, otherwise no foreign_tax event is created and basis is overstated.
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'line1_foreignTaxesPaid' => [
+                        'countries' => [
+                            ['country' => 'Germany', 'amount_usd' => 22.0],
+                            ['country' => 'France', 'amount_usd' => 13.0],
+                        ],
+                        'grandTotalUSD' => 35.0,
+                    ],
+                ],
+                'notes' => '',
+            ],
+        ];
+        $basisYear = $this->basisFromK1(2024, 'K3 Nested LP', ['5' => '100'], [], [], null, [], $k3Sections);
+
+        $this->assertSame(35_00, $basisYear->foreign_taxes_decrease_cents, 'Nested K-3 grandTotalUSD should roll into foreign_taxes_decrease_cents');
+        $this->assertSame(65_00, $basisYear->ending_outside_basis_cents);
+
+        $event = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', 'foreign_tax')
+            ->first();
+        $this->assertNotNull($event, 'A foreign_tax event must be created from the nested K-3 shape');
+    }
+
+    public function test_k3_foreign_taxes_sum_countries_in_nested_shape_when_grand_total_absent(): void
+    {
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'line1_foreignTaxesPaid' => [
+                        'countries' => [
+                            ['country' => 'Canada', 'amount_usd' => 9.0],
+                            ['country' => 'Japan', 'amount_usd' => 7.0],
+                        ],
+                    ],
+                ],
+                'notes' => '',
+            ],
+        ];
+        $basisYear = $this->basisFromK1(2024, 'K3 Nested Sum LP', ['5' => '50'], [], [], null, [], $k3Sections);
+
+        $this->assertSame(16_00, $basisYear->foreign_taxes_decrease_cents);
+        $this->assertSame(34_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_box21_takes_priority_over_k3_foreign_taxes_and_no_double_count(): void
+    {
+        // When both Box 21 and K-3 Part III Section 4 are present, Box 21 takes priority
+        // and the K-3 data must NOT be double-counted.
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'countries' => [['country' => 'Germany', 'amount_usd' => 99.0]],
+                    'grandTotalUSD' => 99.0,
+                ],
+                'notes' => '',
+            ],
+        ];
+        $basisYear = $this->basisFromK1(2024, 'Box21 Priority LP', ['5' => '100', '21' => '20'], [], [], null, [], $k3Sections);
+
+        // Only Box 21 (20) should be counted, not Box 21 + K-3 (119 total would be wrong).
+        $this->assertSame(20_00, $basisYear->foreign_taxes_decrease_cents, 'Only Box 21 should count when both Box 21 and K-3 are present');
+        $this->assertSame(80_00, $basisYear->ending_outside_basis_cents);
+    }
+
+    public function test_absent_k3_foreign_taxes_does_not_create_guessed_event(): void
+    {
+        // When K-3 detail is absent, no foreign_tax event should be created (stays memorandum/needs_review).
+        // Box 16 codes that would normally be memorandum should NOT be upgraded to foreign_tax.
+        $basisYear = $this->basisFromK1(2024, 'No K3 Foreign Tax LP', ['5' => '100'], [
+            '16' => [['code' => 'B', 'value' => '30']],
+        ]);
+
+        $this->assertSame(0, $basisYear->foreign_taxes_decrease_cents, 'No foreign tax event should be created without parseable K-3 data');
+        $this->assertSame(100_00, $basisYear->ending_outside_basis_cents, 'Outside basis must not be reduced by a guessed K-3 amount');
+
+        $foreignTaxEvents = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', 'foreign_tax')
+            ->count();
+        $this->assertSame(0, $foreignTaxEvents, 'No foreign_tax events should be created when K-3 is absent');
+    }
+
+    public function test_k3_foreign_taxes_excess_over_basis_is_suspended_not_gain(): void
+    {
+        // ForeignTax has BASIS_EFFECT_DECREASE_SUSPEND: excess over available basis is suspended,
+        // NOT recognized as gain (unlike cash distributions). Verify the suspend path.
+        $k3Sections = [
+            [
+                'sectionId' => 'part3_section4',
+                'title' => 'Part III – Section 4: Foreign Taxes',
+                'data' => [
+                    'grandTotalUSD' => 150.0,
+                    'countries' => [['country' => 'Germany', 'amount_usd' => 150.0]],
+                ],
+                'notes' => '',
+            ],
+        ];
+        // Beginning basis = 100; K-3 foreign tax = 150 → 100 absorbed, 50 suspended.
+        $basisYear = $this->basisFromK1(2024, 'K3 Suspended Tax LP', ['5' => '100'], [], [], null, [], $k3Sections);
+
+        $this->assertSame(150_00, $basisYear->foreign_taxes_decrease_cents);
+        $this->assertSame(0, $basisYear->ending_outside_basis_cents, 'Basis floors at zero');
+        $this->assertSame(50_00, $basisYear->suspended_loss_carryforward_cents, 'Excess K-3 foreign tax is suspended, not gain');
+        $this->assertSame(0, $basisYear->distribution_gain_cents, 'No §731 gain from a foreign tax decrease');
+    }
+
     public function test_capital_account_net_income_is_reconciliation_only_and_not_double_counted(): void
     {
         // Box 5 income is authoritative; capitalAccount.currentYearNetIncomeLoss is reconciliation
@@ -971,6 +1147,44 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(60_00, $basisYear->ending_outside_basis_cents);
     }
 
+    public function test_box13_code_w_is_tracked_as_section754_step_up_not_lumped_memorandum(): void
+    {
+        // Box 13 mixes a §754 step-up amortization (code W) with an ordinary code-L portfolio
+        // deduction (code A). The §754 item gets its own detail row (with amount + source document)
+        // and never touches outside basis; the non-§754 code-L deduction still reduces basis.
+        $basisYear = $this->basisFromK1(2024, 'Section754 LP', ['5' => '100'], [
+            '13' => [
+                ['code' => 'W', 'value' => '15'],
+                ['code' => 'A', 'value' => '10'],
+            ],
+        ]);
+
+        // Non-§754 code-L (code A) basis treatment is unchanged: still a basis deduction.
+        $this->assertSame(10_00, $basisYear->deductions_losses_decrease_cents);
+        // The §754 step-up amortization does NOT reduce outside basis (memorandum-only): 100 − 10 = 90.
+        $this->assertSame(90_00, $basisYear->ending_outside_basis_cents);
+
+        // §754 step-up is its own detail row, tracked separately from a generic memorandum row.
+        $stepUp = FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $basisYear->partnership_interest_id)
+            ->where('event_type', 'section754_stepup_amortization')
+            ->firstOrFail();
+        $this->assertSame('13', $stepUp->k1_box);
+        $this->assertSame('W', $stepUp->k1_code);
+        $this->assertSame(15_00, $stepUp->amount_cents);
+        $this->assertSame('needs_review', $stepUp->review_status);
+        $this->assertNotNull($stepUp->tax_document_id);
+
+        // The code-A deductible loss remains a separate (non-§754) basis-deduction event.
+        $this->assertDatabaseHas('fin_partnership_basis_events', [
+            'partnership_interest_id' => $basisYear->partnership_interest_id,
+            'k1_box' => '13',
+            'k1_code' => 'A',
+            'event_type' => 'deductible_loss',
+            'amount_cents' => 10_00,
+        ]);
+    }
+
     public function test_box19_override_is_applied_to_normalized_distribution(): void
     {
         $basisYear = $this->basisFromK1(2024, 'Override Distribution LP', ['5' => '100'], [], [
@@ -1112,6 +1326,24 @@ class PartnershipBasisServiceTest extends TestCase
         $this->assertSame(-40_00, $basisYear->liquidation_gain_loss_cents);
     }
 
+    public function test_sale_exchange_negative_amount_realized_is_honored_signed(): void
+    {
+        $interest = $this->interest('Negative Realized LP');
+        $this->manualEvent($interest, 2024, 'beginning_basis', 100_00);
+        // Selling expenses (60) exceed proceeds (10) + liability relief (5): amount realized = −45.
+        $this->manualEvent($interest, 2024, 'sale_exchange', 999_00, [
+            'proceeds_cents' => 10_00,
+            'liability_relief_cents' => 5_00,
+            'selling_expenses_cents' => 60_00,
+        ]);
+
+        $basisYear = $this->service->recomputeInterestYear($interest, 2024);
+
+        // Amount realized −45 − basis 100 = −145; the negative amount realized is not clamped to a
+        // remaining-basis fallback loss of −100.
+        $this->assertSame(-145_00, $basisYear->liquidation_gain_loss_cents);
+    }
+
     public function test_signed_manual_loss_does_not_inflate_tax_basis_capital(): void
     {
         $interest = $this->interest('Signed Capital LP');
@@ -1162,8 +1394,10 @@ class PartnershipBasisServiceTest extends TestCase
      * @param  array<string, string>  $fields
      * @param  array<string, array<int, array<string, string>>>  $codes
      * @param  array<string, mixed>  $basis
+     * @param  array<string, mixed>  $overrides
+     * @param  list<array<string, mixed>>  $k3Sections
      */
-    private function basisFromK1(int $year, string $name, array $fields, array $codes, array $basis = [], ?string $ein = null, array $overrides = []): FinPartnershipBasisYear
+    private function basisFromK1(int $year, string $name, array $fields, array $codes, array $basis = [], ?string $ein = null, array $overrides = [], array $k3Sections = []): FinPartnershipBasisYear
     {
         $ein ??= '47-'.str_pad((string) (abs(crc32($name)) % 10_000_000), 7, '0', STR_PAD_LEFT);
         $docFields = ['A' => ['value' => $ein], 'B' => ['value' => $name."\n123 Example Way"], 'D' => ['value' => 'false']];
@@ -1171,7 +1405,7 @@ class PartnershipBasisServiceTest extends TestCase
             $docFields[$box] = ['value' => $value];
         }
 
-        $this->k1Document($year, $name, $ein, $docFields, $codes, $basis, $overrides);
+        $this->k1Document($year, $name, $ein, $docFields, $codes, $basis, $overrides, $k3Sections);
         $this->service->recomputeForUserYear($this->user->id, $year);
 
         return $this->basisYearFor($name, $year);
@@ -1182,8 +1416,9 @@ class PartnershipBasisServiceTest extends TestCase
      * @param  array<string, array<int, array<string, string>>>  $codes
      * @param  array<string, mixed>  $basis
      * @param  array<string, array<string, mixed>>  $overrides
+     * @param  list<array<string, mixed>>  $k3Sections
      */
-    private function k1Document(int $year, string $name, string $ein, array $fields, array $codes, array $basis = [], array $overrides = []): FileForTaxDocument
+    private function k1Document(int $year, string $name, string $ein, array $fields, array $codes, array $basis = [], array $overrides = [], array $k3Sections = []): FileForTaxDocument
     {
         if (! isset($fields['A'])) {
             // Union (not array_merge) so numeric box keys such as '5'/'19' are not reindexed.
@@ -1201,6 +1436,9 @@ class PartnershipBasisServiceTest extends TestCase
         ];
         if ($overrides !== []) {
             $parsedData['sourceValueOverrides'] = $overrides;
+        }
+        if ($k3Sections !== []) {
+            $parsedData['k3'] = ['sections' => $k3Sections];
         }
 
         return FileForTaxDocument::create([

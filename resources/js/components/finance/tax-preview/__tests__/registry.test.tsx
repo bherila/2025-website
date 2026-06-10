@@ -130,6 +130,70 @@ describe('formRegistry', () => {
     })
   })
 
+  describe('partnership-basis', () => {
+    const entry = formRegistry['partnership-basis']!
+
+    it('is defined and has id partnership-basis', () => {
+      expect(entry).toBeDefined()
+      expect(entry.id).toBe('partnership-basis')
+    })
+
+    it('has at least one keyword', () => {
+      expect(entry.keywords.length).toBeGreaterThan(0)
+    })
+
+    it('has a category set', () => {
+      expect(entry.category).toBeDefined()
+      expect(entry.category).toBe('Form')
+    })
+
+    it('hasData returns false for empty facts', () => {
+      const state = {} as unknown as TaxPreviewState
+      expect(entry.hasData!(state)).toBe(false)
+    })
+
+    it('hasData returns false when partnershipBasis has no interests', () => {
+      const state = {
+        taxFacts: {
+          partnershipBasis: { interests: [] },
+        },
+      } as unknown as TaxPreviewState
+      expect(entry.hasData!(state)).toBe(false)
+    })
+
+    it('hasData returns true when partnershipBasis has at least one interest', () => {
+      const state = {
+        taxFacts: {
+          partnershipBasis: {
+            interests: [{ interestId: 1, partnershipName: 'Test Fund LP', worksheet: { endingOutsideBasis: 50_000 } }],
+          },
+        },
+      } as unknown as TaxPreviewState
+      expect(entry.hasData!(state)).toBe(true)
+    })
+
+    it('keyAmounts returns null when there are no interests', () => {
+      const state = {
+        taxFacts: { partnershipBasis: { interests: [] } },
+      } as unknown as TaxPreviewState
+      expect(entry.keyAmounts!(state)).toBeNull()
+    })
+
+    it('keyAmounts returns ending basis total when interests are present', () => {
+      const state = {
+        taxFacts: {
+          partnershipBasis: {
+            interests: [
+              { interestId: 1, partnershipName: 'Fund A', worksheet: { endingOutsideBasis: 30_000 } },
+              { interestId: 2, partnershipName: 'Fund B', worksheet: { endingOutsideBasis: 20_000 } },
+            ],
+          },
+        },
+      } as unknown as TaxPreviewState
+      expect(entry.keyAmounts!(state)).toEqual([{ label: 'Ending basis', value: 50_000 }])
+    })
+  })
+
   describe('form-6781', () => {
     const entry = formRegistry['form-6781']!
 

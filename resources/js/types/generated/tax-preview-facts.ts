@@ -512,6 +512,7 @@ distributionGainSources: Array<TaxFactSource>;
 liquidationGainLossSources: Array<TaxFactSource>;
 propertyDistributionSources: Array<TaxFactSource>;
 form7217RequiredSources: Array<TaxFactSource>;
+section754StepUpSources: Array<TaxFactSource>;
 form8949Rows: Array<Form8949RowFact>;
 reconciliations: Array<PartnershipBasisReconciliationFacts>;
 year: number;

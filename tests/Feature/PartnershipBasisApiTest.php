@@ -6,8 +6,10 @@ use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPartnershipBasisEvent;
+use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Models\User;
+use App\Services\Finance\MoneyMath;
 use App\Services\Finance\PartnershipBasisService;
 use App\Services\Finance\TaxPreviewFactsService;
 use App\Services\Finance\TaxPreviewWorkbookBuilder;
@@ -359,6 +361,168 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss']);
     }
 
+    public function test_sale_exchange_with_unparseable_metadata_date_stays_review_only_without_crashing(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Bad Date Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Bad Date LP',
+            'normalized_partnership_name' => 'bad date lp',
+            'form_type' => 'k1_1065',
+        ]);
+
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 150_00, '2024-06-15', [
+            'date_acquired' => 'not a real date',
+            'date_sold' => 'also garbage',
+            'proceeds_cents' => 150_00,
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $this->assertEmpty(collect($facts['form8949']['rows'])
+            ->where('accountName', 'Bad Date LP'));
+        $source = collect($facts['partnershipBasis']['liquidationGainLossSources'])
+            ->firstWhere('label', 'Bad Date LP - sale/exchange gain/loss (review)');
+        $this->assertNotNull($source, 'unparseable metadata date should leave the disposition review-only');
+        $this->assertSame('needs_review_schedule_d_line_5_or_12', $source['routing']);
+        $this->assertSame(0.0, $facts['scheduleD']['line3GainLoss']);
+        $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss']);
+    }
+
+    public function test_sale_exchange_uses_interest_start_date_when_metadata_omits_acquisition_date(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Start Date Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Start Date LP',
+            'normalized_partnership_name' => 'start date lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2021-01-01',
+        ]);
+
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 150_00, '2024-06-15', [
+            'proceeds_cents' => 150_00,
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $row = collect($facts['form8949']['rows'])
+            ->firstWhere('accountName', 'Start Date LP');
+        $this->assertNotNull($row, 'interest_start_date should establish the holding period and produce a Form 8949 row');
+        $this->assertSame('F', $row['form8949Box']);
+        $this->assertSame('2021-01-01', $row['dateAcquired']);
+        $this->assertSame('2024-06-15', $row['dateSold']);
+        $this->assertSame(150.0, $row['proceeds']);
+        $this->assertSame(100.0, $row['costBasis']);
+        $this->assertSame(50.0, $row['gainOrLoss']);
+        $this->assertFalse($row['isShortTerm']);
+
+        $this->assertSame(50.0, $facts['scheduleD']['line10GainLoss']);
+    }
+
+    public function test_released_suspended_loss_reduces_form8949_cost_basis_to_match_service_ending_basis(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Released Loss Sale Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Released Loss Sale LP',
+            'normalized_partnership_name' => 'released loss sale lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2021-01-01',
+        ]);
+
+        // 2023: a 150 loss against 100 basis suspends 50 and zeroes outside basis.
+        $this->event($user->id, $interest->id, 2023, 'beginning_basis', 100_00, 'reviewed');
+        $this->event($user->id, $interest->id, 2023, 'deductible_loss', 150_00, 'reviewed');
+        // 2024: a 100 contribution restores basis; 50 of the suspended loss releases (basis → 50),
+        // then a complete sale realizes 200.
+        $this->event($user->id, $interest->id, 2024, 'capital_contribution_cash', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 999_00, '2024-06-15', [
+            'date_acquired' => '2021-01-01',
+            'proceeds_cents' => 200_00,
+            'description' => 'Released Loss Sale LP partnership interest',
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2023);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $basisYear = FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->firstOrFail();
+        // Service: contribution restores 100, release nets 50 → ending outside basis 50 before sale.
+        $this->assertSame(0, $basisYear->suspended_loss_carryforward_cents);
+        // Amount realized 200 − basis-immediately-before-sale 50 = 150 gain.
+        $this->assertSame(150_00, $basisYear->liquidation_gain_loss_cents);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+        $row = collect($facts['form8949']['rows'])
+            ->firstWhere('accountName', 'Released Loss Sale LP');
+        $this->assertNotNull($row, 'complete sale/exchange metadata should generate a Form 8949 row');
+        // The released suspended loss must net out of the Form 8949 cost basis so it matches the
+        // service's basis immediately before the sale (50) rather than the pre-release 100.
+        $this->assertSame(50.0, $row['costBasis']);
+        $this->assertSame(200.0, $row['proceeds']);
+        // Builder gain/loss and the stored estimate no longer diverge.
+        $this->assertSame(150.0, $row['gainOrLoss']);
+        $this->assertSame(MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents), $row['gainOrLoss']);
+    }
+
+    public function test_negative_amount_realized_flows_signed_through_estimate_and_form8949(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Negative Realized Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Negative Realized LP',
+            'normalized_partnership_name' => 'negative realized lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2021-01-01',
+        ]);
+
+        // Selling expenses (60) exceed proceeds (10) + liability relief (5): amount realized = −45.
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->datedEvent($user->id, $interest->id, 2024, 'sale_exchange', 999_00, '2024-06-15', [
+            'date_acquired' => '2021-01-01',
+            'proceeds_cents' => 10_00,
+            'liability_relief_cents' => 5_00,
+            'selling_expenses_cents' => 60_00,
+            'description' => 'Negative Realized LP partnership interest',
+        ]);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $basisYear = FinPartnershipBasisYear::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->firstOrFail();
+        // Amount realized −45 − basis 100 = −145 loss; the signed amount realized is not clamped.
+        $this->assertSame(-145_00, $basisYear->liquidation_gain_loss_cents);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+        $row = collect($facts['form8949']['rows'])
+            ->firstWhere('accountName', 'Negative Realized LP');
+        $this->assertNotNull($row, 'a negative amount realized should still produce a complete Form 8949 row');
+        $this->assertSame(-45.0, $row['proceeds']);
+        $this->assertSame(100.0, $row['costBasis']);
+        $this->assertSame(-145.0, $row['gainOrLoss']);
+        // The stored estimate and the Form 8949 row agree on the signed loss.
+        $this->assertSame(MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents), $row['gainOrLoss']);
+    }
+
     public function test_property_distribution_emits_form7217_sources_and_workbook_rows(): void
     {
         $user = User::factory()->create();
@@ -668,6 +832,546 @@ class PartnershipBasisApiTest extends TestCase
         $this->assertContains('Form 8949 Dispositions', $names);
         $this->assertContains('Transaction & Statement Reconciliation', $names);
         $this->assertContains('Basis Source Lines', $names);
+    }
+
+    /**
+     * Holding-period policy guard (issue #954).
+     *
+     * Indeterminate holding period (no acquisition date, no prior-year rollforward) ⇒
+     * gain is NEVER automatically summed into Schedule D or Form 8949.  This is the
+     * confirmed, intentional default — not a gap to be "fixed" by falling back to short-term.
+     *
+     * The three sub-cases documented below must all remain true:
+     *   1. No acquisition date + no rollforward → indeterminate → review-only.
+     *   2. Prior-year rollforward present → long-term proxy → Schedule D line 10.
+     *   3. Explicit acquisition date → exact computation → line 3 or line 10.
+     */
+    public function test_holding_period_policy_indeterminate_stays_review_only_confirmed_issue_954(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Policy 954 Account']);
+
+        // ── Case 1: first-year interest, no acquisition date, no rollforward ──
+        // Gain must be review-only (routing = NeedsReview) and must NOT flow to Schedule D.
+        $firstYear = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Policy 954 First Year LP',
+            'normalized_partnership_name' => 'policy 954 first year lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $firstYear->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        $this->event($user->id, $firstYear->id, 2024, 'cash_distribution', 150_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $gainSource = collect($facts['partnershipBasis']['distributionGainSources'])
+            ->firstWhere('sourceType', 'partnership_excess_distribution_gain');
+        $this->assertNotNull($gainSource, 'indeterminate-hold excess distribution gain must appear in partnershipBasis sources for review');
+        $this->assertSame('needs_review_schedule_d_line_5_or_12', $gainSource['routing'],
+            'indeterminate holding period must route to NeedsReview, not to Schedule D line 3 or 10');
+        $this->assertSame(0.0, $facts['scheduleD']['line3GainLoss'],
+            'indeterminate gain must NOT appear on Schedule D line 3');
+        $this->assertSame(0.0, $facts['scheduleD']['line10GainLoss'],
+            'indeterminate gain must NOT appear on Schedule D line 10');
+        $this->assertEmpty(
+            collect($facts['form8949']['rows'])->where('accountName', 'Policy 954 First Year LP'),
+            'indeterminate gain must NOT produce a Form 8949 row'
+        );
+
+        // ── Case 2: prior-year rollforward resolves to long-term proxy → Schedule D line 10 ──
+        $crossYear = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Policy 954 Cross Year LP',
+            'normalized_partnership_name' => 'policy 954 cross year lp',
+            'form_type' => 'k1_1065',
+        ]);
+        // Seed a prior year so the rollforward event is created when 2024 is computed.
+        $this->event($user->id, $crossYear->id, 2023, 'beginning_basis', 100_00, 'reviewed');
+        $this->event($user->id, $crossYear->id, 2024, 'cash_distribution', 180_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2023);
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts2 = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $crossYearGain = collect($facts2['partnershipBasis']['distributionGainSources'])
+            ->firstWhere(fn (array $s): bool => str_contains($s['label'] ?? '', 'Policy 954 Cross Year LP'));
+        $this->assertNotNull($crossYearGain, 'cross-year interest gain must appear in sources');
+        $this->assertSame('schedule_d_line_10', $crossYearGain['routing'],
+            'prior-year rollforward proxy must resolve to long-term (Schedule D line 10)');
+
+        // ── Case 3: explicit acquisition date → exact short-term/long-term result ──
+        $exactDate = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Policy 954 Exact Date LP',
+            'normalized_partnership_name' => 'policy 954 exact date lp',
+            'form_type' => 'k1_1065',
+            'interest_start_date' => '2024-01-01',
+        ]);
+        $this->event($user->id, $exactDate->id, 2024, 'beginning_basis', 50_00, 'reviewed');
+        $this->event($user->id, $exactDate->id, 2024, 'cash_distribution', 80_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeForUserYear($user->id, 2024);
+
+        $facts3 = app(TaxPreviewFactsService::class)->arrayForYear($user->id, 2024);
+
+        $exactGain = collect($facts3['partnershipBasis']['distributionGainSources'])
+            ->firstWhere(fn (array $s): bool => str_contains($s['label'] ?? '', 'Policy 954 Exact Date LP'));
+        $this->assertNotNull($exactGain);
+        $this->assertSame('schedule_d_line_3', $exactGain['routing'],
+            'interest acquired 2024-01-01, distributed 2024-12-31 (≤1 year) must be short-term');
+    }
+
+    public function test_accepting_contribution_candidate_creates_reviewed_event_with_source_provenance(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Accept Contribution Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Accept Contribution LP',
+            'normalized_partnership_name' => 'accept contribution lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $lineItem = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-05-01',
+            't_type' => 'Wire',
+            't_amt' => -50_000.00,
+            't_description' => 'Capital call',
+        ]);
+
+        $response = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'capital_contribution_cash',
+            'amount_cents' => 50_000_00,
+            'event_date' => '2024-05-01',
+            'line_item_id' => $lineItem->t_id,
+            'source_label' => 'Capital call accepted from reconciliation',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('eventType', 'capital_contribution_cash')
+            ->assertJsonPath('reviewStatus', 'reviewed')
+            ->assertJsonPath('amountCents', 50_000_00)
+            ->assertJsonPath('lineItemId', $lineItem->t_id)
+            ->assertJsonPath('sourceLabel', 'Capital call accepted from reconciliation')
+            ->assertJsonPath('sourceType', 'account_transaction');
+    }
+
+    public function test_accepting_distribution_candidate_creates_reviewed_event_with_source_provenance(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Accept Distribution Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Accept Distribution LP',
+            'normalized_partnership_name' => 'accept distribution lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 200_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $lineItem = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-06-15',
+            't_type' => 'Distribution',
+            't_amt' => -25_00,
+            't_description' => 'Q2 distribution',
+        ]);
+
+        $response = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 25_00,
+            'event_date' => '2024-06-15',
+            'line_item_id' => $lineItem->t_id,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('eventType', 'cash_distribution')
+            ->assertJsonPath('reviewStatus', 'reviewed')
+            ->assertJsonPath('amountCents', 25_00)
+            ->assertJsonPath('lineItemId', $lineItem->t_id)
+            ->assertJsonPath('sourceType', 'account_transaction');
+
+        // The rollforward should have been updated — distribution reduces outside basis.
+        $this->getJson("/api/finance/accounts/{$account->acct_id}/basis?year=2024")
+            ->assertOk()
+            ->assertJsonPath('interests.0.cashDistributions', 25);
+    }
+
+    public function test_accepting_same_candidate_twice_is_a_no_op(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Idempotent Accept Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Idempotent LP',
+            'normalized_partnership_name' => 'idempotent lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 200_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $lineItem = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-03-01',
+            't_type' => 'Distribution',
+            't_amt' => -40_00,
+            't_description' => 'Distribution payment',
+        ]);
+
+        $payload = [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 40_00,
+            'line_item_id' => $lineItem->t_id,
+        ];
+
+        $first = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", $payload);
+        $first->assertCreated();
+        $firstId = $first->json('id');
+
+        // Second accept with the same line_item_id must return the existing event (same id).
+        $second = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", $payload);
+        $second->assertCreated();
+        $this->assertSame($firstId, $second->json('id'));
+
+        // Only one event should exist for this line item.
+        $eventCount = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('line_item_id', $lineItem->t_id)
+            ->count();
+        $this->assertSame(1, $eventCount);
+    }
+
+    public function test_distinct_line_items_sharing_a_statement_seed_independently(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Shared Statement Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Shared Statement LP',
+            'normalized_partnership_name' => 'shared statement lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 500_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $contribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-02-01',
+            't_type' => 'Contribution',
+            't_amt' => 30_00,
+            't_description' => 'Capital call',
+        ]);
+        $distribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-03-01',
+            't_type' => 'Distribution',
+            't_amt' => -20_00,
+            't_description' => 'Cash distribution',
+        ]);
+
+        // Both candidates originate from the same imported statement but are
+        // distinct line items; each must seed its own event.
+        $first = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'capital_contribution_cash',
+            'amount_cents' => 30_00,
+            'line_item_id' => $contribution->t_id,
+            'statement_id' => 7777,
+        ])->assertCreated();
+
+        $second = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 20_00,
+            'line_item_id' => $distribution->t_id,
+            'statement_id' => 7777,
+        ])->assertCreated();
+
+        $this->assertNotSame($first->json('id'), $second->json('id'), 'A shared statement_id must not suppress a distinct line item');
+
+        $events = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('source_type', 'account_transaction')
+            ->get();
+        $this->assertCount(2, $events);
+        $this->assertEqualsCanonicalizing(
+            [(int) $contribution->t_id, (int) $distribution->t_id],
+            $events->pluck('line_item_id')->map(fn ($id): int => (int) $id)->all(),
+        );
+    }
+
+    public function test_accept_reconciliation_requires_valid_event_type(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Accept Validation Account']);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'not_a_real_type',
+            'amount_cents' => 100_00,
+        ])->assertStatus(422)->assertJsonValidationErrors('event_type');
+    }
+
+    public function test_accept_reconciliation_rejects_locked_year(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Accept Locked Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Locked Accept LP',
+            'normalized_partnership_name' => 'locked accept lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/lock?year=2024")->assertOk();
+
+        $lineItem = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-03-01',
+            't_type' => 'Distribution',
+            't_amt' => -30_00,
+            't_description' => 'Distribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/accept", [
+            'tax_year' => 2024,
+            'event_type' => 'cash_distribution',
+            'amount_cents' => 30_00,
+            'line_item_id' => $lineItem->t_id,
+        ])->assertStatus(422)->assertJsonValidationErrors('tax_year');
+    }
+
+    public function test_seed_from_transactions_creates_contribution_and_distribution_events(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Seed Basis Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Seed Basis LP',
+            'normalized_partnership_name' => 'seed basis lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        // Contribution line item (keyword: "capital call")
+        $contribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-04-01',
+            't_type' => 'Wire',
+            't_amt' => -50_000.00,
+            't_description' => 'Capital call',
+        ]);
+
+        // Distribution line item
+        $distribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-08-15',
+            't_type' => 'Distribution',
+            't_amt' => -25_00,
+            't_description' => 'Q3 distribution',
+        ]);
+
+        $response = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024");
+
+        $response->assertOk()
+            ->assertJsonPath('seed.created', 2)
+            ->assertJsonPath('seed.skipped', 0);
+
+        // Both events should now exist in the database
+        $events = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('source_type', 'account_transaction')
+            ->orderBy('line_item_id')
+            ->get();
+
+        $this->assertCount(2, $events);
+
+        $contribEvent = $events->firstWhere('line_item_id', $contribution->t_id);
+        $this->assertNotNull($contribEvent);
+        $this->assertSame('capital_contribution_cash', $contribEvent->event_type);
+        $this->assertSame('reviewed', $contribEvent->review_status);
+        $this->assertSame((int) $contribution->t_id, (int) $contribEvent->line_item_id);
+
+        $distEvent = $events->firstWhere('line_item_id', $distribution->t_id);
+        $this->assertNotNull($distEvent);
+        $this->assertSame('cash_distribution', $distEvent->event_type);
+        $this->assertSame('reviewed', $distEvent->review_status);
+        $this->assertSame((int) $distribution->t_id, (int) $distEvent->line_item_id);
+    }
+
+    public function test_seed_from_transactions_is_idempotent(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Idempotent Seed Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Idempotent Seed LP',
+            'normalized_partnership_name' => 'idempotent seed lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 200_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-03-10',
+            't_type' => 'Distribution',
+            't_amt' => -30_00,
+            't_description' => 'Distribution payment',
+        ]);
+
+        // First seed: creates 1 event
+        $first = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024");
+        $first->assertOk()->assertJsonPath('seed.created', 1)->assertJsonPath('seed.skipped', 0);
+
+        // Second seed: skips the already-seeded item; no duplicate is created
+        $second = $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024");
+        $second->assertOk()->assertJsonPath('seed.created', 0)->assertJsonPath('seed.skipped', 1);
+
+        $eventCount = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', 2024)
+            ->where('source_type', 'account_transaction')
+            ->count();
+        $this->assertSame(1, $eventCount);
+    }
+
+    public function test_seed_from_transactions_recomputes_rollforward(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Seed Recompute Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Seed Recompute LP',
+            'normalized_partnership_name' => 'seed recompute lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 500_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-07-01',
+            't_type' => 'Distribution',
+            't_amt' => -150.00,
+            't_description' => 'Cash distribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertOk()
+            ->assertJsonPath('seed.created', 1);
+
+        // The rollforward should now reflect the seeded distribution
+        $this->getJson("/api/finance/accounts/{$account->acct_id}/basis?year=2024")
+            ->assertOk()
+            ->assertJsonPath('interests.0.cashDistributions', 150);
+    }
+
+    public function test_seed_from_transactions_rejects_locked_year(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Seed Locked Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Seed Locked LP',
+            'normalized_partnership_name' => 'seed locked lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/lock?year=2024")->assertOk();
+
+        FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-06-01',
+            't_type' => 'Distribution',
+            't_amt' => -20_00,
+            't_description' => 'Distribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('tax_year');
+    }
+
+    public function test_seed_from_transactions_preserves_source_provenance(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Provenance Seed Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Provenance Seed LP',
+            'normalized_partnership_name' => 'provenance seed lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        $lineItem = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-05-20',
+            't_type' => 'Wire',
+            't_amt' => -10_000.00,
+            't_description' => 'Capital contribution',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertOk()
+            ->assertJsonPath('seed.created', 1);
+
+        $event = FinPartnershipBasisEvent::query()
+            ->where('user_id', $user->id)
+            ->where('line_item_id', $lineItem->t_id)
+            ->first();
+
+        $this->assertNotNull($event);
+        $this->assertSame('account_transaction', $event->source_type);
+        $this->assertSame((int) $lineItem->t_id, (int) $event->line_item_id);
+        $this->assertSame('reviewed', $event->review_status);
+        $this->assertIsArray($event->metadata);
+        $this->assertTrue($event->metadata['seeded_from_transactions'] ?? false);
     }
 
     private function event(int $userId, int $interestId, int $year, string $eventType, int $amountCents, string $reviewStatus): void

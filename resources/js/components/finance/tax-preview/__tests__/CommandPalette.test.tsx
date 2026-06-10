@@ -244,6 +244,7 @@ const mockRegistry: FormRegistry = {
     presentation: 'column',
     component: MockComponent,
   },
+  'partnership-basis': stubColumn('partnership-basis', 'Partnership Outside Basis', 'P/S Basis'),
   'w2-summary': {
     id: 'w2-summary',
     label: 'W-2 Income Summary',

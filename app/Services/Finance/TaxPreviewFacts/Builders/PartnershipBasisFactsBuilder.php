@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinPartnershipBasisYear;
 use App\Models\FinanceTool\FinPartnershipInterest;
 use App\Services\Finance\MoneyMath;
 use App\Services\Finance\PartnershipBasisReconciliationService;
+use App\Services\Finance\PartnershipBasisSaleExchangeMath;
 use App\Services\Finance\PartnershipBasisService;
 use App\Services\Finance\TaxPreviewFacts\Data\Form8949RowFact;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisEventFact;
@@ -44,6 +45,7 @@ class PartnershipBasisFactsBuilder
         $liquidationGainLossSources = [];
         $propertyDistributionSources = [];
         $form7217RequiredSources = [];
+        $section754StepUpSources = [];
         $form8949Rows = [];
         /** @var array<int, Collection<int, FinPartnershipBasisYear>> $basisYearsByAccount */
         $basisYearsByAccount = [];
@@ -67,6 +69,10 @@ class PartnershipBasisFactsBuilder
                 if ((int) $basisYear->tax_year >= 2024) {
                     $form7217RequiredSources[] = $this->propertyDistributionSource($basisYear, $interest, $event, TaxFactSourceType::PartnershipForm7217Required);
                 }
+            }
+
+            foreach ($this->section754StepUpEvents($events) as $event) {
+                $section754StepUpSources[] = $this->section754StepUpSource($basisYear, $interest, $event);
             }
 
             foreach ($this->distributionGainAllocations($basisYear, $events) as $allocation) {
@@ -116,7 +122,7 @@ class PartnershipBasisFactsBuilder
             }
 
             $saleExchangeSources = [];
-            foreach ($this->saleExchangeAllocations($basisYear, $events) as $allocation) {
+            foreach ($this->saleExchangeAllocations($basisYear, $interest, $events) as $allocation) {
                 $sourceId = "partnership-basis-event-{$allocation['event']->id}-sale-exchange";
                 $gainDollars = MoneyMath::fromCents($allocation['gain_loss_cents']);
                 $reviewStatus = (string) ($allocation['event']->review_status ?: $basisYear->review_status);
@@ -207,6 +213,7 @@ class PartnershipBasisFactsBuilder
             liquidationGainLossSources: $liquidationGainLossSources,
             propertyDistributionSources: $propertyDistributionSources,
             form7217RequiredSources: $form7217RequiredSources,
+            section754StepUpSources: $section754StepUpSources,
             form8949Rows: $form8949Rows,
             reconciliations: $reconciliations,
         );
@@ -217,6 +224,12 @@ class PartnershipBasisFactsBuilder
      * Form 8949 box C = short-term not reported on a 1099-B → Schedule D line 3; box F = long-term
      * not reported on a 1099-B → Schedule D line 10. An indeterminate period yields no box (the gain
      * is left for review and excluded from Schedule D totals).
+     *
+     * POLICY (confirmed, issue #954): indeterminate → NeedsReview with box = null so the gain is
+     * NEVER automatically included in Schedule D. §731 gain on the deemed sale of a partnership
+     * interest requires knowing whether it is short-term or long-term; omitting the gain from the
+     * return totals until the acquisition date is confirmed is the conservative, correct behaviour.
+     * Do not change the default arm to a short-term assumption.
      *
      * @return array{0: TaxFactRouting, 1: ?string, 2: bool}
      */
@@ -300,23 +313,37 @@ class PartnershipBasisFactsBuilder
      * @param  Collection<int, FinPartnershipBasisEvent>  $events
      * @return array<int, array{event: FinPartnershipBasisEvent, amount_realized_cents: int, cost_basis_cents: int, gain_loss_cents: int, date_acquired: ?string, date_sold: ?string, description: ?string, holding_period: string, is_complete: bool}>
      */
-    private function saleExchangeAllocations(FinPartnershipBasisYear $basisYear, Collection $events): array
+    private function saleExchangeAllocations(FinPartnershipBasisYear $basisYear, FinPartnershipInterest $interest, Collection $events): array
     {
         $availableOutsideBasis = (int) $basisYear->beginning_outside_basis_cents;
         $allocations = [];
 
+        // The authoritative rollforward (PartnershipBasisService) releases a suspended loss AFTER its
+        // event loop and reduces ending outside basis by that amount before computing the sale gain,
+        // independent of event_order. SuspendedLossReleased carries BASIS_EFFECT_NONE in the enum
+        // (other call sites depend on that) and is ordered AFTER the sale event, so the in-loop switch
+        // would never apply it before the SaleExchange snapshot. Pre-compute the release here and net
+        // it out at the snapshot so cost_basis_cents matches the service's ending outside basis.
+        $releasedSuspendedLoss = $this->releasedSuspendedLossCents($events);
+
         foreach ($events as $event) {
             $type = PartnershipBasisEventType::tryFrom((string) $event->event_type);
-            if ($type === null || in_array($type, [PartnershipBasisEventType::BeginningBasis, PartnershipBasisEventType::PriorYearRollforward], true)) {
+            if ($type === null || in_array($type, [PartnershipBasisEventType::BeginningBasis, PartnershipBasisEventType::PriorYearRollforward, PartnershipBasisEventType::SuspendedLossReleased], true)) {
                 continue;
             }
 
             if ($type === PartnershipBasisEventType::SaleExchange) {
+                $availableOutsideBasis -= min($availableOutsideBasis, $releasedSuspendedLoss);
+                $releasedSuspendedLoss = 0;
                 $metadata = $event->getAttribute('metadata');
                 $metadata = is_array($metadata) ? $metadata : [];
-                $amountRealized = $this->saleExchangeAmountRealizedCents($event, $metadata);
+                $amountRealized = PartnershipBasisSaleExchangeMath::amountRealizedCents($event);
                 $hasProceedsMetadata = isset($metadata['proceeds_cents']) && is_numeric($metadata['proceeds_cents']);
-                $dateAcquired = $this->metadataDate($metadata, 'date_acquired');
+                // Fall back to the interest's recorded acquisition date when the event metadata omits
+                // date_acquired, mirroring the §731 distribution path (#947 acceptance criterion:
+                // "holding period: exact when interest_start_date set").
+                $dateAcquired = $this->metadataDate($metadata, 'date_acquired')
+                    ?? $this->interestStartDate($interest);
                 $dateSold = $this->metadataDate($metadata, 'date_sold')
                     ?? ($event->event_date === null ? null : CarbonImmutable::parse($event->event_date)->toDateString());
                 $holdingPeriod = $this->saleExchangeHoldingPeriod($dateAcquired, $dateSold);
@@ -360,25 +387,35 @@ class PartnershipBasisFactsBuilder
         return $allocations;
     }
 
-    /** @param array<string, mixed> $metadata */
-    private function saleExchangeAmountRealizedCents(FinPartnershipBasisEvent $event, array $metadata): int
+    /**
+     * Total suspended loss released into outside basis this year. The service stores each release as a
+     * SuspendedLossReleased event whose metadata key released_suspended_loss_cents is authoritative,
+     * falling back to the absolute signed amount when the metadata is absent.
+     *
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     */
+    private function releasedSuspendedLossCents(Collection $events): int
     {
-        if (! isset($metadata['proceeds_cents']) || ! is_numeric($metadata['proceeds_cents'])) {
-            return abs((int) $event->amount_cents);
-        }
+        return (int) $events
+            ->where('event_type', PartnershipBasisEventType::SuspendedLossReleased->value)
+            ->sum(function (FinPartnershipBasisEvent $event): int {
+                $metadata = $event->getAttribute('metadata');
+                $metadata = is_array($metadata) ? $metadata : [];
 
-        return (int) $metadata['proceeds_cents']
-            + $this->metadataCents($metadata, 'liability_relief_cents')
-            - $this->metadataCents($metadata, 'selling_expenses_cents');
+                return isset($metadata['released_suspended_loss_cents']) && is_numeric($metadata['released_suspended_loss_cents'])
+                    ? (int) $metadata['released_suspended_loss_cents']
+                    : abs((int) $event->amount_cents);
+            });
     }
 
-    /** @param array<string, mixed> $metadata */
-    private function metadataCents(array $metadata, string $key): int
-    {
-        return isset($metadata[$key]) && is_numeric($metadata[$key]) ? (int) $metadata[$key] : 0;
-    }
-
-    /** @param array<string, mixed> $metadata */
+    /**
+     * Parse a metadata-supplied date string defensively. The manual-event endpoint only validates
+     * metadata as ['nullable','array'] — it does not validate the shape of date_acquired/date_sold —
+     * so a stored value can be unparseable. An unparseable date is treated as MISSING (null) rather
+     * than throwing, keeping the disposition review-only instead of crashing the whole tax-preview year.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
     private function metadataDate(array $metadata, string $key): ?string
     {
         $value = $metadata[$key] ?? null;
@@ -386,7 +423,11 @@ class PartnershipBasisFactsBuilder
             return null;
         }
 
-        return CarbonImmutable::parse($value)->toDateString();
+        try {
+            return CarbonImmutable::parse($value)->toDateString();
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     /** @param array<string, mixed> $metadata */
@@ -455,6 +496,43 @@ class PartnershipBasisFactsBuilder
             isReviewed: false,
             reviewStatus: (string) ($event->review_status ?: $basisYear->review_status),
             reviewAction: $isForm7217 ? 'Review Form 7217 filing support' : 'Review property distribution basis allocation',
+        );
+    }
+
+    /**
+     * §754/§743(b) step-up amortization events (Box 13 code W), surfaced separately from the
+     * other Box 13 code-L portfolio deductions.
+     *
+     * @param  Collection<int, FinPartnershipBasisEvent>  $events
+     * @return Collection<int, FinPartnershipBasisEvent>
+     */
+    private function section754StepUpEvents(Collection $events): Collection
+    {
+        return $events->filter(fn (FinPartnershipBasisEvent $event): bool => $event->event_type === PartnershipBasisEventType::Section754StepUpAmortization->value)->values();
+    }
+
+    private function section754StepUpSource(
+        FinPartnershipBasisYear $basisYear,
+        FinPartnershipInterest $interest,
+        FinPartnershipBasisEvent $event,
+    ): TaxFactSource {
+        $codeLabel = $event->k1_code === null ? '' : " code {$event->k1_code}";
+
+        return new TaxFactSource(
+            id: "partnership-basis-event-{$event->id}-section-754-step-up",
+            label: "{$interest->partnership_name} - §754 step-up amortization (Box {$event->k1_box}{$codeLabel})",
+            amount: MoneyMath::fromCents(abs((int) $event->amount_cents)),
+            sourceType: TaxFactSourceType::PartnershipSection754StepUp,
+            taxDocumentId: $event->tax_document_id,
+            taxDocumentAccountId: $event->tax_document_account_id,
+            accountId: $interest->account_id,
+            formType: 'k1',
+            box: $event->k1_box ?? '13',
+            code: $event->k1_code,
+            routingReason: '§754/§743(b) step-up amortization is tracked as its own memorandum detail row, separate from the other Box 13 code-L deductions; confirm the schedule of detail before applying any partner-level basis effect.',
+            isReviewed: false,
+            reviewStatus: (string) ($event->review_status ?: $basisYear->review_status),
+            reviewAction: 'Review §754 step-up amortization detail',
         );
     }
 

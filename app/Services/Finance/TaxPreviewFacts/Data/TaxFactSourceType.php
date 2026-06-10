@@ -139,4 +139,5 @@ enum TaxFactSourceType: string
     case PartnershipLiquidationGainLoss = 'partnership_liquidation_gain_loss';
     case PartnershipPropertyDistribution = 'partnership_property_distribution';
     case PartnershipForm7217Required = 'partnership_form_7217_required';
+    case PartnershipSection754StepUp = 'partnership_section_754_step_up';
 }
