@@ -3,6 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
+use App\Mcp\Support\FiltersByFeature;
+use App\Mcp\Support\RequiresFeature;
 use App\Services\Finance\Agent\TaxDocumentsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
@@ -12,9 +14,15 @@ use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
 #[Description('List tax documents (W-2, 1099-INT, 1099-DIV, 1099-MISC, 1099-B, 1099-NEC, 1099-R, broker_1099 consolidated statements, K-1, Form 1116) for the authenticated user. Supports filtering by year, form type, and review status.')]
-class ListTaxDocuments extends Tool
+class ListTaxDocuments extends Tool implements RequiresFeature
 {
     use AuthorizesFeatureAccess;
+    use FiltersByFeature;
+
+    public static function requiredFeature(): ?string
+    {
+        return 'finance.tax-documents.view';
+    }
 
     public function __construct(
         private TaxDocumentsQueryService $taxDocuments,

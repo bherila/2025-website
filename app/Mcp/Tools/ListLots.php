@@ -3,6 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
+use App\Mcp\Support\FiltersByFeature;
+use App\Mcp\Support\RequiresFeature;
 use App\Services\Finance\Agent\LotsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
@@ -12,9 +14,15 @@ use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
 #[Description('List investment lots. Pass as_of=YYYY-12-31 to get lots held at year-end. Optionally filter by account_id.')]
-class ListLots extends Tool
+class ListLots extends Tool implements RequiresFeature
 {
     use AuthorizesFeatureAccess;
+    use FiltersByFeature;
+
+    public static function requiredFeature(): ?string
+    {
+        return 'finance.lots.view';
+    }
 
     public function __construct(
         private LotsQueryService $lots,

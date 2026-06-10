@@ -3,6 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
+use App\Mcp\Support\FiltersByFeature;
+use App\Mcp\Support\RequiresFeature;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -14,9 +16,15 @@ use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
 #[Description('Get a summary of an account including transaction totals, per-symbol breakdown, and monthly totals. Optionally filter by year.')]
-class GetAccountSummary extends Tool
+class GetAccountSummary extends Tool implements RequiresFeature
 {
     use AuthorizesFeatureAccess;
+    use FiltersByFeature;
+
+    public static function requiredFeature(): ?string
+    {
+        return 'finance.accounts.detail';
+    }
 
     public function handle(Request $request): Response
     {

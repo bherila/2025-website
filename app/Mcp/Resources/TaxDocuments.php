@@ -3,6 +3,8 @@
 namespace App\Mcp\Resources;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
+use App\Mcp\Support\FiltersByFeature;
+use App\Mcp\Support\RequiresFeature;
 use App\Models\Files\FileForTaxDocument;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -13,9 +15,15 @@ use Laravel\Mcp\Server\Resource;
 
 #[Uri('finance://tax-documents/reviewed')]
 #[Description('All reviewed tax documents for the current year with their parsed_data JSON blobs. For year-specific queries, use the list_tax_documents tool with is_reviewed=true.')]
-class TaxDocuments extends Resource
+class TaxDocuments extends Resource implements RequiresFeature
 {
     use AuthorizesFeatureAccess;
+    use FiltersByFeature;
+
+    public static function requiredFeature(): ?string
+    {
+        return 'finance.tax-documents.view';
+    }
 
     public function handle(Request $request): Response
     {
