@@ -1,26 +1,35 @@
-# Finance Onboarding Dashboard Plan
+# Finance Onboarding Dashboard Implementation Plan
 
 ## Goal
 
-Create a browser-first Finance onboarding and readiness experience for users who are starting from a blank slate or trying to understand what is missing for a tax year.
+Make `/finance` the browser-first landing page for Finance. A new or returning user should be able to answer four questions from one screen:
 
-The workstream is strictly web/session Finance UX. It must not add or modify Agent API, MCP, OpenAPI, TOON, setup-token, signed upload/download agent workflow, CPA-return comparison, Career Comparison agent workflow, Tax agent workflow, or lock-guard functionality.
+- What is already set up?
+- What is missing for the selected tax year?
+- What needs review before Tax Preview is useful?
+- Which existing Finance tool should I open next?
 
-The desired user outcome:
+This workstream is strictly web/session Finance UX. It does not add Agent API, MCP, REST agent, OpenAPI, TOON, token setup, signed upload/download agent workflow, CPA-return comparison, Career Comparison agent workflow, Tax agent workflow, or lock-guard functionality.
 
-- Create accounts.
-- Import transactions.
-- Import tax documents.
-- Review mappings.
-- Set up jobs and businesses.
-- Set up K-1 and partnership basis data.
-- Enter carryovers.
-- Review tax readiness.
-- Deep-link into the correct existing Finance tool.
+The user path this plan supports:
 
-## Non-976 Exclusion Boundary
+```text
+Create accounts
+Import transactions
+Import tax documents
+Review mappings
+Set up jobs and businesses
+Set up K-1 / partnership basis
+Enter carryovers
+Review tax readiness
+Deep-link into the correct existing tool
+```
 
-Treat issue 976 and its PR3 split as frozen until PR3 is uploaded and reviewable. Do not touch these files in this workstream:
+## Exclusion Boundary
+
+Treat issue 976 and its PR3 split as frozen until PR3 is uploaded and reviewable.
+
+Do not touch these files in this workstream:
 
 ```text
 routes/agent.php
@@ -41,7 +50,7 @@ docs/finance/mcp-server.md
 .mcp.example.json
 ```
 
-Also avoid these subjects:
+Do not add or modify these surfaces:
 
 ```text
 Agent tokens
@@ -68,32 +77,51 @@ shared navigation/settings entry points
 generated TypeScript files
 ```
 
-## Current State
+## Current Finance Surface
 
-Finance already has substantial browser modules:
+The app already has the modules needed for the first version:
 
-- Tax Preview.
-- Tax Documents.
-- RSU.
-- Payslips.
-- Tags.
-- Financial Planning calculators.
-- Accounts.
-- Config.
-- Transactions, lots, statements, fees, duplicates, linker, import, and maintenance under account routes.
+- Web Finance pages in `routes/web.php` for Accounts, Documents, Payslips, RSU, Tags, Config, Tax Preview, and account-scoped tools.
+- Canonical all-account transactions and import routes:
+  - `/finance/account/all/transactions`
+  - `/finance/account/all/import`
+- Finance navigation definitions in `resources/js/lib/financeNavigation.ts`.
+- Finance shell mounting in `resources/js/finance/bootstrap.tsx`.
+- Browser readiness data already exposed to Tax Preview:
+  - `GET /api/finance/tax-preview-data`
+  - `GET /api/finance/tax-years/{year}/readiness-summary`
+  - `GET /api/finance/tax-years/{year}/reconciliation-summary`
+  - `GET /api/finance/tax-years/{year}/lot-reconciliation`
+- `App\Services\Finance\ReadinessSummaryService`, which already aggregates document counts, pending review, missing account mappings, parsing failures, lot reconciliation health, and matcher timestamps.
 
-The missing piece is orchestration. A new or returning user needs one place that answers:
+The missing product layer is orchestration, not new finance engines.
 
-- What is already set up?
-- What is missing?
-- What needs review?
-- Where should I go next?
+## Delivery Sequence
 
-## Proposed Browser UX
+### Phase 0: This Planning PR
 
-### Finance Home
+Branch:
 
-Add a canonical Finance landing page after PR3 is visible:
+```text
+planning/finance-onboarding-dashboard
+```
+
+Scope:
+
+- Add this implementation plan only.
+- Do not touch routes, nav, config, generated TypeScript, Agent API, MCP, OpenAPI, TOON, or Finance Config.
+- Create or update the GitHub issue that tracks the implementation work.
+
+Acceptance:
+
+- Only `docs/finance/onboarding-dashboard.md` changes.
+- The issue links to this plan and describes the implementation sequence.
+
+### PR A: Finance Home Skeleton
+
+Implement after PR3 is uploaded and this branch is rebased.
+
+Add:
 
 ```text
 GET /finance
@@ -108,61 +136,7 @@ resources/js/finance/pages/home.tsx
 resources/js/components/finance/FinanceHomePage.tsx
 ```
 
-Use the existing Finance shell and layout. Do not place Agent/API token creation on this page.
-
-At most, after PR3 has landed, a passive link can say:
-
-```text
-Agent/API Access is managed in Config.
-```
-
-### Dashboard Structure
-
-Top controls:
-
-- Year selector.
-- Overall readiness status.
-
-Setup checklist sections:
-
-- Accounts.
-- Transactions.
-- Documents.
-- Jobs and Businesses.
-- Payslips / RSU.
-- K-1 / Partnership Basis.
-- Lots / 1099-B reconciliation.
-- Carryovers / prior-year tax data.
-- Categorization.
-- Tax Preview.
-
-Recent or pending work:
-
-- Pending document reviews.
-- Failed imports.
-- Missing account mappings.
-- Duplicate transactions.
-- Unlinked transfers.
-- Lot reconciliation drift.
-
-Primary deep links:
-
-- Import transactions.
-- Import tax documents.
-- Add account.
-- Add W-2 job.
-- Add Schedule C business.
-- Open Tax Preview.
-
-## Readiness Data Contract
-
-Add a browser-only summary endpoint after PR3 is visible:
-
-```text
-GET /api/finance/onboarding-summary?year=YYYY
-```
-
-Middleware:
+Route requirements:
 
 ```text
 web
@@ -170,24 +144,85 @@ auth
 feature:finance.access
 ```
 
-Suggested service:
+UI requirements:
+
+- Use `layouts.finance` and the existing `FinanceNavbar`.
+- Render the dashboard as the first screen. Do not make a marketing page.
+- Include a year selector, overall readiness state, setup checklist, pending work list, and primary actions.
+- Use static or minimal server-provided placeholder state in this PR. Do not build the full summary service yet.
+- Do not render an Agent/API Access card. PR 978 owns the Config card.
+
+Initial screen structure:
 
 ```text
+[Year selector] [Overall readiness]
+
+Setup checklist
+  Accounts
+  Transactions
+  Documents
+  Jobs and Businesses
+  Payslips
+  RSU
+  K-1 / Partnership Basis
+  Lots / 1099-B Reconciliation
+  Carryovers
+  Categorization
+  Tax Preview
+
+Recent and pending work
+  Pending document reviews
+  Missing account mappings
+  Lot reconciliation drift
+  Duplicate transactions
+  Unlinked transfers
+  Failed imports
+
+Primary actions
+  Add account
+  Import transactions
+  Import tax documents
+  Open Tax Preview
+```
+
+Tests:
+
+- Feature test: authenticated user with `finance.access` can load `/finance`.
+- Feature test: user without `finance.access` cannot load `/finance`.
+- Frontend test: `FinanceHomePage` renders checklist sections and primary actions.
+
+### PR B: Browser Onboarding Summary API
+
+Add a browser-only summary endpoint:
+
+```text
+GET /api/finance/onboarding-summary?year=YYYY
+```
+
+Suggested files:
+
+```text
+app/Http/Controllers/Finance/OnboardingSummaryController.php
 app/Services/Finance/Onboarding/FinanceOnboardingSummaryService.php
+resources/js/types/finance/onboarding-summary.ts
+tests/Feature/Finance/OnboardingSummaryControllerTest.php
+tests/Unit/Services/Finance/Onboarding/FinanceOnboardingSummaryServiceTest.php
 ```
 
-Suggested TypeScript type:
+Route requirements:
 
 ```text
-resources/js/types/finance/onboarding-summary.ts
+web
+auth
+feature:finance.access
 ```
 
-This endpoint must not be exposed through Agent API, MCP, TOON, OpenAPI, or a capability registry.
+This endpoint is not an Agent API endpoint. Do not add it to MCP discovery, Agent capabilities, OpenAPI, TOON, REST agent routing, or any `/api/agent/v1/*` namespace.
 
-Target payload:
+Target TypeScript contract:
 
 ```ts
-type FinanceOnboardingSummary = {
+export type FinanceOnboardingSummary = {
   year: number
   availableYears: number[]
   sections: FinanceReadinessSection[]
@@ -195,7 +230,7 @@ type FinanceOnboardingSummary = {
   warnings: FinanceWarning[]
 }
 
-type FinanceReadinessSection = {
+export type FinanceReadinessSection = {
   id:
     | 'accounts'
     | 'transactions'
@@ -215,7 +250,7 @@ type FinanceReadinessSection = {
   actions: FinanceAction[]
 }
 
-type FinanceAction = {
+export type FinanceAction = {
   id: string
   label: string
   href: string
@@ -223,7 +258,7 @@ type FinanceAction = {
   permission?: string
 }
 
-type FinanceWarning = {
+export type FinanceWarning = {
   id: string
   severity: 'info' | 'warning' | 'critical'
   message: string
@@ -231,92 +266,130 @@ type FinanceWarning = {
 }
 ```
 
-## Card Inventory
+Service behavior:
 
-| Section | Status inputs | Primary actions | Notes |
-|---|---|---|---|
-| Accounts | Account count, active/closed state, account suffix coverage | Add account, open Accounts | Use existing account models and account maintenance flows. |
-| Transactions | Transaction years, current-year count, duplicate/unlinked indicators | Import transactions, open all transactions | Use canonical all-account route `/finance/account/all/transactions`. |
-| Documents | Tax document count, pending review count, parser failures | Import tax documents, open Documents | Reuse document review and readiness data where available. |
-| Employment | Employment entities, W-2/payslip presence, Schedule C businesses | Add W-2 job, add Schedule C business | Deep-link to existing browser forms. |
-| Payslips | Payslip count by year, RSU/bonus indicators | Open Payslips | Permission-aware; mark optional when user has no payroll data path. |
-| RSU | Award count, settlement/link gaps, unresolved reconciliation | Open RSU | Use existing RSU summaries; no Agent workflow exposure. |
-| K-1 / Basis | K-1 docs, basis initialization state, missing basis events | Open Documents, open relevant account basis | Surface as readiness, do not add new tax engine behavior. |
-| Lots | Open lots, 1099-B reconciliation drift, missing account mappings | Open Lots, open Tax Preview | Reuse lot reconciliation services. |
-| Carryovers | Schedule D/PAL carryover input presence | Open Tax Preview | Browser-only readiness cards. |
-| Categorization | Tags, rules, Schedule C mappings, uncategorized counts | Open Tags, future Categorization page | Do not move Agent Access out of Config. |
-| Tax Preview | Available years, missing inputs, pending review blockers | Open Tax Preview | Link to existing preview and forms. |
+- Resolve the requested year from `?year=YYYY`.
+- If no year is provided, prefer the latest available Finance tax/transaction year; fall back to the current calendar year.
+- Gather permissions server-side. Return only actions the user can open. Sections may be omitted or marked `no_access`, but route middleware remains the security boundary.
+- Reuse existing services where possible. Do not duplicate tax or reconciliation business rules.
+- Keep the payload compact and UI-oriented. It is not a tax calculation API.
 
-## Data Source Plan
+Tests:
 
-Prefer existing services and queries. Avoid copying business rules into the dashboard.
+- Blank user summary returns actionable `not_started` sections.
+- User with accounts but no transactions gets `accounts: ready` and `transactions: not_started`.
+- User with pending parsed tax documents gets `documents: needs_attention`.
+- User lacking granular permissions does not receive unauthorized actions.
+- Endpoint requires `finance.access`.
+- Unit tests cover section status computation and action filtering.
 
-Likely sources:
+### PR C: Finance Home Data Integration
 
-- Account counts and account metadata from existing Finance account models/controllers.
-- Transaction years and counts from transaction APIs/services.
-- Tax document counts, pending review, missing account links, parser failures, and matcher status from existing document readiness logic.
-- Tax Preview year availability and missing-input signals from existing Tax Preview data services.
-- Employment entities from existing Finance employment entity endpoints/services.
-- Payslips from existing payslip models/services.
-- RSU settlement and link readiness from existing RSU UI/API data.
-- Lots and 1099-B reconciliation from existing lot reconciliation services.
-- Schedule D and PAL carryover inputs from existing tax preview inputs.
-- Tags, rules, and tax characteristics from existing tag/rules services.
+Wire `FinanceHomePage` to `GET /api/finance/onboarding-summary`.
 
-## Route Plan
+Requirements:
 
-Implement only after PR3 is visible and conflicts are inspected.
+- Fetch summary for the selected year.
+- Preserve the selected year in the URL query string.
+- Show loading, empty, ready, needs-attention, no-access, and error states.
+- Make every action a real deep link into an existing browser flow.
+- Keep hidden cards as UX only; do not rely on client hiding for security.
 
-Browser pages:
+Frontend tests:
 
-```text
-GET /finance
-GET /finance/import
-GET /finance/categorization
+- Renders setup checklist from API data.
+- Shows actionable blank slate when all sections are `not_started`.
+- Hides or disables unauthorized actions from the response.
+- Changing year fetches the selected year summary.
+- Error state keeps primary links to Accounts, Import, Documents, and Tax Preview when permissions allow.
+
+### PR D: Navigation and Blank-State Cleanup
+
+Implement after PR3 route/nav conflicts are known.
+
+Changes:
+
+1. Add Home to Finance top tools in `resources/js/lib/financeNavigation.ts`:
+
+```ts
+{
+  id: 'home',
+  label: 'Home',
+  href: '/finance',
+  permission: 'finance.access',
+  keywords: ['home', 'dashboard', 'setup', 'readiness', 'onboarding']
+}
 ```
 
-Browser API:
+2. Make the Finance brand in `FinanceNavbar` link to `/finance`.
+
+3. Ensure the command palette can find Finance Home.
+
+4. Update universal navigation to use canonical browser routes:
 
 ```text
-GET /api/finance/onboarding-summary?year=YYYY
+Finance Home        /finance
+Transactions        /finance/account/all/transactions
+Import              /finance/account/all/import
+Accounts            /finance/accounts
+Documents           /finance/documents
+Tax Preview         /finance/tax-preview
+RSU                 /finance/rsu
+Payslips            /finance/payslips
+Categorization      /finance/categorization
+Config              /finance/config
+Financial Planning  /financial-planning
 ```
 
-Do not add:
+5. Do not add Agent/API Access to primary nav. Config remains the place for the card owned by PR 978.
+
+6. Improve blank states:
+
+- Transactions: if all-account import is supported, enable it and label it `Import multi-account statement`; otherwise remove the route in a separate decision PR.
+- Documents: offer `Import W-2, 1099, K-1, or broker tax package`.
+- Tax Preview: link back to Finance Home checklist when inputs are missing.
+- Schedule C related empty states: link to employment/business setup and transaction categorization.
+
+Tests:
+
+- `FinanceNavbar` brand links to `/finance`.
+- Command palette includes Finance Home for users with `finance.access`.
+- Universal nav no longer points users to `/finance/all-transactions`.
+- Empty transaction state links to all-account import when allowed.
+
+### PR E: Account Navigation Deduplication
+
+Current issue:
+
+- `FinanceNavbar` renders account tabs for account pages.
+- `AccountNavigation` also builds account tool tabs from `FINANCE_ACCOUNT_TOOLS`.
+
+Desired state:
 
 ```text
-/api/agent/v1/finance/readiness
-MCP readiness tool
-Agent capability entry
-TOON schema
-Agent OpenAPI schema
+FinanceNavbar
+  Owns account tab navigation.
+
+AccountNavigation
+  Owns contextual controls only:
+  [Year selector] [Import] [Maintenance]
 ```
 
-## Navigation Plan
+Requirements:
 
-Implement only after PR3 is visible and conflicts are inspected.
+- Account pages have one tab row, not two.
+- Year selection still works.
+- Import and Maintenance remain available when permitted.
+- No generated TypeScript changes unless required by the final implementation.
 
-- Make the Finance brand link to `/finance`.
-- Add Finance Home to top tools and the command palette.
-- Use `/finance` as the canonical Finance entry.
-- Update universal nav to prioritize:
-  - Finance Home.
-  - Transactions.
-  - Import.
-  - Accounts.
-  - Documents.
-  - Tax Preview.
-  - RSU.
-  - Payslips.
-  - Categorization.
-  - Config.
-  - Financial Planning.
-- Use `/finance/account/all/transactions` instead of legacy `/finance/all-transactions`.
-- Do not add Agent/API Access to primary nav.
+Tests:
 
-## Import Center Plan
+- Existing `AccountNavigation` tests updated to assert no duplicate tab row.
+- Account page tests still find Import and Maintenance controls when permissions allow.
 
-Add after PR3:
+### PR F: Browser Import Center
+
+Add:
 
 ```text
 GET /finance/import
@@ -325,195 +398,243 @@ GET /finance/import
 Suggested files:
 
 ```text
+app/Http/Controllers/FinanceTool/FinanceImportCenterController.php
 resources/views/finance/import.blade.php
 resources/js/finance/pages/import.tsx
 resources/js/components/finance/FinanceImportCenterPage.tsx
 ```
 
-The Import Center should deep-link to existing browser flows only. It should not change GenAI import controllers, signed URL behavior, document storage internals, Agent upload/download workflows, MCP tools, or `/api/agent/v1/*`.
+Purpose:
+
+Users should not need to know whether a file belongs in transactions, tax documents, RSU, payslips, lots, or basis before starting.
 
 Import choices:
 
-- Bank / brokerage transactions.
-- Tax documents.
-- Payslips.
-- RSU / equity awards.
-- K-1 / partnership basis history.
-- Prior filed return / carryovers as a future placeholder unless already supported.
-
-## Account Setup Improvements
-
-Add after PR3 and after route/nav conflicts are understood.
-
-Improve browser account creation and maintenance to capture matching metadata:
-
-- Institution.
-- Account number suffix / last 4.
-- Account kind.
-- Tax relevance.
-- Default import hint.
-
-Prefer existing columns first:
-
 ```text
-acct_number
-acct_is_debt
-acct_is_retirement
+Bank / brokerage transactions
+  CSV, QFX/OFX, HAR, IB activity statement, broker statement PDF
+  Deep link: /finance/account/all/import
+
+Tax documents
+  W-2, 1099, 1099-B, K-1, 1116
+  Deep link: /finance/documents
+
+Payslips
+  Payroll PDFs or manual entry
+  Deep link: /finance/payslips or /finance/payslips/entry
+
+RSU / equity awards
+  Grants, vesting, settlement review
+  Deep link: /finance/rsu
+
+K-1 / partnership basis history
+  K-1 forms, basis events, capital account history
+  Deep link: /finance/documents and account basis pages
+
+Prior filed return / carryovers
+  Future placeholder unless already supported by Tax Preview forms
+  Deep link: /finance/tax-preview
 ```
 
-Avoid schema changes unless necessary.
+Hard boundary:
 
-Suggested UI copy:
+- Routing and UI only.
+- No new backend import semantics.
+- No signed URL changes.
+- No signed upload/download agent workflow changes.
+- No MCP or `/api/agent/v1/*` exposure.
+
+Tests:
+
+- Import Center renders each choice.
+- Choices hide or disable when permissions are missing.
+- Links point to existing browser flows.
+
+### PR G: Account Setup Metadata
+
+Problem:
+
+Multi-account PDF import can use suffix matching, but account creation primarily collects name plus liability/retirement flags.
+
+Change:
+
+- Add optional account metadata to creation and maintenance forms:
+  - Institution.
+  - Account number suffix / last 4.
+  - Account kind.
+  - Tax relevance.
+  - Default import hint.
+- Prefer existing columns first, especially:
+  - `acct_number`
+  - `acct_is_debt`
+  - `acct_is_retirement`
+- Avoid schema changes unless the existing model cannot represent the field.
+
+UX copy:
 
 ```text
 Account suffix helps match broker/bank PDFs to the correct account. Store only the last 4 digits when possible.
 ```
 
-## Blank State Improvements
+Tests:
 
-Update blank states after PR3:
+- User can create an account with an account suffix.
+- Existing create-account requests without the new fields still work.
+- Account maintenance preserves and updates suffix metadata.
 
-- Transactions: enable all-account import if the multi-account importer is supported, labeled `Import multi-account statement`.
-- Documents: point users to import W-2, 1099, K-1, or broker tax packages.
-- Tax Preview: link back to the Finance Home checklist when required inputs are missing.
-- Schedule C: extend the existing helpful pattern to employment entities and transaction imports.
+### PR H: Categorization Page
 
-## Categorization Page
-
-Add after PR3:
+Add after PR3 and after Config conflicts are known:
 
 ```text
 GET /finance/categorization
 ```
 
-Tabs:
+Suggested tabs:
 
-- Tags.
-- Rules.
-- Tax Characteristics.
-- Schedule C Mapping.
+```text
+Tags
+Rules
+Tax Characteristics
+Schedule C Mapping
+```
 
-Keep `/finance/tags` working. Do not move or duplicate Agent Access UI.
+Initial implementation:
 
-## File-Touch Matrix
+- Reuse existing Tags and Rules components or endpoints.
+- Keep `/finance/tags` working.
+- Link Categorization from Finance Home and navigation.
+- Do not move or duplicate `AgentAccessCard`.
+- Do not touch Finance Config unless the final PR3 conflict inspection makes that safe.
 
-| Phase | Allowed files | Avoid until PR3 | Forbidden for this workstream |
-|---|---|---|---|
-| Phase 0 planning | `docs/finance/onboarding-dashboard.md` | none | all 976-owned files |
-| Finance Home skeleton | Finance controller/view/page/component files | `routes/web.php`, nav entry points until PR3 visible | Agent/API/MCP/OpenAPI/TOON files |
-| Summary API | Browser Finance service/API/type files | `routes/api.php` until PR3 visible | `/api/agent/v1/*`, capability registry, MCP tools |
-| Nav cleanup | Finance nav and universal nav files | shared nav chokepoints until PR3 visible | Agent Access card and Config token UI |
-| Import Center | Browser import page/view/component files | route files until PR3 visible | signed upload/download agent workflows |
-| Account setup | Browser account forms/services | generated TS files unless necessary | Agent API field exposure changes |
-| Categorization | Browser categorization page/components | Config-adjacent files until PR3 visible | Agent setup surfaces |
+Tests:
 
-## Post-PR3 Rebase Checklist
+- Categorization page loads with `finance.rules.manage` or the final selected permission.
+- Existing `/finance/tags` route still works.
+- Finance Home links categorization actions to the new page when permitted.
 
-Before implementing code:
+## Readiness Section Matrix
 
-1. Fetch PR3 and inspect its changed files.
-2. Rebase the planning branch or implementation branch onto the PR3 base.
-3. Check for changes in:
-   - Finance config.
-   - Finance navigation.
-   - Shared route files.
-   - Generated TypeScript types.
-   - Browser import workflows.
-4. Confirm PR3 did not add a competing Finance Home, Import Center, or categorization hub.
-5. Reconfirm exclusion boundary with the current diff.
-6. Split implementation PRs so no PR mixes browser onboarding with Agent/API/MCP work.
+| Section | Permission gate | Status rules | Existing sources | Primary actions |
+|---|---|---|---|---|
+| `accounts` | `finance.accounts.basic` or `finance.accounts.detail` | `not_started` when active account count is 0. `needs_attention` when accounts exist but useful matching metadata is missing. `ready` when at least one active account exists. | Account APIs and account models behind `/api/finance/accounts/basic` and `/api/finance/accounts`. | Add account, open Accounts, import transactions. |
+| `transactions` | `finance.transactions.view` | `not_started` when selected-year transaction count is 0. `in_progress` when transactions exist but duplicate/link review is nonzero. `ready` when transactions exist without known blockers. | `/api/finance/all/transaction-years`, `/api/finance/all/line_items`, duplicate/linker endpoints. | Import transactions, open all transactions. |
+| `documents` | `finance.tax-documents.view` | `not_started` when no tax documents exist for the year. `needs_attention` for pending review, parsing failures, or missing account mappings. `ready` when documents are reviewed and no blockers are known. | `ReadinessSummaryService`, document APIs, `FileForTaxDocument`, `TaxDocumentAccount`. | Import tax documents, open Documents. |
+| `employment` | `finance.tax-preview.view` | `not_started` when no employment entities or business setup exists. `needs_attention` when entities exist but selected-year rows are missing. `ready` when selected-year employment/business data exists. | Employment entity APIs, Tax Preview data. | Open Tax Preview, add W-2 job, add Schedule C business. |
+| `payslips` | `finance.payslips.view` | `optional` when no payslip path appears relevant. `not_started` when payroll is expected but no payslips exist. `ready` when selected-year payslips exist. | Payslip APIs and Tax Preview data. | Open Payslips, add payslip. |
+| `rsu` | `finance.rsu.view` | `optional` when no RSU awards or settlements exist. `needs_attention` when settlement/link review is pending. `ready` when awards and links are clean. | RSU APIs and settlement/link endpoints. | Open RSU. |
+| `k1_basis` | `finance.accounts.detail` plus `finance.tax-documents.view` where document evidence is needed | `optional` when no partnership/K-1 signals exist. `needs_attention` when K-1 docs or partnership accounts exist but basis is not initialized or events are missing. `ready` when basis data exists for relevant accounts. | K-1 document counts from `ReadinessSummaryService`; partnership basis account endpoints. | Open Documents, open account Basis. |
+| `lots` | `finance.lots.view` | `optional` when no brokerage tax documents or lots exist. `needs_attention` when reconciliation drift, blocked matches, or missing account mappings exist. `ready` when reconciliation health is clean. | `ReadinessSummaryService`, reconciliation summary, lot reconciliation endpoints. | Open Lots, open Tax Preview. |
+| `carryovers` | `finance.tax-preview.view` | `optional` when no prior-year indicators exist. `needs_attention` when Schedule D/PAL/tax-loss carryovers appear expected but inputs are absent. `ready` when carryover inputs exist or are explicitly not needed. | Schedule D carryover, PAL carryforward, tax-loss carryforward APIs. | Open Tax Preview carryover inputs. |
+| `categorization` | `finance.transactions.view` and `finance.rules.manage` for edit actions | `not_started` when no tags or rules exist and transactions exist. `needs_attention` when uncategorized or Schedule C mapping gaps exist. `ready` when tags/rules/mappings exist and no major uncategorized count is known. | Tags, Rules, Schedule C summary APIs. | Open Tags, open Categorization. |
+| `tax_preview` | `finance.tax-preview.view` | `not_started` when no tax-year inputs exist. `needs_attention` when readiness cards expose blockers. `ready` when required inputs are present and no blockers are known. | Tax Preview data, `ReadinessSummaryService`. | Open Tax Preview. |
 
-## Recommended PR Sequence
+## Overall Readiness Algorithm
 
-### PR A: Finance Home Skeleton
+Use the strongest section status as the overall state:
 
-Scope:
+```text
+critical warnings present        -> needs_attention
+any required section needs review -> needs_attention
+any required section not started  -> in_progress
+at least one useful section ready -> in_progress
+all required sections ready       -> ready
+no accessible required sections   -> not_started
+```
 
-- `/finance` browser route.
-- FinanceHomePage static/skeleton UI.
-- Finance brand link.
-- Universal nav canonical `/finance` link.
-- Command palette Finance Home row.
+Required sections for the first version:
 
-No summary complexity.
+```text
+accounts
+transactions
+documents
+employment
+tax_preview
+```
 
-### PR B: Browser Readiness Summary
+Optional sections for the first version:
 
-Scope:
+```text
+payslips
+rsu
+k1_basis
+lots
+carryovers
+categorization
+```
 
-- `FinanceOnboardingSummaryService`.
-- `/api/finance/onboarding-summary`.
-- Permission-filtered cards.
-- FinanceHomePage data integration.
-- Tests.
+Optional sections can still raise the overall status to `needs_attention` when the system has direct evidence that they apply. Examples:
 
-No Agent API exposure.
+- A K-1 document exists but no basis data is initialized.
+- A broker 1099 exists with blocked lot reconciliation.
+- PAL carryforward data is expected but missing.
+- RSU settlements exist but are not linked.
 
-### PR C: Navigation and Blank-State Cleanup
+## Deep-Link Rules
 
-Scope:
+All dashboard actions must target existing browser routes until their future pages are implemented:
 
-- Remove duplicate account tabs from AccountNavigation.
-- Enable or remove all-account import.
-- Improve empty states.
-- Canonical transaction links.
+```text
+Finance Home              /finance
+Accounts                  /finance/accounts
+All Transactions          /finance/account/all/transactions
+All-Account Import        /finance/account/all/import
+Documents                 /finance/documents
+Tax Preview               /finance/tax-preview
+Payslips                  /finance/payslips
+Payslip Entry             /finance/payslips/entry
+RSU                       /finance/rsu
+Tags                      /finance/tags
+Config                    /finance/config
+Account Basis             /finance/account/{account_id}/basis
+Import Center             /finance/import
+Categorization            /finance/categorization
+Financial Planning        /financial-planning
+```
 
-### PR D: Import Center
+Do not point new links at legacy `/finance/all-transactions`.
 
-Scope:
-
-- `/finance/import`.
-- Browser-only import choices.
-- Deep links into existing import flows.
-
-No backend import semantics.
-
-### PR E: Account Setup Improvements
-
-Scope:
-
-- Account suffix in new-account and maintenance flows.
-- Matching-readiness status on Finance Home.
-- Backward-compatible account APIs.
-
-### PR F: Categorization Page
-
-Scope:
-
-- `/finance/categorization`.
-- Tags, Rules, Tax Characteristics, Schedule C Mapping.
-- Keep `/finance/tags` compatibility.
-
-## Test Plan
+## Testing Plan
 
 Backend feature tests:
 
-- `GET /finance`.
-- `GET /api/finance/onboarding-summary`.
-- Permission-filtered cards.
-- Blank-user summary.
-- User with accounts but no transactions.
-- User with documents pending review.
-- User with no Tax Preview permission.
+```text
+GET /finance
+GET /api/finance/onboarding-summary
+permission-filtered actions
+blank-user summary
+user with accounts but no transactions
+user with pending tax documents
+user with missing account mappings
+user with no tax-preview permission
+```
 
 Backend unit tests:
 
-- `FinanceOnboardingSummaryService`.
-- Section status computation.
-- Action generation.
-- Permission filtering.
+```text
+FinanceOnboardingSummaryService
+selected-year fallback
+section status computation
+overall readiness computation
+primary action generation
+permission filtering
+```
 
 Frontend tests:
 
-- FinanceHomePage renders setup checklist.
-- FinanceHomePage hides unauthorized cards.
-- FinanceNavbar brand links to `/finance`.
-- Command palette includes Finance Home.
-- AccountNavigation no longer duplicates tabs.
-- Import Center renders choices.
-- Empty transaction state links to Import Center.
+```text
+FinanceHomePage renders setup checklist
+FinanceHomePage renders pending work
+FinanceHomePage hides unauthorized actions
+FinanceHomePage handles loading and API failure
+FinanceNavbar brand links to /finance
+FinanceCommandPalette includes Finance Home
+AccountNavigation no longer duplicates tabs
+FinanceImportCenterPage renders import choices
+empty transaction state links to all-account import
+```
 
-Do not add or modify these tests for this workstream:
+Do not add or modify these tests in this workstream:
 
 ```text
 AgentDiscoveryTest
@@ -525,16 +646,31 @@ McpToolVisibilityTest
 ToonNegotiationTest
 ```
 
+## PR3 Rebase Checklist
+
+Before implementing PR A:
+
+1. Fetch latest `main` and the PR3 branch once PR3 is uploaded.
+2. Rebase the Finance onboarding branch onto the latest merge base.
+3. Inspect route/nav/config conflict areas before editing:
+   - `routes/web.php`
+   - `routes/api.php`
+   - `resources/js/lib/financeNavigation.ts`
+   - `resources/js/components/finance/FinanceNavbar.tsx`
+   - shared navigation/settings entry points
+   - `resources/js/components/finance/FinanceConfigPage.tsx`
+4. Confirm no Agent API/MCP/OpenAPI/TOON files are touched.
+5. Implement the smallest first PR: `/finance` skeleton only.
+
 ## Definition of Done
 
 This workstream is complete when:
 
-- `/finance` is the canonical browser landing page.
-- A blank user sees a setup path instead of empty tables.
-- Users can answer what is missing for a selected tax year from one screen.
-- Import choices are understandable without knowing module internals.
-- Account setup captures matching metadata.
+- `/finance` is the canonical browser Finance landing page.
+- A blank user sees concrete setup steps instead of an empty table.
+- Users can answer what is missing for a selected year from one screen.
+- Import choices are understandable without knowing internal modules.
+- Account setup captures matching metadata needed by browser imports.
 - Navigation has one account-tab system.
 - Categorization is findable.
-- No Agent API, MCP, OpenAPI, TOON, setup-token, signed-upload/download agent workflow, CPA-return comparison, or lock-guard code was touched.
-
+- No Agent API, MCP, OpenAPI, TOON, setup-token, signed-upload/download agent workflow, CPA-return comparison, lock-guard, Career agent, or Tax agent surface was touched.
