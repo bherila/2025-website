@@ -542,25 +542,6 @@ class PartnershipBasisService
         $interest = $this->resolveManualInterest($account, $userId, null);
         $this->assertYearEditable($interest, $year);
 
-        // Bulk seed writes reviewed account_transaction events with only same-source
-        // idempotency; it cannot tell whether a transaction already corresponds to a
-        // K-1-reported contribution/distribution. If the year already carries any
-        // K-1-sourced contribution/distribution event, seeding could reduce/increase
-        // outside basis twice, so disable bulk seed and require per-candidate review.
-        $hasK1ContributionOrDistribution = FinPartnershipBasisEvent::query()
-            ->where('user_id', $userId)
-            ->where('partnership_interest_id', $interest->id)
-            ->where('tax_year', $year)
-            ->whereIn('source_type', ['k1_field', 'k1_code'])
-            ->whereIn('event_type', $this->contributionDistributionEventTypes())
-            ->exists();
-
-        if ($hasK1ContributionOrDistribution) {
-            throw ValidationException::withMessages([
-                'seed' => 'Bulk seed is disabled because this year already contains K-1-sourced contribution/distribution events. Accept candidates individually to avoid double-counting outside basis.',
-            ]);
-        }
-
         $basisYears = FinPartnershipBasisYear::query()
             ->where('user_id', $userId)
             ->where('tax_year', $year)
@@ -569,6 +550,36 @@ class PartnershipBasisService
 
         $reconciliation = $this->reconciliationService->reconcile((int) $account->acct_id, $year, $basisYears);
         $candidates = array_merge($reconciliation->contributionCandidates, $reconciliation->distributionCandidates);
+
+        // Bulk seed writes reviewed account_transaction events with only same-source
+        // idempotency; it cannot tell whether a transaction already corresponds to a
+        // K-1-reported contribution/distribution. If the year already carries a
+        // K-1-sourced event of a type this seed run would actually create, seeding
+        // could reduce/increase outside basis twice, so disable bulk seed and
+        // require per-candidate review. The guard is scoped to the event types of
+        // the seedable (line-item-backed) candidates so a K-1 that only reports
+        // non-seedable items (e.g. property/deemed/liquidation distributions) does
+        // not block a legitimate cash seed the bulk path could never duplicate.
+        $seedableEventTypes = collect($candidates)
+            ->filter(fn ($candidate): bool => $candidate->lineItemId !== null)
+            ->pluck('suggestedEventType')
+            ->unique()
+            ->values()
+            ->all();
+
+        $hasK1DuplicateSeedableType = $seedableEventTypes !== [] && FinPartnershipBasisEvent::query()
+            ->where('user_id', $userId)
+            ->where('partnership_interest_id', $interest->id)
+            ->where('tax_year', $year)
+            ->whereIn('source_type', ['k1_field', 'k1_code'])
+            ->whereIn('event_type', $seedableEventTypes)
+            ->exists();
+
+        if ($hasK1DuplicateSeedableType) {
+            throw ValidationException::withMessages([
+                'seed' => 'Bulk seed is disabled because this year already contains K-1-sourced contribution/distribution events matching seedable transaction candidates. Accept candidates individually to avoid double-counting outside basis.',
+            ]);
+        }
 
         $created = 0;
         $skipped = 0;
@@ -1633,28 +1644,6 @@ class PartnershipBasisService
                 'tax_year' => "Tax year {$year} is locked for this partnership interest; unlock it before recording new events.",
             ]);
         }
-    }
-
-    /**
-     * Event types that represent a capital contribution or a distribution — the
-     * categories a bank-transaction candidate could duplicate against a K-1.
-     *
-     * @return array<int, string>
-     */
-    private function contributionDistributionEventTypes(): array
-    {
-        return [
-            PartnershipBasisEventType::InitialCashContribution->value,
-            PartnershipBasisEventType::InitialPropertyContributionBasis->value,
-            PartnershipBasisEventType::CapitalContributionCash->value,
-            PartnershipBasisEventType::CapitalContributionPropertyBasis->value,
-            PartnershipBasisEventType::CashDistribution->value,
-            PartnershipBasisEventType::PropertyDistributionBasis->value,
-            PartnershipBasisEventType::MarketableSecuritiesDistribution->value,
-            PartnershipBasisEventType::DeemedDistributionLiabilityDecrease->value,
-            PartnershipBasisEventType::LiquidationDistributionCash->value,
-            PartnershipBasisEventType::LiquidationDistributionProperty->value,
-        ];
     }
 
     private function basisSideFor(PartnershipBasisEventType $type): string

@@ -1319,6 +1319,55 @@ class PartnershipBasisApiTest extends TestCase
             ->count());
     }
 
+    public function test_bulk_seed_is_allowed_when_k1_only_has_non_seedable_distribution_types(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = FinAccounts::create(['acct_name' => 'Non-seedable K1 Account']);
+        $interest = FinPartnershipInterest::create([
+            'user_id' => $user->id,
+            'account_id' => $account->acct_id,
+            'partnership_name' => 'Non Seedable LP',
+            'normalized_partnership_name' => 'non seedable lp',
+            'form_type' => 'k1_1065',
+        ]);
+        $this->event($user->id, $interest->id, 2024, 'beginning_basis', 100_00, 'reviewed');
+
+        // The K-1 reports only a non-cash distribution type the bulk seed path
+        // cannot create (property distribution), so it must not block a cash seed.
+        FinPartnershipBasisEvent::create([
+            'user_id' => $user->id,
+            'partnership_interest_id' => $interest->id,
+            'tax_year' => 2024,
+            'event_type' => 'property_distribution_basis',
+            'amount_cents' => 40_00,
+            'source_type' => 'k1_code',
+            'k1_box' => '19',
+            'k1_code' => 'C',
+            'review_status' => 'reviewed',
+        ]);
+        app(PartnershipBasisService::class)->recomputeInterestYear($interest, 2024);
+
+        // A cash contribution transaction (a seedable candidate type).
+        $contribution = FinAccountLineItems::create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-04-01',
+            't_type' => 'Wire',
+            't_amt' => -50_000.00,
+            't_description' => 'Capital call',
+        ]);
+
+        $this->postJson("/api/finance/accounts/{$account->acct_id}/basis/reconciliation/seed?year=2024")
+            ->assertOk()
+            ->assertJsonPath('seed.created', 1);
+
+        $this->assertSame(1, FinPartnershipBasisEvent::query()
+            ->where('partnership_interest_id', $interest->id)
+            ->where('source_type', 'account_transaction')
+            ->where('line_item_id', $contribution->t_id)
+            ->count());
+    }
+
     public function test_bulk_seed_is_disabled_for_multi_interest_accounts(): void
     {
         $user = User::factory()->create();
