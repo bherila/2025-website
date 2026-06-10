@@ -16,8 +16,10 @@ class LoginAuditMigrationTest extends TestCase
 
         DB::table('auth_audit_log')->insert($this->auditRow('registered@example.com', 'passkey_registered', true, 'passkey'));
 
+        $legacyRows = $this->legacyRows();
+
         $this->createLegacyTable();
-        DB::table('login_audit_log')->insert($this->legacyRows());
+        DB::table('login_audit_log')->insert($legacyRows);
 
         $migration = $this->migration();
         $migration->up();
@@ -47,7 +49,7 @@ class LoginAuditMigrationTest extends TestCase
         // Re-running when the legacy table could not be dropped (e.g. the MySQL
         // user lacks the DROP privilege on production) must not duplicate rows.
         $this->createLegacyTable();
-        DB::table('login_audit_log')->insert($this->legacyRows());
+        DB::table('login_audit_log')->insert($legacyRows);
         $migration->up();
 
         $this->assertSame(4, DB::table('auth_audit_log')->count());
