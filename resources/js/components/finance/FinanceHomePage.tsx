@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  ArrowRight,
+  AlertCircle,
   BookOpen,
   Briefcase,
   CheckSquare,
@@ -12,125 +12,291 @@ import {
   RefreshCw,
   Tags,
   TrendingUp,
-  Upload,
   Wallet,
 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 
 import MainTitle from '@/components/MainTitle'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { fetchWrapper } from '@/fetchWrapper'
+import type { FinanceAction, FinanceOnboardingSummary, FinanceReadinessSection } from '@/types/finance/onboarding-summary'
+import { financeOnboardingSummarySchema } from '@/types/finance/onboarding-summary'
 
-interface ChecklistItem {
-  label: string
-  icon: React.ReactNode
+// ── URL helpers ───────────────────────────────────────────────────────────────
+
+function getUrlParam(key: string): string | null {
+  if (typeof window === 'undefined') return null
+  return new URLSearchParams(window.location.search).get(key)
 }
 
-interface ActionItem {
-  label: string
-  href: string
-  icon: React.ReactNode
-  variant?: 'default' | 'outline'
+function setUrlParam(key: string, value: string) {
+  if (typeof window === 'undefined') return
+  const params = new URLSearchParams(window.location.search)
+  if (value) {
+    params.set(key, value)
+  } else {
+    params.delete(key)
+  }
+  window.history.replaceState(null, '', `?${params.toString()}`)
 }
 
-interface PendingWorkItem {
-  label: string
-  icon: React.ReactNode
+// ── icon map ──────────────────────────────────────────────────────────────────
+
+function sectionIcon(id: string): React.ReactNode {
+  const icons: Record<string, React.ReactNode> = {
+    accounts: <Wallet className="h-4 w-4" />,
+    transactions: <List className="h-4 w-4" />,
+    documents: <FileText className="h-4 w-4" />,
+    employment: <Briefcase className="h-4 w-4" />,
+    payslips: <Receipt className="h-4 w-4" />,
+    rsu: <TrendingUp className="h-4 w-4" />,
+    k1_basis: <BookOpen className="h-4 w-4" />,
+    lots: <Layers className="h-4 w-4" />,
+    carryovers: <RefreshCw className="h-4 w-4" />,
+    categorization: <Tags className="h-4 w-4" />,
+    tax_preview: <CheckSquare className="h-4 w-4" />,
+  }
+  return icons[id] ?? <FileText className="h-4 w-4" />
 }
 
-const CHECKLIST_ITEMS: ChecklistItem[] = [
-  { label: 'Accounts', icon: <Wallet className="h-4 w-4" /> },
-  { label: 'Transactions', icon: <List className="h-4 w-4" /> },
-  { label: 'Documents', icon: <FileText className="h-4 w-4" /> },
-  { label: 'Jobs and Businesses', icon: <Briefcase className="h-4 w-4" /> },
-  { label: 'Payslips', icon: <Receipt className="h-4 w-4" /> },
-  { label: 'RSU', icon: <TrendingUp className="h-4 w-4" /> },
-  { label: 'K-1 / Partnership Basis', icon: <BookOpen className="h-4 w-4" /> },
-  { label: 'Lots / 1099-B Reconciliation', icon: <Layers className="h-4 w-4" /> },
-  { label: 'Carryovers', icon: <RefreshCw className="h-4 w-4" /> },
-  { label: 'Categorization', icon: <Tags className="h-4 w-4" /> },
-  { label: 'Tax Preview', icon: <CheckSquare className="h-4 w-4" /> },
-]
+// ── sub-components ────────────────────────────────────────────────────────────
 
-const PENDING_WORK_ITEMS: PendingWorkItem[] = [
-  { label: 'Pending document reviews', icon: <FileText className="h-4 w-4" /> },
-  { label: 'Missing account mappings', icon: <Wallet className="h-4 w-4" /> },
-  { label: 'Lot reconciliation drift', icon: <Layers className="h-4 w-4" /> },
-  { label: 'Duplicate transactions', icon: <List className="h-4 w-4" /> },
-  { label: 'Unlinked transfers', icon: <ArrowRight className="h-4 w-4" /> },
-  { label: 'Failed imports', icon: <Upload className="h-4 w-4" /> },
-]
+function SectionListItem({ section }: { section: FinanceReadinessSection }) {
+  if (section.status === 'no_access') {
+    return (
+      <li
+        className="flex items-center gap-2 text-sm text-muted-foreground"
+        data-testid={`section-${section.id}`}
+      >
+        {sectionIcon(section.id)}
+        <span>{section.title}</span>
+      </li>
+    )
+  }
 
-const PRIMARY_ACTIONS: ActionItem[] = [
-  { label: 'Add account', href: '/finance/accounts', icon: <Wallet className="h-4 w-4" />, variant: 'default' },
-  { label: 'Import transactions', href: '/finance/account/all/import', icon: <Upload className="h-4 w-4" />, variant: 'outline' },
-  { label: 'Import tax documents', href: '/finance/documents', icon: <FileText className="h-4 w-4" />, variant: 'outline' },
-  { label: 'Open Tax Preview', href: '/finance/tax-preview', icon: <CheckSquare className="h-4 w-4" />, variant: 'outline' },
-]
-
-export default function FinanceHomePage() {
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <MainTitle>Finance Dashboard</MainTitle>
+    <li className="flex items-center gap-2 text-sm" data-testid={`section-${section.id}`}>
+      {sectionIcon(section.id)}
+      <span>{section.title}</span>
+      {section.summary ? (
+        <span className="ml-auto text-xs text-muted-foreground" data-testid={`section-${section.id}-summary`}>
+          {section.summary}
+        </span>
+      ) : null}
+    </li>
+  )
+}
 
+function PrimaryActionButton({ action }: { action: FinanceAction }) {
+  return (
+    <li>
+      <Button variant={action.kind === 'primary' ? 'default' : 'outline'} asChild>
+        <a href={action.href} className="flex items-center gap-2">
+          {action.label}
+        </a>
+      </Button>
+    </li>
+  )
+}
+
+// ── loading skeleton ──────────────────────────────────────────────────────────
+
+function LoadingSkeleton() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-6 p-6" aria-label="Loading Finance Dashboard">
+      <Skeleton className="h-10 w-48" />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* Setup Checklist */}
         <Card>
           <CardHeader>
-            <CardTitle>Setup checklist</CardTitle>
+            <Skeleton className="h-6 w-32" />
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2" aria-label="Setup checklist">
-              {CHECKLIST_ITEMS.map((item) => (
-                <li key={item.label} className="flex items-center gap-2 text-sm">
-                  {item.icon}
-                  <span>{item.label}</span>
-                </li>
+            <div className="space-y-2">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-5 w-full" />
               ))}
-            </ul>
+            </div>
           </CardContent>
         </Card>
-
-        {/* Recent and pending work */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent and pending work</CardTitle>
+            <Skeleton className="h-6 w-40" />
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2" aria-label="Recent and pending work">
-              {PENDING_WORK_ITEMS.map((item) => (
-                <li key={item.label} className="flex items-center gap-2 text-sm">
-                  {item.icon}
-                  <span>{item.label}</span>
-                </li>
+            <div className="space-y-2">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-5 w-full" />
               ))}
-            </ul>
+            </div>
           </CardContent>
         </Card>
       </div>
+    </div>
+  )
+}
 
-      {/* Primary actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Primary actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="flex flex-wrap gap-3" aria-label="Primary actions">
-            {PRIMARY_ACTIONS.map((action) => (
-              <li key={action.label}>
-                <Button
-                  variant={action.variant ?? 'default'}
-                  asChild
-                >
-                  <a href={action.href} className="flex items-center gap-2">
-                    {action.icon}
-                    {action.label}
-                  </a>
-                </Button>
-              </li>
+// ── main component ────────────────────────────────────────────────────────────
+
+export default function FinanceHomePage() {
+  const [summary, setSummary] = useState<FinanceOnboardingSummary | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    const fromUrl = getUrlParam('year')
+    if (fromUrl) {
+      const parsed = parseInt(fromUrl, 10)
+      if (!isNaN(parsed)) return parsed
+    }
+    return new Date().getFullYear()
+  })
+
+  const fetchSummary = useCallback(async (year: number) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const data = await fetchWrapper.get(`/api/finance/onboarding-summary?year=${year}`)
+      const parsed = financeOnboardingSummarySchema.parse(data)
+      setSummary(parsed)
+    } catch {
+      setError('Failed to load Finance Dashboard. Please try again.')
+      setSummary(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSummary(selectedYear)
+  }, [selectedYear, fetchSummary])
+
+  const handleYearChange = (value: string) => {
+    const year = parseInt(value, 10)
+    if (!isNaN(year)) {
+      setSelectedYear(year)
+      setUrlParam('year', value)
+    }
+  }
+
+  if (isLoading) {
+    return <LoadingSkeleton />
+  }
+
+  const allSections = summary?.sections ?? []
+  const warningsAndPending = summary?.warnings ?? []
+  const primaryActions = summary?.primaryActions ?? []
+  const availableYears = summary?.availableYears ?? [selectedYear]
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
+      <div className="flex items-center justify-between">
+        <MainTitle>Finance Dashboard</MainTitle>
+        <Select value={String(selectedYear)} onValueChange={handleYearChange}>
+          <SelectTrigger className="w-32" aria-label="Select year">
+            <SelectValue placeholder="Year" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableYears.map((year) => (
+              <SelectItem key={year} value={String(year)}>
+                {year}
+              </SelectItem>
             ))}
-          </ul>
-        </CardContent>
-      </Card>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {error ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Unable to load dashboard</AlertTitle>
+          <AlertDescription>
+            <p>{error}</p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <Button variant="outline" size="sm" onClick={() => fetchSummary(selectedYear)}>
+                <RefreshCw className="mr-2 h-3 w-3" />
+                Retry
+              </Button>
+              <a href="/finance/accounts" className="text-sm underline">
+                Accounts
+              </a>
+              <a href="/finance/documents" className="text-sm underline">
+                Documents
+              </a>
+              <a href="/finance/tax-preview" className="text-sm underline">
+                Tax Preview
+              </a>
+            </div>
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {/* Setup Checklist */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Setup checklist</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2" aria-label="Setup checklist">
+                  {allSections.map((section) => (
+                    <SectionListItem key={section.id} section={section} />
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+
+            {/* Recent and pending work */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent and pending work</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {warningsAndPending.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No pending work.</p>
+                ) : (
+                  <ul className="space-y-2" aria-label="Recent and pending work">
+                    {warningsAndPending.map((warning) => (
+                      <li
+                        key={warning.id}
+                        className="flex items-start gap-2 text-sm"
+                        data-testid={`warning-${warning.id}`}
+                      >
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                        {warning.href ? (
+                          <a href={warning.href} className="underline">
+                            {warning.message}
+                          </a>
+                        ) : (
+                          <span>{warning.message}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Primary actions */}
+          {primaryActions.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Primary actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="flex flex-wrap gap-3" aria-label="Primary actions">
+                  {primaryActions.map((action) => (
+                    <PrimaryActionButton key={action.id} action={action} />
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
+        </>
+      )}
     </div>
   )
 }
