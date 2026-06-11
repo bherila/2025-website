@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Middleware\AuthenticateAgentRequest;
+use App\Mcp\Servers\CareerComparison;
 use App\Mcp\Servers\Finance;
+use App\Mcp\Servers\Tax;
 use Laravel\Mcp\Facades\Mcp;
 
 /**
@@ -24,3 +26,13 @@ Mcp::local('finance', Finance::class);
  * module-scoped agent tokens issued for a different module.
  */
 Mcp::web('/mcp/finance', Finance::class)->middleware(AuthenticateAgentRequest::class.':finance');
+
+/**
+ * Module MCP servers (same auth pattern; the module parameter rejects agent
+ * tokens scoped to a different module — module-less/legacy tokens pass).
+ */
+Mcp::local('career-comparison', CareerComparison::class);
+Mcp::web('/mcp/career-comparison', CareerComparison::class)->middleware(AuthenticateAgentRequest::class.':career-comparison');
+
+Mcp::local('tax', Tax::class);
+Mcp::web('/mcp/tax', Tax::class)->middleware(AuthenticateAgentRequest::class.':tax');
