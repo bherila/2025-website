@@ -68,10 +68,13 @@ class FinanceOnboardingSummaryService
     /**
      * Build the full onboarding summary payload for the dashboard.
      *
+     * @param  list<int>  $availableYears  Pre-computed list from the caller (avoids a second DB round-trip).
      * @return array{year: int, availableYears: list<int>, sections: list<SectionPayload>, primaryActions: list<array<string, mixed>>, warnings: list<array<string, mixed>>}
      */
-    public function summaryForYear(User $user, int $year): array
+    public function summaryForYear(User $user, int $year, array $availableYears): array
     {
+        $readiness = $this->readinessSummaryService->summaryForYear((int) $user->id, $year);
+
         $sections = [
             $this->accountsSection($user),
             $this->transactionsSection($user, $year),
@@ -80,15 +83,15 @@ class FinanceOnboardingSummaryService
             $this->payslipsSection($user, $year),
             $this->rsuSection($user, $year),
             $this->k1BasisSection($user, $year),
-            $this->lotsSection($user, $year),
+            $this->lotsSection($user, $year, $readiness),
             $this->carryoversSection($user, $year),
             $this->categorizationSection($user),
-            $this->taxPreviewSection($user, $year),
+            $this->taxPreviewSection($user, $year, $readiness),
         ];
 
         return [
             'year' => $year,
-            'availableYears' => $this->availableYears($user),
+            'availableYears' => $availableYears,
             'sections' => $sections,
             'primaryActions' => $this->primaryActions($sections),
             'warnings' => $this->warnings($sections),
@@ -179,7 +182,15 @@ class FinanceOnboardingSummaryService
         }
 
         if ($pendingCount > 0 || $failedCount > 0) {
-            return $this->section('documents', 'needs_attention', 'Tax documents', "{$pendingCount} document(s) pending review for {$year}.", $counts, $actions);
+            if ($pendingCount > 0 && $failedCount > 0) {
+                $summary = "{$pendingCount} document(s) pending review, {$failedCount} failed parsing for {$year}.";
+            } elseif ($pendingCount > 0) {
+                $summary = "{$pendingCount} document(s) pending review for {$year}.";
+            } else {
+                $summary = "{$failedCount} document(s) failed parsing for {$year}.";
+            }
+
+            return $this->section('documents', 'needs_attention', 'Tax documents', $summary, $counts, $actions);
         }
 
         return $this->section('documents', 'ready', 'Tax documents', "{$documentCount} document(s) uploaded and reviewed for {$year}.", $counts, $actions);
@@ -300,9 +311,10 @@ class FinanceOnboardingSummaryService
     }
 
     /**
+     * @param  array<string, mixed>  $readiness  Pre-computed readiness summary (shared with taxPreviewSection).
      * @return SectionPayload
      */
-    private function lotsSection(User $user, int $year): array
+    private function lotsSection(User $user, int $year, array $readiness): array
     {
         if (! $this->featureAccess->can($user, 'finance.lots.view')) {
             return $this->noAccessSection('lots', 'Lots');
@@ -312,7 +324,6 @@ class FinanceOnboardingSummaryService
             ->whereHas('account', fn ($query) => $query->withoutGlobalScopes()->where('acct_owner', $user->id))
             ->count();
 
-        $readiness = $this->readinessSummaryService->summaryForYear((int) $user->id, $year);
         $reconciliation = $readiness['reconciliation_health'];
         $drift = (int) ($reconciliation['drift'] ?? 0);
         $blocked = (int) ($reconciliation['blocked'] ?? 0);
@@ -404,15 +415,15 @@ class FinanceOnboardingSummaryService
     }
 
     /**
+     * @param  array<string, mixed>  $readiness  Pre-computed readiness summary (shared with lotsSection).
      * @return SectionPayload
      */
-    private function taxPreviewSection(User $user, int $year): array
+    private function taxPreviewSection(User $user, int $year, array $readiness): array
     {
         if (! $this->featureAccess->can($user, 'finance.tax-preview.view')) {
             return $this->noAccessSection('tax_preview', 'Tax Preview');
         }
 
-        $readiness = $this->readinessSummaryService->summaryForYear((int) $user->id, $year);
         $pendingReview = (int) ($readiness['pending_review_count'] ?? 0);
         $missingAccounts = (int) ($readiness['missing_account_count'] ?? 0);
         $parsingFailures = (int) ($readiness['parsing_failure_count'] ?? 0);

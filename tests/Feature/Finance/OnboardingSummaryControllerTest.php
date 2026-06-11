@@ -136,7 +136,7 @@ class OnboardingSummaryControllerTest extends TestCase
         $response = $this->getJson('/api/finance/onboarding-summary?year=2024');
 
         $response->assertOk();
-        foreach (['accounts', 'transactions', 'documents', 'payslips', 'lots', 'tax_preview', 'employment', 'carryovers', 'categorization', 'k1_basis'] as $sectionId) {
+        foreach (['accounts', 'transactions', 'documents', 'payslips', 'rsu', 'lots', 'tax_preview', 'employment', 'carryovers', 'categorization', 'k1_basis'] as $sectionId) {
             $section = $this->section($response->json('sections'), $sectionId);
             $this->assertSame('no_access', $section['status'], "Section {$sectionId} should be no_access");
             $this->assertArrayNotHasKey('counts', $section, "Section {$sectionId} must not expose counts");

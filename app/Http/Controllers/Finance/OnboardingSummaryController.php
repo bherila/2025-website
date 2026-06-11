@@ -29,6 +29,6 @@ class OnboardingSummaryController extends Controller
             $availableYears,
         );
 
-        return response()->json($this->onboardingSummaryService->summaryForYear($user, $year));
+        return response()->json($this->onboardingSummaryService->summaryForYear($user, $year, $availableYears));
     }
 }

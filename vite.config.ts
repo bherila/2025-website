@@ -30,7 +30,6 @@ export default defineConfig({
         'resources/js/finance/pages/linker.tsx',
         'resources/js/finance/pages/lot-reconciliation.tsx',
         'resources/js/finance/pages/statements.tsx',
-        'resources/js/finance/pages/tags.tsx',
         'resources/js/finance/pages/tax-preview.tsx',
         'resources/js/home.tsx',
         'resources/js/recipes.tsx',

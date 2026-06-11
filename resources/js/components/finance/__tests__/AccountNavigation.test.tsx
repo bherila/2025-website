@@ -78,6 +78,8 @@ describe('AccountNavigation', () => {
     })
     // Import button remains present regardless of year selector state
     expect(screen.getByRole('link', { name: /import/i })).toBeInTheDocument()
+    // Year selector (combobox) must be rendered for year-enabled tabs
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
   })
 
   it('does not render FinanceNavbar (FINANCE branding not present)', async () => {

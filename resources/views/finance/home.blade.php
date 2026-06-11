@@ -4,7 +4,7 @@
 
 @section('content')
   <div class="w-full">
-    <div id="FinanceNavbar"></div>
+    <div id="FinanceNavbar" data-active-section="home"></div>
     <div id="FinanceHomePage"></div>
   </div>
 @endsection

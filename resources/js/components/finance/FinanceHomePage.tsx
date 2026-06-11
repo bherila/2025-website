@@ -14,7 +14,7 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import MainTitle from '@/components/MainTitle'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -154,18 +154,26 @@ export default function FinanceHomePage() {
     return new Date().getFullYear()
   })
 
+  const requestSeqRef = useRef(0)
+
   const fetchSummary = useCallback(async (year: number) => {
+    requestSeqRef.current += 1
+    const requestId = requestSeqRef.current
     setIsLoading(true)
     setError(null)
     try {
       const data = await fetchWrapper.get(`/api/finance/onboarding-summary?year=${year}`)
+      if (requestId !== requestSeqRef.current) return
       const parsed = financeOnboardingSummarySchema.parse(data)
       setSummary(parsed)
     } catch {
+      if (requestId !== requestSeqRef.current) return
       setError('Failed to load Finance Dashboard. Please try again.')
       setSummary(null)
     } finally {
-      setIsLoading(false)
+      if (requestId === requestSeqRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [])
 
