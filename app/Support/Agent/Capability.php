@@ -8,6 +8,8 @@ use InvalidArgumentException;
  * Describes one agent-facing capability: a REST endpoint and/or MCP tool with
  * the feature permission required to see and invoke it. A null
  * requiredPermission marks the capability as public (anonymous-visible).
+ * requiredModule can pin bearer-token module visibility separately from the
+ * capability manifest module.
  */
 final readonly class Capability
 {
@@ -35,6 +37,7 @@ final readonly class Capability
         public array $pathParameters = [],
         public array $examples = [],
         public ?string $routeName = null,
+        public ?string $requiredModule = null,
     ) {
         if (! in_array($risk, self::RISKS, true)) {
             throw new InvalidArgumentException("Unknown capability risk [{$risk}] for [{$id}].");

@@ -64,6 +64,32 @@ class AgentSetupTokenTest extends TestCase
             ->assertJson(['authenticated' => true, 'token' => ['module' => 'finance']]);
     }
 
+    public function test_creates_quick_setup_tokens_for_all_mcp_modules(): void
+    {
+        $user = $this->user([
+            'finance.payslips.view',
+            'finance.tax-preview.view',
+            'financial-planning.career-comparison.private',
+        ]);
+
+        foreach (['tax', 'career-comparison'] as $module) {
+            $response = $this->actingAs($user)
+                ->postJson('/api/agent/setup-tokens', ['module' => $module])
+                ->assertStatus(201);
+
+            $this->assertSame($module, $response->json('module'));
+            $this->assertStringEndsWith("/mcp/{$module}", $response->json('mcp_url'));
+            $this->assertStringEndsWith("/api/agent/v1/{$module}/capabilities.toon", $response->json('capabilities_url'));
+
+            $model = AgentApiToken::query()
+                ->where('user_id', $user->id)
+                ->where('module', $module)
+                ->sole();
+            $this->assertSame(AgentApiToken::PURPOSE_QUICK_SETUP, $model->purpose);
+            $this->assertSame(hash('sha256', $response->json('token')), $model->getAttributes()['token_hash']);
+        }
+    }
+
     public function test_custom_ttl_is_applied(): void
     {
         $user = $this->user();
@@ -84,12 +110,6 @@ class AgentSetupTokenTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors(['module']);
 
         $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'phr'])
-            ->assertStatus(422)->assertJsonValidationErrors(['module']);
-
-        $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'tax'])
-            ->assertStatus(422)->assertJsonValidationErrors(['module']);
-
-        $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'career-comparison'])
             ->assertStatus(422)->assertJsonValidationErrors(['module']);
 
         $this->actingAs($user)->postJson('/api/agent/setup-tokens', ['module' => 'finance', 'client' => 'cursor'])
