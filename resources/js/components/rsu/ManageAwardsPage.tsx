@@ -301,10 +301,20 @@ export default function ManageAwardsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleEdit(award)}>
+                            <Button
+                              aria-label={`Edit ${award.award_id ?? 'vest event'} ${award.vest_date ?? ''}`.trim()}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(award)}
+                            >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => setDeleteAward(award)}>
+                            <Button
+                              aria-label={`Delete ${award.award_id ?? 'vest event'} ${award.vest_date ?? ''}`.trim()}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDeleteAward(award)}
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>

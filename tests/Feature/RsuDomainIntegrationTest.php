@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\FinanceTool\FinAccountLineItems;
+use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinEquityAwards;
 use App\Models\FinanceTool\FinPayslips;
@@ -12,6 +13,7 @@ use App\Models\FinanceTool\FinRsuVestSettlementAllocation;
 use App\Models\FinanceTool\StockQuotesDaily;
 use App\Models\User;
 use App\Models\UserFeaturePermission;
+use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
@@ -273,6 +275,81 @@ class RsuDomainIntegrationTest extends TestCase
             ->assertJsonPath('excessRefund', 25);
     }
 
+    public function test_rsu_vest_fmv_basis_flows_through_normal_lot_capital_gains_pipeline(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = $this->makeFinanceAccount($user, 'RSU Brokerage');
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-LOTS',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-01-15',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+        $this->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 2,
+            'actualTaxRemitted' => 200,
+            'brokerageAccountId' => $account->acct_id,
+        ])->assertOk();
+
+        $allocation = FinRsuVestSettlement::query()
+            ->with('allocations')
+            ->findOrFail($settlementId)
+            ->allocations
+            ->firstOrFail();
+        $sellToCoverLot = $this->makeCapitalGainLot($account, [
+            'symbol' => 'META',
+            'description' => 'META RSU sell-to-cover',
+            'quantity' => 2,
+            'purchase_date' => '2026-01-15',
+            'sale_date' => '2026-01-15',
+            'proceeds' => 200,
+            'cost_basis' => 200,
+        ]);
+        $laterSaleLot = $this->makeCapitalGainLot($account, [
+            'symbol' => 'META',
+            'description' => 'META RSU later sale',
+            'quantity' => 8,
+            'purchase_date' => '2026-01-15',
+            'sale_date' => '2027-02-01',
+            'proceeds' => 1200,
+            'cost_basis' => 800,
+            'is_short_term' => false,
+            'form_8949_box' => 'D',
+        ]);
+
+        foreach ([$sellToCoverLot, $laterSaleLot] as $lot) {
+            $this->postJson("/api/rsu/settlements/{$settlementId}/links", [
+                'link_type' => 'tax_lot',
+                'settlement_allocation_id' => $allocation->id,
+                'equity_award_id' => $award->id,
+                'lot_id' => $lot->lot_id,
+                'status' => 'confirmed',
+            ])->assertCreated();
+        }
+
+        $coverReport = app(CapitalGainsTaxReportService::class)->reportForUserYear($user->id, 2026);
+        $coverTransaction = collect($coverReport['transactions'])->firstWhere('lotId', $sellToCoverLot->lot_id);
+        $this->assertNotNull($coverTransaction);
+        $this->assertSame(200.0, $coverTransaction->costBasis);
+        $this->assertSame(200.0, $coverTransaction->proceeds);
+        $this->assertSame(0.0, $coverTransaction->realizedGainLoss);
+
+        $laterReport = app(CapitalGainsTaxReportService::class)->reportForUserYear($user->id, 2027);
+        $laterTransaction = collect($laterReport['transactions'])->firstWhere('lotId', $laterSaleLot->lot_id);
+        $this->assertNotNull($laterTransaction);
+        $this->assertSame(800.0, $laterTransaction->costBasis);
+        $this->assertSame(1200.0, $laterTransaction->proceeds);
+        $this->assertSame(400.0, $laterTransaction->realizedGainLoss);
+        $this->assertFalse($laterTransaction->isShortTerm);
+    }
+
     public function test_rsu_links_are_user_scoped_to_transactions_lots_and_payslips(): void
     {
         $user = User::factory()->create();
@@ -339,6 +416,63 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertSame($settlement->id, $response->json('0.settlement.id'));
     }
 
+    public function test_settlement_confirmation_persists_income_and_refund_payslips_through_api_updates(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-PAYSLIP',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+        $incomePayslip = FinPayslips::query()->create([
+            'uid' => $user->id,
+            'pay_date' => '2026-06-15',
+            'earnings_rsu' => 1000,
+        ]);
+        $refundPayslip = FinPayslips::query()->create([
+            'uid' => $user->id,
+            'pay_date' => '2026-07-15',
+            'ps_rsu_excess_refund' => 25,
+        ]);
+
+        $settlementId = $this->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+
+        $this->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 3,
+            'actualTaxRemitted' => 275,
+            'payslipId' => $incomePayslip->payslip_id,
+        ])->assertOk()
+            ->assertJsonPath('payslip_id', $incomePayslip->payslip_id)
+            ->assertJsonPath('refund_payslip_id', null);
+
+        $this->putJson("/api/rsu/settlements/{$settlementId}", [
+            'withheldSharesWhole' => 3,
+            'actualTaxRemitted' => 275,
+            'payslipId' => $incomePayslip->payslip_id,
+            'refundPayslipId' => $refundPayslip->payslip_id,
+        ])->assertOk()
+            ->assertJsonPath('payslip_id', $incomePayslip->payslip_id)
+            ->assertJsonPath('refund_payslip_id', $refundPayslip->payslip_id);
+
+        $this->assertDatabaseHas('fin_rsu_vest_settlements', [
+            'id' => $settlementId,
+            'payslip_id' => $incomePayslip->payslip_id,
+            'refund_payslip_id' => $refundPayslip->payslip_id,
+        ]);
+
+        $incomeLinks = $this->getJson("/api/payslips/{$incomePayslip->payslip_id}/rsu-links")->assertOk();
+        $refundLinks = $this->getJson("/api/payslips/{$refundPayslip->payslip_id}/rsu-links")->assertOk();
+
+        $this->assertContains('payslip_rsu_income', collect($incomeLinks->json())->pluck('link_type')->all());
+        $this->assertContains('payslip_rsu_excess_refund', collect($refundLinks->json())->pluck('link_type')->all());
+    }
+
     public function test_settlement_confirmation_rejects_invalid_domain_values_and_other_user_targets(): void
     {
         $user = User::factory()->create();
@@ -385,6 +519,88 @@ class RsuDomainIntegrationTest extends TestCase
             'actualTaxRemitted' => 100,
             'payslipId' => $otherPayslip->payslip_id,
         ])->assertNotFound();
+    }
+
+    public function test_settlement_routes_and_link_deletion_are_user_scoped(): void
+    {
+        $user = User::factory()->create();
+        $other = $this->grantAllFeatures(User::factory()->create());
+        $settlement = FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'META',
+            'gross_shares' => 10,
+            'gross_income' => 1000,
+            'status' => 'suggested',
+        ]);
+        $link = FinRsuLink::query()->create([
+            'uid' => $user->id,
+            'settlement_id' => $settlement->id,
+            'link_type' => 'other',
+            'status' => 'confirmed',
+        ]);
+
+        $this->actingAs($other)->getJson("/api/rsu/settlements/{$settlement->id}/links")->assertNotFound();
+        $this->actingAs($other)->getJson("/api/rsu/settlements/{$settlement->id}/candidates")->assertNotFound();
+        $this->actingAs($other)->postJson("/api/rsu/settlements/{$settlement->id}/links", ['link_type' => 'other'])->assertNotFound();
+        $this->actingAs($other)->postJson("/api/rsu/settlements/{$settlement->id}/confirm")->assertNotFound();
+        $this->actingAs($other)->putJson("/api/rsu/settlements/{$settlement->id}", ['notes' => 'nope'])->assertNotFound();
+        $this->actingAs($other)->postJson("/api/rsu/settlements/{$settlement->id}/ignore")->assertNotFound();
+        $this->actingAs($other)->deleteJson("/api/rsu/links/{$link->id}")->assertNotFound();
+
+        $this->assertDatabaseHas('fin_rsu_links', ['id' => $link->id]);
+        $this->assertSame('suggested', $settlement->refresh()->status);
+    }
+
+    public function test_cross_user_lot_id_link_and_id_targeted_award_update_are_rejected(): void
+    {
+        $user = User::factory()->create();
+        $other = $this->grantAllFeatures(User::factory()->create());
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-SCOPE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+        $settlement = FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'META',
+            'gross_shares' => 10,
+            'gross_income' => 1000,
+            'status' => 'confirmed',
+        ]);
+        $otherAccount = $this->makeFinanceAccount($other, 'Other Brokerage');
+        $otherLot = $this->makeCapitalGainLot($otherAccount, [
+            'symbol' => 'META',
+            'purchase_date' => '2026-06-01',
+            'sale_date' => '2026-06-01',
+            'proceeds' => 100,
+            'cost_basis' => 100,
+        ]);
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlement->id}/links", [
+            'link_type' => 'tax_lot',
+            'lot_id' => $otherLot->lot_id,
+        ])->assertNotFound();
+
+        $this->actingAs($other)->postJson('/api/rsu', [[
+            'id' => $award->id,
+            'award_id' => 'RSU-SCOPE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 99,
+            'symbol' => 'META',
+            'vest_price' => 999,
+        ]])->assertNotFound();
+
+        $award->refresh();
+        $this->assertSame(10.0, $award->share_count);
+        $this->assertSame('100.000000', $award->vest_price);
     }
 
     public function test_rsu_links_validate_allocation_and_equity_award_scope(): void
@@ -520,6 +736,76 @@ class RsuDomainIntegrationTest extends TestCase
 
         $response = $this->actingAs($user)->getJson('/api/rsu')->assertOk();
         $this->assertSame(10.125, $response->json('0.share_count'));
+    }
+
+    public function test_same_day_los_angeles_vest_price_backfill_includes_today_and_excludes_future_vests(): void
+    {
+        $testNow = Carbon::create(2026, 6, 1, 12, 0, 0, 'America/Los_Angeles');
+        Carbon::setTestNow($testNow);
+
+        try {
+            $user = User::factory()->create();
+            $sameDay = FinEquityAwards::query()->create([
+                'uid' => $user->id,
+                'award_id' => 'RSU-TODAY',
+                'grant_date' => '2025-01-01',
+                'vest_date' => '2026-06-01',
+                'share_count' => 4,
+                'symbol' => 'META',
+            ]);
+            $future = FinEquityAwards::query()->create([
+                'uid' => $user->id,
+                'award_id' => 'RSU-FUTURE',
+                'grant_date' => '2025-01-01',
+                'vest_date' => '2026-06-02',
+                'share_count' => 4,
+                'symbol' => 'META',
+            ]);
+            StockQuotesDaily::query()->create(['c_symb' => 'META', 'c_date' => '2026-06-01', 'c_open' => 123.45, 'c_high' => 123.45, 'c_low' => 123.45, 'c_close' => 123.45, 'c_vol' => 0]);
+            StockQuotesDaily::query()->create(['c_symb' => 'META', 'c_date' => '2026-06-02', 'c_open' => 234.56, 'c_high' => 234.56, 'c_low' => 234.56, 'c_close' => 234.56, 'c_vol' => 0]);
+
+            $this->actingAs($user)->postJson('/api/rsu/backfill-vest-prices')
+                ->assertOk()
+                ->assertJsonPath('updated.0', $sameDay->id);
+
+            $this->assertSame('123.450000', $sameDay->refresh()->vest_price);
+            $this->assertNull($future->refresh()->vest_price);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_zero_vest_price_can_be_suggested_confirmed_and_empty_suggest_returns_no_awards(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')
+            ->assertOk()
+            ->assertJsonCount(0);
+
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-ZERO',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 0,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $suggestion = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk();
+        $suggestion->assertJsonPath('0.vestPrice', 0)
+            ->assertJsonPath('0.grossIncome', 0);
+
+        $settlementId = $suggestion->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 3,
+            'actualTaxRemitted' => 0,
+        ])->assertOk()
+            ->assertJsonPath('vest_price', '0.000000')
+            ->assertJsonPath('gross_income', '0.0000')
+            ->assertJsonPath('withheld_value', '0.0000');
     }
 
     public function test_deleting_settled_award_reconciles_settlement_totals(): void
@@ -1078,5 +1364,45 @@ class RsuDomainIntegrationTest extends TestCase
         $this->actingAs($user)->getJson('/api/rsu/tax-projection?year=2026')
             ->assertOk()
             ->assertJsonPath('ordinaryIncomeAtVest', 0);
+    }
+
+    private function makeFinanceAccount(User $user, string $name): FinAccounts
+    {
+        return FinAccounts::withoutEvents(fn (): FinAccounts => FinAccounts::withoutGlobalScopes()->forceCreate([
+            'acct_owner' => $user->id,
+            'acct_name' => $name,
+            'acct_last_balance' => 0,
+        ]));
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeCapitalGainLot(FinAccounts $account, array $overrides): FinAccountLot
+    {
+        $purchaseDate = (string) ($overrides['purchase_date'] ?? '2026-01-01');
+        $saleDate = (string) ($overrides['sale_date'] ?? '2026-02-01');
+        $proceeds = (float) ($overrides['proceeds'] ?? 0);
+        $costBasis = (float) ($overrides['cost_basis'] ?? 0);
+        $metrics = FinAccountLot::computeMetrics($purchaseDate, $saleDate, $proceeds, $costBasis);
+
+        return FinAccountLot::query()->create([
+            'acct_id' => $account->acct_id,
+            'symbol' => $overrides['symbol'] ?? 'META',
+            'description' => $overrides['description'] ?? 'RSU sale',
+            'quantity' => $overrides['quantity'] ?? 1,
+            'purchase_date' => $purchaseDate,
+            'sale_date' => $saleDate,
+            'proceeds' => $proceeds,
+            'cost_basis' => $costBasis,
+            'cost_per_unit' => $overrides['cost_per_unit'] ?? null,
+            'realized_gain_loss' => $overrides['realized_gain_loss'] ?? $metrics['realized_gain_loss'],
+            'is_short_term' => $overrides['is_short_term'] ?? $metrics['is_short_term'],
+            'source' => $overrides['source'] ?? FinAccountLot::SOURCE_ACCOUNT_DERIVED,
+            'lot_source' => $overrides['lot_source'] ?? null,
+            'lot_origin' => $overrides['lot_origin'] ?? FinAccountLot::ORIGIN_MANUAL,
+            'form_8949_box' => $overrides['form_8949_box'] ?? (($overrides['is_short_term'] ?? $metrics['is_short_term']) ? 'A' : 'D'),
+            'is_covered' => $overrides['is_covered'] ?? true,
+        ]);
     }
 }
