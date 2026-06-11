@@ -8,7 +8,10 @@ use Illuminate\Support\Carbon;
 
 class RsuVestPriceBackfillService
 {
-    public function __construct(private readonly StockQuoteService $stockQuoteService) {}
+    public function __construct(
+        private readonly StockQuoteService $stockQuoteService,
+        private readonly RsuSettlementService $settlementService,
+    ) {}
 
     /** @return array{updated: array<int, int>, missing: array<int, int>} */
     public function backfillMissingVestPrices(int $userId): array
@@ -23,6 +26,7 @@ class RsuVestPriceBackfillService
         $closes = $this->stockQuoteService->closesForAwards($awards);
         $updated = [];
         $missing = [];
+        $affectedBuckets = [];
 
         foreach ($awards as $award) {
             $close = $closes[$award->id] ?? $this->stockQuoteService->closeOnOrBefore((string) $award->symbol, (string) $award->vest_date);
@@ -37,6 +41,14 @@ class RsuVestPriceBackfillService
             $award->vest_price_fetched_at = now();
             $award->save();
             $updated[] = (int) $award->id;
+
+            $vestDate = Carbon::parse((string) $award->vest_date)->format('Y-m-d');
+            $symbol = strtoupper((string) $award->symbol);
+            $affectedBuckets[$vestDate.'|'.$symbol] = [$vestDate, $symbol];
+        }
+
+        foreach ($affectedBuckets as [$vestDate, $symbol]) {
+            $this->settlementService->reconcileAfterAwardChange($userId, $vestDate, $symbol);
         }
 
         return ['updated' => $updated, 'missing' => $missing];

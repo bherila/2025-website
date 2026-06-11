@@ -137,20 +137,20 @@ Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu', [Fin
 Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/backfill-vest-prices', [FinanceRsuController::class, 'backfillVestPrices']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu/settlements', [FinanceRsuController::class, 'settlements']);
 Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/suggest', [FinanceRsuController::class, 'suggestSettlements']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/{settlement}/confirm', [FinanceRsuController::class, 'confirmSettlement']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->put('/rsu/settlements/{settlement}', [FinanceRsuController::class, 'updateSettlement']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/{settlement}/ignore', [FinanceRsuController::class, 'ignoreSettlement']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu/settlements/{settlement}/links', [FinanceRsuController::class, 'settlementLinks']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu/settlements/{settlement}/candidates', [FinanceRsuController::class, 'settlementCandidates']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/{settlement}/links', [FinanceRsuController::class, 'createSettlementLink']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->delete('/rsu/links/{link}', [FinanceRsuController::class, 'deleteRsuLink']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/{settlement}/confirm', [FinanceRsuController::class, 'confirmSettlement'])->whereNumber('settlement');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->put('/rsu/settlements/{settlement}', [FinanceRsuController::class, 'updateSettlement'])->whereNumber('settlement');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/{settlement}/ignore', [FinanceRsuController::class, 'ignoreSettlement'])->whereNumber('settlement');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu/settlements/{settlement}/links', [FinanceRsuController::class, 'settlementLinks'])->whereNumber('settlement');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu/settlements/{settlement}/candidates', [FinanceRsuController::class, 'settlementCandidates'])->whereNumber('settlement');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/settlements/{settlement}/links', [FinanceRsuController::class, 'createSettlementLink'])->whereNumber('settlement');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->delete('/rsu/links/{link}', [FinanceRsuController::class, 'deleteRsuLink'])->whereNumber('link');
 Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/rsu/tax-projection', [FinanceRsuController::class, 'taxProjection']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/finance/transactions/{transaction}/rsu-links', [FinanceRsuController::class, 'transactionRsuLinks']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/payslips/{payslip}/rsu-links', [FinanceRsuController::class, 'payslipRsuLinks']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/finance/transactions/{transaction}/rsu-links', [FinanceRsuController::class, 'transactionRsuLinks'])->whereNumber('transaction');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.view'])->get('/payslips/{payslip}/rsu-links', [FinanceRsuController::class, 'payslipRsuLinks'])->whereNumber('payslip');
 Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu', [FinanceRsuController::class, 'upsertRsuGrants']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/genai-import/{jobId}/results/{resultId}/confirm', [FinanceRsuController::class, 'confirmGenAiImport']);
-Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/genai-import/{jobId}/results/{resultId}/skip', [FinanceRsuController::class, 'skipGenAiImport']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->delete('/rsu/{id}', [FinanceRsuController::class, 'deleteRsuGrant'])->whereNumber('id');
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/genai-import/{jobId}/results/{resultId}/confirm', [FinanceRsuController::class, 'confirmGenAiImport'])->whereNumber(['jobId', 'resultId']);
+Route::middleware(['web', 'auth', 'feature:finance.rsu.manage'])->post('/rsu/genai-import/{jobId}/results/{resultId}/skip', [FinanceRsuController::class, 'skipGenAiImport'])->whereNumber(['jobId', 'resultId']);
 
 // Transaction routes (FinanceTransactionsApiController)
 // /finance/all/... routes must come before /finance/{account_id}/... to avoid conflicts

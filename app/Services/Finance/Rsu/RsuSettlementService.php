@@ -16,6 +16,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class RsuSettlementService
 {
@@ -40,20 +41,22 @@ class RsuSettlementService
     public function confirm(int $userId, string $vestDate, string $symbol, array $data): FinRsuVestSettlement
     {
         $symbol = strtoupper($symbol);
-        $awards = FinEquityAwards::query()
-            ->where('uid', $userId)
-            ->whereDate('vest_date', $vestDate)
-            ->where('symbol', $symbol)
-            ->whereNotNull('vest_price')
-            ->get();
 
-        if ($awards->isEmpty()) {
-            throw ValidationException::withMessages([
-                'settlement' => 'No priced RSU vesting events exist for this vest date and symbol.',
-            ]);
-        }
+        return DB::transaction(function () use ($userId, $vestDate, $symbol, $data): FinRsuVestSettlement {
+            $awards = FinEquityAwards::query()
+                ->where('uid', $userId)
+                ->whereDate('vest_date', $vestDate)
+                ->where('symbol', $symbol)
+                ->whereNotNull('vest_price')
+                ->lockForUpdate()
+                ->get();
 
-        return DB::transaction(function () use ($userId, $vestDate, $symbol, $data, $awards): FinRsuVestSettlement {
+            if ($awards->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'settlement' => 'No priced RSU vesting events exist for this vest date and symbol.',
+                ]);
+            }
+
             $summary = $this->summary($awards);
             $validated = $this->validateConfirmationData($userId, $data, $summary);
             $withheldShares = $validated['withheld_shares_whole'];
@@ -62,12 +65,14 @@ class RsuSettlementService
             $excessRefund = $withheldValue === null || $actualTaxRemitted === null ? null : round($withheldValue - $actualTaxRemitted, 4);
 
             $settlement = isset($data['settlement_id'])
-                ? FinRsuVestSettlement::query()->where('uid', $userId)->findOrFail($data['settlement_id'])
+                ? FinRsuVestSettlement::query()->where('uid', $userId)->lockForUpdate()->findOrFail($data['settlement_id'])
                 : FinRsuVestSettlement::query()->firstOrNew([
                     'uid' => $userId,
                     'vest_date' => $vestDate,
                     'symbol' => $symbol,
                 ]);
+
+            $this->assertSettlementCanBeConfirmed($settlement);
 
             $settlement->fill([
                 'vest_price' => $summary['vestPrice'],
@@ -94,6 +99,8 @@ class RsuSettlementService
 
     public function ignore(FinRsuVestSettlement $settlement): FinRsuVestSettlement
     {
+        $this->assertSettlementCanBeIgnored($settlement);
+
         $settlement->status = 'ignored';
         $settlement->save();
 
@@ -244,6 +251,17 @@ class RsuSettlementService
     /** @param array<string, mixed> $data */
     public function assertLinkTargetsBelongToSettlement(int $userId, FinRsuVestSettlement $settlement, array $data): void
     {
+        $targetKeys = ['settlement_allocation_id', 'equity_award_id', 'transaction_id', 'account_id', 'lot_id', 'payslip_id'];
+        $targetCount = collect($targetKeys)
+            ->filter(fn (string $key): bool => ($data[$key] ?? null) !== null)
+            ->count();
+
+        if ($targetCount === 0) {
+            throw ValidationException::withMessages([
+                'target' => 'At least one RSU link target is required.',
+            ]);
+        }
+
         $allocation = null;
         if (($data['settlement_allocation_id'] ?? null) !== null) {
             $allocation = FinRsuVestSettlementAllocation::query()
@@ -278,6 +296,12 @@ class RsuSettlementService
         }
 
         $this->assertExternalTargetsBelongToUser($userId, $data);
+
+        if ($this->linkTargetAlreadyExists($userId, $settlement, $data)) {
+            throw ValidationException::withMessages([
+                'target' => 'An RSU link for this target already exists.',
+            ]);
+        }
     }
 
     /**
@@ -382,10 +406,6 @@ class RsuSettlementService
             : round($withheldShares * $vestPrice, 4);
 
         $actualTaxRemitted = $settlement->actual_tax_remitted !== null ? (float) $settlement->actual_tax_remitted : null;
-        if ($actualTaxRemitted !== null && $withheldValue !== null && $actualTaxRemitted > $withheldValue) {
-            $actualTaxRemitted = $withheldValue;
-        }
-
         $excessRefund = ($withheldValue === null || $actualTaxRemitted === null)
             ? null
             : round($withheldValue - $actualTaxRemitted, 4);
@@ -412,19 +432,11 @@ class RsuSettlementService
         $grossShares = (float) $settlement->gross_shares;
         $existing = $settlement->allocations()->get()->keyBy(fn (FinRsuVestSettlementAllocation $allocation): int => (int) $allocation->equity_award_id);
         $retainedAwardIds = [];
+        $allocationRows = $this->allocationRows($awards, $grossShares, (float) $settlement->gross_income, $withheldShares, $withheldValue, $actualTaxRemitted, $excessRefund);
 
         foreach ($awards as $award) {
             $retainedAwardIds[] = (int) $award->id;
-            $ratio = $grossShares === 0.0 ? 0.0 : (float) $award->share_count / $grossShares;
-            $attributes = [
-                'vested_shares' => $award->share_count,
-                'gross_income' => round((float) $award->share_count * (float) $award->vest_price, 4),
-                'allocation_ratio' => round($ratio, 10),
-                'allocated_withheld_shares' => $withheldShares === null ? null : round($withheldShares * $ratio, 6),
-                'allocated_withheld_value' => $withheldValue === null ? null : round($withheldValue * $ratio, 4),
-                'allocated_tax_remitted' => $actualTaxRemitted === null ? null : round($actualTaxRemitted * $ratio, 4),
-                'allocated_excess_refund' => $excessRefund === null ? null : round($excessRefund * $ratio, 4),
-            ];
+            $attributes = $allocationRows[(int) $award->id];
 
             $allocation = $existing->get((int) $award->id);
             if ($allocation instanceof FinRsuVestSettlementAllocation) {
@@ -483,17 +495,123 @@ class RsuSettlementService
         $withheldValue = $withholding['withheld_value'];
         $actualTaxRemitted = $withholding['actual_tax_remitted'];
         $excessRefund = $withholding['excess_refund'];
+        $allocationRows = $this->allocationRows($settlement->allocations, $grossShares, (float) $settlement->gross_income, $withheldShares, $withheldValue, $actualTaxRemitted, $excessRefund);
 
         foreach ($settlement->allocations as $allocation) {
-            $ratio = $grossShares === 0.0 ? 0.0 : (float) $allocation->vested_shares / $grossShares;
-            $allocation->update([
-                'allocation_ratio' => round($ratio, 10),
-                'allocated_withheld_shares' => $withheldShares === null ? null : round($withheldShares * $ratio, 6),
-                'allocated_withheld_value' => $withheldValue === null ? null : round($withheldValue * $ratio, 4),
-                'allocated_tax_remitted' => $actualTaxRemitted === null ? null : round($actualTaxRemitted * $ratio, 4),
-                'allocated_excess_refund' => $excessRefund === null ? null : round($excessRefund * $ratio, 4),
-            ]);
+            $allocation->update($allocationRows[(int) $allocation->equity_award_id]);
         }
+    }
+
+    private function assertSettlementCanBeConfirmed(FinRsuVestSettlement $settlement): void
+    {
+        if ($settlement->exists && $settlement->status === 'ignored') {
+            throw new ConflictHttpException('Ignored RSU settlements must be restored explicitly before confirmation.');
+        }
+    }
+
+    private function assertSettlementCanBeIgnored(FinRsuVestSettlement $settlement): void
+    {
+        if (in_array($settlement->status, ['confirmed', 'partially_reconciled', 'reconciled'], true)) {
+            throw new ConflictHttpException('Confirmed RSU settlements cannot be ignored without an explicit restore workflow.');
+        }
+    }
+
+    /**
+     * @param  Collection<int, FinEquityAwards>|Collection<int, FinRsuVestSettlementAllocation>  $items
+     * @return array<int, array<string, float|null|string>>
+     */
+    private function allocationRows(Collection $items, float $grossShares, float $grossIncomeTotal, ?float $withheldShares, ?float $withheldValue, ?float $actualTaxRemitted, ?float $excessRefund): array
+    {
+        $rows = [];
+        $count = $items->count();
+
+        foreach ($items->values() as $item) {
+            $awardId = (int) ($item instanceof FinEquityAwards ? $item->id : $item->equity_award_id);
+            $vestedShares = (float) ($item instanceof FinEquityAwards ? $item->share_count : $item->vested_shares);
+            $rowGrossIncome = $item instanceof FinEquityAwards
+                ? round($vestedShares * (float) $item->vest_price, 4)
+                : (float) $item->gross_income;
+            $ratio = $grossShares === 0.0 ? 0.0 : $vestedShares / $grossShares;
+
+            $rows[$awardId] = [
+                'vested_shares' => $item instanceof FinEquityAwards ? $item->share_count : $item->vested_shares,
+                'gross_income' => $rowGrossIncome,
+                'allocation_ratio' => $this->allocatedAmount($grossShares === 0.0 ? 0.0 : 1.0, $ratio, 10, $count),
+                'allocated_withheld_shares' => $this->allocatedAmount($withheldShares, $ratio, 6, $count),
+                'allocated_withheld_value' => $this->allocatedAmount($withheldValue, $ratio, 4, $count),
+                'allocated_tax_remitted' => $this->allocatedAmount($actualTaxRemitted, $ratio, 4, $count),
+                'allocated_excess_refund' => $this->allocatedAmount($excessRefund, $ratio, 4, $count),
+            ];
+        }
+
+        return $this->applyAllocationResiduals($rows, [
+            'gross_income' => [$grossIncomeTotal, 4],
+            'allocation_ratio' => [$grossShares === 0.0 ? 0.0 : 1.0, 10],
+            'allocated_withheld_shares' => [$withheldShares, 6],
+            'allocated_withheld_value' => [$withheldValue, 4],
+            'allocated_tax_remitted' => [$actualTaxRemitted, 4],
+            'allocated_excess_refund' => [$excessRefund, 4],
+        ]);
+    }
+
+    private function allocatedAmount(?float $total, float $ratio, int $precision, int $count): ?float
+    {
+        if ($total === null) {
+            return null;
+        }
+
+        if ($count === 0) {
+            return round(0, $precision);
+        }
+
+        return round($total * $ratio, $precision);
+    }
+
+    /**
+     * @param  array<int, array<string, float|null|string>>  $rows
+     * @param  array<string, array{0: ?float, 1: int}>  $totals
+     * @return array<int, array<string, float|null|string>>
+     */
+    private function applyAllocationResiduals(array $rows, array $totals): array
+    {
+        if ($rows === []) {
+            return $rows;
+        }
+
+        $lastKey = array_key_last($rows);
+
+        foreach ($totals as $field => [$total, $precision]) {
+            if ($total === null) {
+                continue;
+            }
+
+            $target = round($total, $precision);
+            $allocated = round(array_sum(array_map(static fn (array $row): float => (float) $row[$field], $rows)), $precision);
+            $rows[$lastKey][$field] = round((float) $rows[$lastKey][$field] + ($target - $allocated), $precision);
+        }
+
+        return $rows;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function linkTargetAlreadyExists(int $userId, FinRsuVestSettlement $settlement, array $data): bool
+    {
+        $query = FinRsuLink::query()
+            ->where('uid', $userId)
+            ->where('settlement_id', $settlement->id)
+            ->where('link_type', $data['link_type']);
+
+        if (($data['settlement_allocation_id'] ?? null) !== null) {
+            return $query->where('settlement_allocation_id', $data['settlement_allocation_id'])->exists();
+        }
+
+        return $query
+            ->where('equity_award_id', $data['equity_award_id'] ?? null)
+            ->where('transaction_id', $data['transaction_id'] ?? null)
+            ->where('account_id', $data['account_id'] ?? null)
+            ->where('lot_id', $data['lot_id'] ?? null)
+            ->where('payslip_id', $data['payslip_id'] ?? null)
+            ->exists();
     }
 
     /**
@@ -506,8 +624,6 @@ class RsuSettlementService
         $rawWithheldShares = $this->blankToNull($data['withheldSharesWhole'] ?? $data['withheld_shares_whole'] ?? null);
         $rawActualTaxRemitted = $this->blankToNull($data['actualTaxRemitted'] ?? $data['actual_tax_remitted'] ?? null);
 
-        $withheldShares = $this->nullableFloat($rawWithheldShares);
-        $withheldValue = $withheldShares === null || $summary['vestPrice'] === null ? null : round($withheldShares * $summary['vestPrice'], 4);
         $normalized = [
             'withheld_shares_whole' => $rawWithheldShares,
             'actual_tax_remitted' => $rawActualTaxRemitted,
@@ -536,11 +652,6 @@ class RsuSettlementService
                 'nullable',
                 'numeric',
                 'min:0',
-                function (string $attribute, mixed $value, Closure $fail) use ($withheldValue): void {
-                    if ($withheldValue !== null && (float) $value > $withheldValue) {
-                        $fail('Actual tax remitted may not exceed withheld value.');
-                    }
-                },
             ],
             'brokerage_account_id' => ['nullable', 'integer'],
             'payslip_id' => ['nullable', 'integer'],
