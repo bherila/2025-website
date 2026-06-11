@@ -33,13 +33,25 @@ class AgentImportTest extends TestCase
         // test are genuinely non-admin.
         $this->createAdminUser();
 
-        // Mirror the AgentServiceProvider chokepoint binding (the integrator
-        // wires the identical bind() into the provider).
-        $this->app->bind(AccountingPeriodLockGuard::class, PartnershipBasisLockGuard::class);
+        if (! $this->app->bound(AccountingPeriodLockGuard::class)) {
+            $this->app->bind(AccountingPeriodLockGuard::class, PartnershipBasisLockGuard::class);
+        }
 
-        // Mirror the routes/agent.php chokepoint registration (the vertical
-        // branch does not edit shared route files; the integrator wires the
-        // identical block into routes/agent.php).
+        $this->registerImportSurfaceIfMissing();
+    }
+
+    /**
+     * Mirror the routes/agent.php chokepoint registration only when the
+     * integrated routes are absent, so the shipped wiring is what gets
+     * exercised once the integrator has wired routes/agent.php. The block
+     * below must stay byte-equivalent to the integrated imports group wiring.
+     */
+    private function registerImportSurfaceIfMissing(): void
+    {
+        if (Route::has('agent.imports.jobs')) {
+            return;
+        }
+
         Route::prefix('api/agent/v1')->name('agent.')->middleware([NegotiatesAgentPayload::class])->group(function (): void {
             Route::middleware([AuthenticateAgentRequest::class, 'feature:finance.access'])->prefix('imports')->name('imports.')->group(function (): void {
                 Route::post('/request-upload', [AgentImportController::class, 'requestUpload'])->name('request-upload');

@@ -24,11 +24,24 @@ class FinanceDownloadTest extends TestCase
         // test are genuinely non-admin.
         $this->createAdminUser();
 
-        // Mirror the routes/agent.php chokepoint registration (the vertical
-        // branch does not edit shared route files; the integrator wires the
-        // identical block into routes/agent.php).
+        $this->registerDownloadSurfaceIfMissing();
+    }
+
+    /**
+     * Mirror the routes/agent.php chokepoint registration only when the
+     * integrated routes are absent, so the shipped wiring (including the
+     * `:finance` module pin) is what gets exercised once the integrator has
+     * wired routes/agent.php. The block below must stay byte-equivalent to
+     * the integrated finance group wiring.
+     */
+    private function registerDownloadSurfaceIfMissing(): void
+    {
+        if (Route::has('agent.finance.tax-documents.download-url')) {
+            return;
+        }
+
         Route::prefix('api/agent/v1')->name('agent.')->middleware([NegotiatesAgentPayload::class])->group(function (): void {
-            Route::middleware([AuthenticateAgentRequest::class])->prefix('finance')->name('finance.')->group(function (): void {
+            Route::middleware(AuthenticateAgentRequest::class.':finance')->prefix('finance')->name('finance.')->group(function (): void {
                 Route::get('/tax-documents/{id}/download-url', [FinanceDownloadController::class, 'taxDocumentDownloadUrl'])
                     ->whereNumber('id')
                     ->middleware('feature:finance.tax-documents.view')
@@ -170,6 +183,17 @@ class FinanceDownloadTest extends TestCase
 
         $this->getJson("/api/agent/v1/finance/tax-documents/{$doc->id}/download-url", $this->bearer($rawToken))
             ->assertStatus(403);
+    }
+
+    public function test_tax_module_scoped_token_is_rejected_by_finance_module_pin(): void
+    {
+        $user = $this->grantFeatures($this->createUser(), ['finance.tax-documents.view']);
+        $doc = $this->makeTaxDocument($user);
+
+        $result = app(AgentTokenService::class)->createQuickSetupToken($user, 'tax', null);
+
+        $this->getJson("/api/agent/v1/finance/tax-documents/{$doc->id}/download-url", $this->bearer($result['token']))
+            ->assertStatus(401);
     }
 
     public function test_fin_document_download_url_returns_signed_urls(): void

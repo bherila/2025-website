@@ -6,6 +6,7 @@ use App\Http\Middleware\RequireFeaturePermission;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Sentry\Laravel\Integration;
 
@@ -43,4 +44,12 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         Integration::handles($exceptions);
+
+        // Agent API clients may negotiate TOON (Accept: text/toon), which
+        // fails expectsJson(); without this, a validation failure on an agent
+        // route would render a 302 redirect instead of a 422. All other
+        // routes keep the default expectsJson() behavior.
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request, Throwable $e): bool => $request->is('api/agent/*') || $request->expectsJson(),
+        );
     })->create();

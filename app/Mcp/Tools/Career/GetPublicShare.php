@@ -7,6 +7,7 @@ use App\Mcp\Support\RequiresFeature;
 use App\Models\CareerComparison;
 use App\Services\Planning\CareerComp\CareerComparisonWorkflowService;
 use App\Services\Planning\CareerComp\ComparisonSharePresenter;
+use App\Support\Agent\AgentContext;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -45,7 +46,10 @@ class GetPublicShare extends Tool implements RequiresFeature
             return Response::error('Share not found or expired.');
         }
 
-        $isCreator = Auth::id() !== null && $share->user_id !== null && (int) Auth::id() === (int) $share->user_id;
+        $isCreator = Auth::id() !== null
+            && $share->user_id !== null
+            && (int) Auth::id() === (int) $share->user_id
+            && app(AgentContext::class)->can('financial-planning.career-comparison.private');
 
         return Response::json($this->sharePresenter->shareResponse($share, $isCreator));
     }

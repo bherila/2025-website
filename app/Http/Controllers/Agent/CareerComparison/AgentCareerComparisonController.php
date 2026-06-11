@@ -11,6 +11,7 @@ use App\Services\Planning\CareerComp\CareerComparisonWorkflowService;
 use App\Services\Planning\CareerComp\CareerCompCalculator;
 use App\Services\Planning\CareerComp\CareerCompInputs;
 use App\Services\Planning\CareerComp\ComparisonSharePresenter;
+use App\Support\Agent\AgentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -137,8 +138,20 @@ class AgentCareerComparisonController extends Controller
         return response()->json($this->workflows->importRsuCurrentJob((int) Auth::id(), $validated['currentJob'] ?? null));
     }
 
+    /**
+     * Creator status for unredaction/mutation. Besides owning the comparison,
+     * the bound AgentContext must allow the career private permission — token
+     * scope only ever shrinks access, so a token scoped to another module
+     * (e.g. finance/tax) must not unlock career-confidential data even for the
+     * creator. Module-less tokens (legacy mcp_api_key, persistent module=null)
+     * are unscoped and pass when the user holds the permission. Must stay in
+     * sync with the identical guard in App\Mcp\Tools\Career\GetPublicShare.
+     */
     private function isCreator(CareerComparison $comparison): bool
     {
-        return Auth::id() !== null && $comparison->user_id !== null && (int) Auth::id() === (int) $comparison->user_id;
+        return Auth::id() !== null
+            && $comparison->user_id !== null
+            && (int) Auth::id() === (int) $comparison->user_id
+            && app(AgentContext::class)->can('financial-planning.career-comparison.private');
     }
 }
