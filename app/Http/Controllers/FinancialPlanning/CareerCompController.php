@@ -10,7 +10,7 @@ use App\Models\CareerComparison;
 use App\Services\Planning\CareerComp\CareerComparisonWorkflowService;
 use App\Services\Planning\CareerComp\CareerCompCalculator;
 use App\Services\Planning\CareerComp\CareerCompInputs;
-use App\Services\Planning\CareerComp\ComparisonShareRedactor;
+use App\Services\Planning\CareerComp\ComparisonSharePresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +20,7 @@ class CareerCompController extends Controller
 {
     public function __construct(
         private CareerCompCalculator $calculator,
-        private ComparisonShareRedactor $shareRedactor,
+        private ComparisonSharePresenter $sharePresenter,
         private CareerComparisonWorkflowService $workflows,
     ) {}
 
@@ -59,7 +59,7 @@ class CareerCompController extends Controller
         // Confidential share: hide the current job from anyone who is not the creator, so no
         // current-job dollar value reaches the page payload (directly or via the deltas column).
         if (! $share->share_includes_current && ! $isCreator) {
-            [$inputs, $projection] = $this->redactCurrent($inputs, $projection);
+            [$inputs, $projection] = $this->sharePresenter->redactCurrent($inputs, $projection);
         }
 
         return view('financial-planning.career-comparison', [
@@ -187,64 +187,7 @@ class CareerCompController extends Controller
      */
     private function shareResponse(CareerComparison $share, bool $isCreator): array
     {
-        $response = $this->workflows->response($share);
-        $response['isCreator'] = $isCreator;
-
-        if (! $share->share_includes_current && ! $isCreator) {
-            $inputs = is_array($response['inputs'] ?? null) ? $response['inputs'] : [];
-            $projection = is_array($response['projection'] ?? null) ? $response['projection'] : null;
-            [$response['inputs'], $response['projection']] = $this->redactCurrent($inputs, $projection);
-            $response['title'] = 'Career comparison';
-        }
-
-        return $response;
-    }
-
-    /**
-     * @param  array<string, mixed>  $inputs
-     * @param  array<string, mixed>|null  $projection
-     * @return array{0: array<string, mixed>, 1: array<string, mixed>|null}
-     */
-    private function redactCurrent(array $inputs, ?array $projection): array
-    {
-        $redacted = $this->shareRedactor->redact($inputs, $projection, $this->currentJobIdsForRedaction($inputs, $projection));
-        $redactedProjection = $projection !== null
-            ? $this->calculator->project(CareerCompInputs::fromArray($redacted['inputs']))->toArray()
-            : null;
-
-        return [$redacted['inputs'], $redactedProjection];
-    }
-
-    /**
-     * @param  array<string, mixed>  $inputs
-     * @param  array<string, mixed>|null  $projection
-     * @return list<string>
-     */
-    private function currentJobIdsForRedaction(array $inputs, ?array $projection): array
-    {
-        if (is_array($projection) && is_array($projection['currentJobIds'] ?? null)) {
-            return array_values(array_filter(array_map(
-                static fn (mixed $id): string => trim((string) $id),
-                $projection['currentJobIds'],
-            ), static fn (string $id): bool => $id !== ''));
-        }
-
-        if (is_array($inputs['currentJobs'] ?? null)) {
-            return array_values(array_filter(array_map(
-                static fn (mixed $job): string => is_array($job) ? trim((string) ($job['id'] ?? '')) : '',
-                $inputs['currentJobs'],
-            ), static fn (string $id): bool => $id !== ''));
-        }
-
-        if (is_array($inputs['currentJob'] ?? null) && is_string($inputs['currentJob']['id'] ?? null)) {
-            return [$inputs['currentJob']['id']];
-        }
-
-        if (is_array($projection) && is_string($projection['currentJobId'] ?? null)) {
-            return [$projection['currentJobId']];
-        }
-
-        return [];
+        return $this->sharePresenter->shareResponse($share, $isCreator);
     }
 
     /**
