@@ -14,8 +14,6 @@ class FinanceImportCenterControllerTest extends TestCase
     {
         parent::setUp();
 
-        $this->withoutVite();
-
         // Consume user ID 1 (always admin) so subsequent users are non-admin
         // and must pass the feature-permission gate.
         User::factory()->create(['user_role' => 'admin']);

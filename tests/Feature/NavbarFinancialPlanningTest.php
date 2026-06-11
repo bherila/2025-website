@@ -76,7 +76,7 @@ class NavbarFinancialPlanningTest extends TestCase
         $this->assertSame('dropdown', $finance['type']);
         $financeHrefs = array_column($finance['items'], 'href');
         $this->assertContains('/finance/accounts', $financeHrefs);
-        $this->assertContains('/finance/all-transactions', $financeHrefs);
+        $this->assertContains('/finance/account/all/transactions', $financeHrefs);
         $this->assertContains('/finance/tax-preview', $financeHrefs);
         $this->assertContains('/utility-bill-tracker', $financeHrefs);
         $this->assertContains('/tools/irs-f461', $financeHrefs);
