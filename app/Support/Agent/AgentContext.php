@@ -44,4 +44,9 @@ final class AgentContext
 
         return app(FeatureAccess::class)->can($this->user, $permission) && $this->tokenAllows($permission);
     }
+
+    public function allowsModule(string $module): bool
+    {
+        return $this->token === null || $this->token->module === null || $this->token->module === $module;
+    }
 }

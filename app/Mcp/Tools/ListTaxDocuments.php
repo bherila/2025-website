@@ -3,7 +3,9 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
-use App\Models\Files\FileForTaxDocument;
+use App\Mcp\Support\FiltersByFeature;
+use App\Mcp\Support\RequiresFeature;
+use App\Services\Finance\Agent\TaxDocumentsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -12,9 +14,19 @@ use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
 #[Description('List tax documents (W-2, 1099-INT, 1099-DIV, 1099-MISC, 1099-B, 1099-NEC, 1099-R, broker_1099 consolidated statements, K-1, Form 1116) for the authenticated user. Supports filtering by year, form type, and review status.')]
-class ListTaxDocuments extends Tool
+class ListTaxDocuments extends Tool implements RequiresFeature
 {
     use AuthorizesFeatureAccess;
+    use FiltersByFeature;
+
+    public static function requiredFeature(): ?string
+    {
+        return 'finance.tax-documents.view';
+    }
+
+    public function __construct(
+        private TaxDocumentsQueryService $taxDocuments,
+    ) {}
 
     public function handle(Request $request): Response
     {
@@ -22,31 +34,19 @@ class ListTaxDocuments extends Tool
             return $denied;
         }
 
-        $userId = Auth::id();
-
-        $query = FileForTaxDocument::where('user_id', $userId)
-            ->with([
-                'uploader:id,name',
-                'employmentEntity:id,display_name',
-                'account:acct_id,acct_name',
-            ])
-            ->orderBy('tax_year', 'desc')
-            ->orderBy('created_at', 'desc');
-
-        if ($request->has('year')) {
-            $query->where('tax_year', (int) $request->input('year'));
-        }
-
+        $formTypes = null;
         if ($request->has('form_type')) {
-            $types = array_filter(array_map('trim', explode(',', (string) $request->input('form_type'))));
-            $query->whereIn('form_type', $types);
+            $formTypes = array_values(array_filter(array_map('trim', explode(',', (string) $request->input('form_type')))));
         }
 
-        if ($request->has('is_reviewed')) {
-            $query->where('is_reviewed', filter_var($request->input('is_reviewed'), FILTER_VALIDATE_BOOLEAN));
-        }
+        $docs = $this->taxDocuments->listForUser(
+            (int) Auth::id(),
+            $request->has('year') ? (int) $request->input('year') : null,
+            $formTypes,
+            $request->has('is_reviewed') ? filter_var($request->input('is_reviewed'), FILTER_VALIDATE_BOOLEAN) : null,
+        );
 
-        return Response::json($query->get());
+        return Response::json($docs);
     }
 
     /**

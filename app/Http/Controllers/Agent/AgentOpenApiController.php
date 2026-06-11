@@ -79,7 +79,7 @@ class AgentOpenApiController extends Controller
             'x-bh-output-formats' => self::OUTPUT_FORMATS,
         ];
 
-        if ($capability->requestSchema !== null) {
+        if ($capability->requestSchema !== null && strtoupper((string) $capability->restMethod) !== 'GET') {
             $operation['requestBody'] = [
                 'required' => true,
                 'content' => [
@@ -87,6 +87,16 @@ class AgentOpenApiController extends Controller
                     AgentPayload::TOON_MEDIA_TYPE => ['schema' => $capability->requestSchema],
                 ],
             ];
+        }
+
+        $parameters = $capability->pathParameters;
+
+        if ($capability->requestSchema !== null && strtoupper((string) $capability->restMethod) === 'GET') {
+            $parameters = array_merge($parameters, $this->queryParameters($capability->requestSchema));
+        }
+
+        if ($parameters !== []) {
+            $operation['parameters'] = $parameters;
         }
 
         $responseContent = $capability->responseSchema === null
@@ -101,5 +111,50 @@ class AgentOpenApiController extends Controller
         ];
 
         return $operation;
+    }
+
+    /**
+     * @param  array<string, mixed>  $schema
+     * @return list<array<string, mixed>>
+     */
+    private function queryParameters(array $schema): array
+    {
+        $properties = $schema['properties'] ?? [];
+        if (! is_array($properties)) {
+            return [];
+        }
+
+        $required = array_flip(array_filter(
+            is_array($schema['required'] ?? null) ? $schema['required'] : [],
+            'is_string',
+        ));
+
+        $parameters = [];
+
+        foreach ($properties as $name => $propertySchema) {
+            if (! is_string($name) || ! is_array($propertySchema)) {
+                continue;
+            }
+
+            $description = is_string($propertySchema['description'] ?? null)
+                ? $propertySchema['description']
+                : null;
+            unset($propertySchema['description']);
+
+            $parameter = [
+                'name' => $name,
+                'in' => 'query',
+                'required' => isset($required[$name]),
+                'schema' => $propertySchema,
+            ];
+
+            if ($description !== null) {
+                $parameter['description'] = $description;
+            }
+
+            $parameters[] = $parameter;
+        }
+
+        return $parameters;
     }
 }

@@ -3,7 +3,9 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
-use App\Models\FinanceTool\FinAccounts;
+use App\Mcp\Support\FiltersByFeature;
+use App\Mcp\Support\RequiresFeature;
+use App\Services\Finance\Agent\AccountsQueryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -12,9 +14,19 @@ use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
 #[Description('List financial accounts for the authenticated user, grouped into asset, liability, and retirement accounts.')]
-class ListAccounts extends Tool
+class ListAccounts extends Tool implements RequiresFeature
 {
     use AuthorizesFeatureAccess;
+    use FiltersByFeature;
+
+    public static function requiredFeature(): ?string
+    {
+        return 'finance.accounts.basic';
+    }
+
+    public function __construct(
+        private AccountsQueryService $accounts,
+    ) {}
 
     public function handle(Request $request): Response
     {
@@ -22,23 +34,7 @@ class ListAccounts extends Tool
             return $denied;
         }
 
-        $uid = Auth::id();
-
-        $accounts = FinAccounts::where('acct_owner', $uid)
-            ->orderBy('when_closed', 'asc')
-            ->orderBy('acct_sort_order', 'asc')
-            ->orderBy('acct_name', 'asc')
-            ->get(['acct_id', 'acct_name', 'acct_is_debt', 'acct_is_retirement', 'when_closed']);
-
-        $assetAccounts = $accounts->filter(fn ($a) => ! $a->acct_is_debt && ! $a->acct_is_retirement)->values();
-        $liabilityAccounts = $accounts->filter(fn ($a) => $a->acct_is_debt && ! $a->acct_is_retirement)->values();
-        $retirementAccounts = $accounts->filter(fn ($a) => ! $a->acct_is_debt && $a->acct_is_retirement)->values();
-
-        return Response::json([
-            'assetAccounts' => $assetAccounts,
-            'liabilityAccounts' => $liabilityAccounts,
-            'retirementAccounts' => $retirementAccounts,
-        ]);
+        return Response::json($this->accounts->groupedForUser((int) Auth::id()));
     }
 
     /**

@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Middleware\AuthenticateMcpRequest;
+use App\Http\Middleware\AuthenticateAgentRequest;
 use App\Mcp\Servers\Finance;
 use Laravel\Mcp\Facades\Mcp;
 
@@ -14,9 +14,13 @@ Mcp::local('finance', Finance::class);
 
 /**
  * HTTP transport — used by remote MCP clients (e.g. production Claude Desktop config).
- * Requests must carry an `Authorization: Bearer <mcp_api_key_or_agent_token>` header.
+ * Requests must carry an `Authorization: Bearer <token>` header — either an
+ * agent_api_tokens quick-setup/persistent token or a legacy users.mcp_api_key.
  *
- * The AuthenticateMcpRequest middleware sets the authenticated user
- * statelessly so all per-user model scopes work correctly.
+ * AuthenticateAgentRequest resolves the user statelessly (legacy keys keep
+ * working via the AgentTokenService fallback) and binds an AgentContext so
+ * tools/list discovery is filtered by feature permission AND token scope
+ * (see App\Mcp\Support\FiltersByFeature). The `:finance` parameter rejects
+ * module-scoped agent tokens issued for a different module.
  */
-Mcp::web('/mcp/finance', Finance::class)->middleware(AuthenticateMcpRequest::class);
+Mcp::web('/mcp/finance', Finance::class)->middleware(AuthenticateAgentRequest::class.':finance');

@@ -15,12 +15,18 @@ use Symfony\Component\HttpFoundation\Response;
  * On success the user is set statelessly (no session/cookie side-effects) and
  * an AgentContext carrying the scoping token record is bound into the
  * container for downstream permission checks.
+ *
+ * An optional middleware parameter pins the route to one module (e.g.
+ * `AuthenticateAgentRequest::class.':finance'`): agent tokens scoped to a
+ * different module are rejected with 401, while module-less tokens (legacy
+ * mcp_api_key fallbacks and persistent tokens with `module = null`) are
+ * accepted and remain limited by their allowed_permissions scope.
  */
 class AuthenticateAgentRequest
 {
     public function __construct(private readonly AgentTokenService $tokenService) {}
 
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, ?string $module = null): Response
     {
         $rawToken = $request->bearerToken();
 
@@ -32,6 +38,10 @@ class AuthenticateAgentRequest
 
         if ($result === null) {
             return response()->json(['message' => 'Unauthenticated. Invalid, expired, or revoked token.'], 401);
+        }
+
+        if ($module !== null && $result['token']?->module !== null && $result['token']->module !== $module) {
+            return response()->json(['message' => 'Unauthenticated. Token is not scoped to this module.'], 401);
         }
 
         Auth::setUser($result['user']);

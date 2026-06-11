@@ -3,6 +3,8 @@
 namespace App\Mcp\Resources;
 
 use App\Mcp\Support\AuthorizesFeatureAccess;
+use App\Mcp\Support\FiltersByFeature;
+use App\Mcp\Support\RequiresFeature;
 use App\Models\FinanceTool\FinAccounts;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Mcp\Request;
@@ -13,9 +15,15 @@ use Laravel\Mcp\Server\Resource;
 
 #[Uri('finance://accounts')]
 #[Description('Complete list of financial accounts with metadata (type, balance, status). Use the list_accounts tool for structured queries.')]
-class Accounts extends Resource
+class Accounts extends Resource implements RequiresFeature
 {
     use AuthorizesFeatureAccess;
+    use FiltersByFeature;
+
+    public static function requiredFeature(): ?string
+    {
+        return 'finance.accounts.basic';
+    }
 
     public function handle(Request $request): Response
     {
