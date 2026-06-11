@@ -17,6 +17,8 @@ class CareerCompShareLeakageTest extends TestCase
 
     private const string CURRENT_NAME = 'Confidential Current';
 
+    private const string CURRENT_RSU_SYMBOL = 'HUSH';
+
     private const string SIDE_CURRENT_SALARY = '131313';
 
     private const string SIDE_CURRENT_NAME = 'Confidential Side Current';
@@ -32,6 +34,7 @@ class CareerCompShareLeakageTest extends TestCase
         $content = (string) $response->getContent();
         $this->assertStringNotContainsString(self::CURRENT_SALARY, $content);
         $this->assertStringNotContainsString(self::CURRENT_NAME, $content);
+        $this->assertStringNotContainsString(self::CURRENT_RSU_SYMBOL, $content);
         $this->assertStringNotContainsString(self::SIDE_CURRENT_SALARY, $content);
         $this->assertStringNotContainsString(self::SIDE_CURRENT_NAME, $content);
         $this->assertStringContainsString('"currentJob":null', $content);
@@ -51,6 +54,7 @@ class CareerCompShareLeakageTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString(self::CURRENT_SALARY, (string) $response->getContent());
+        $this->assertStringContainsString(self::CURRENT_RSU_SYMBOL, (string) $response->getContent());
         $this->assertStringContainsString(self::SIDE_CURRENT_SALARY, (string) $response->getContent());
     }
 
@@ -69,6 +73,7 @@ class CareerCompShareLeakageTest extends TestCase
         $blob = implode("\n", $cells);
         $this->assertStringNotContainsString(self::CURRENT_SALARY, $blob);
         $this->assertStringNotContainsString(self::CURRENT_NAME, $blob);
+        $this->assertStringNotContainsString(self::CURRENT_RSU_SYMBOL, $blob);
         $this->assertStringNotContainsString(self::SIDE_CURRENT_SALARY, $blob);
         $this->assertStringNotContainsString(self::SIDE_CURRENT_NAME, $blob);
         $this->assertStringContainsString('Public Offer', $blob);
@@ -84,6 +89,28 @@ class CareerCompShareLeakageTest extends TestCase
         $mainCurrent['id'] = 'current';
         $mainCurrent['name'] = self::CURRENT_NAME;
         $mainCurrent['comp']['baseSalary'] = (float) self::CURRENT_SALARY;
+        $mainCurrent['rsuGrants'] = [[
+            'id' => 'confidential-current-rsu',
+            'kind' => 'hire',
+            'grantDate' => '2026-01-15',
+            'vestingStartDate' => null,
+            'shareCount' => 100,
+            'sourceAwardId' => null,
+            'sourceAwardRowIds' => [],
+            'symbol' => self::CURRENT_RSU_SYMBOL,
+            'rsuSource' => null,
+            'grantValue' => null,
+            'grantPrice' => 25,
+            'cliffMonths' => 0,
+            'vestingYears' => 4,
+            'vestingFrequency' => 'quarterly',
+            'vestingSchedule' => null,
+            'vestingEvents' => [[
+                'vestDate' => '2026-04-15',
+                'shareCount' => 25,
+                'vestPrice' => 25,
+            ]],
+        ]];
         // Decreasing growth bands force a calculator warning that embeds the current job name,
         // so the leakage assertions exercise warning redaction, not just job/series removal.
         $mainCurrent['growthBands'] = ['lowPct' => 10.0, 'mediumPct' => 5.0, 'highPct' => 0.0];

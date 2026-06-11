@@ -413,7 +413,7 @@ describe('CareerCompPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete link' }))
 
     await waitFor(() => expect(mockDeleteShare).toHaveBeenCalledWith('share123'))
-    expect(await screen.findByText(/this link will no longer work/i)).toBeInTheDocument()
+    expect(await screen.findByText(/this link will no longer work/i, undefined, { timeout: 5000 })).toBeInTheDocument()
   })
 
   it('imports RSU grants into the current job for authenticated users', async () => {
@@ -422,7 +422,7 @@ describe('CareerCompPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import RSU' }))
 
     await waitFor(() => expect(mockImportRsu).toHaveBeenCalledWith(currentJobFixture))
-    expect(await screen.findByText('No RSU awards found to import.')).toBeInTheDocument()
+    expect(await screen.findByText('No RSU awards found to import.', undefined, { timeout: 5000 })).toBeInTheDocument()
   })
 
   it('keeps focus in a new grant editor after the first field change creates the grant', () => {

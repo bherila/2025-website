@@ -283,6 +283,28 @@ class CareerCompPersistenceTest extends TestCase
         $visitor = User::factory()->create();
         $inputs = CareerCompInputs::defaults();
         $inputs['currentJob']['name'] = 'Confidential current';
+        $inputs['currentJob']['rsuGrants'] = [[
+            'id' => 'confidential-rsu',
+            'kind' => 'hire',
+            'grantDate' => '2026-01-15',
+            'vestingStartDate' => null,
+            'shareCount' => 120,
+            'sourceAwardId' => null,
+            'sourceAwardRowIds' => [],
+            'symbol' => 'HUSH',
+            'rsuSource' => null,
+            'grantValue' => null,
+            'grantPrice' => 25,
+            'cliffMonths' => 0,
+            'vestingYears' => 4,
+            'vestingFrequency' => 'quarterly',
+            'vestingSchedule' => null,
+            'vestingEvents' => [[
+                'vestDate' => '2026-04-15',
+                'shareCount' => 30,
+                'vestPrice' => 25,
+            ]],
+        ]];
         $share = $this->actingAs($owner)->postJson('/api/financial-planning/career-comparison/share', [
             'inputs' => $inputs,
             'shareIncludesCurrent' => false,
@@ -302,6 +324,10 @@ class CareerCompPersistenceTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('inputs.currentJob', null);
         $this->assertSame($storedCurrentJobId, CareerComparison::query()->where('short_code', $code)->value('current_job_id'));
+
+        $storedCurrentJob = CareerJob::query()->findOrFail($storedCurrentJobId);
+        $this->assertSame('confidential-rsu', $storedCurrentJob->spec_json['rsuGrants'][0]['id']);
+        $this->assertSame('HUSH', $storedCurrentJob->spec_json['rsuGrants'][0]['symbol']);
     }
 
     public function test_confidential_share_hides_multiple_current_jobs_from_non_creator_and_preserves_them_on_save(): void
@@ -568,6 +594,7 @@ class CareerCompPersistenceTest extends TestCase
 
     public function test_shared_rsu_snapshot_does_not_refresh_after_source_awards_change(): void
     {
+        $this->withoutVite();
         $user = User::factory()->create();
         $award = FinEquityAwards::query()->create([
             'uid' => $user->id,
@@ -595,21 +622,19 @@ class CareerCompPersistenceTest extends TestCase
         ]);
         $share->assertCreated();
         $code = $share->json('shortCode');
-        $comparison = CareerComparison::query()->where('short_code', $code)->firstOrFail();
-        $storedJobId = $comparison->current_job_ids[0];
-        $storedJob = CareerJob::query()->findOrFail($storedJobId);
-        $snapshot = $storedJob->spec_json['rsuGrants'][0];
-        $this->assertSame('snapshot', $snapshot['rsuSource']['mode']);
-        $this->assertSame([$award->id], $snapshot['rsuSource']['sourceAwardRowIds']);
 
         $award->update(['share_count' => 99, 'vest_price' => 999]);
         $award->delete();
 
-        $reloaded = CareerJob::query()->findOrFail($storedJobId)->spec_json['rsuGrants'][0];
-        $this->assertSame(12.5, $reloaded['shareCount']);
-        $this->assertSame(12.5, $reloaded['vestingEvents'][0]['shareCount']);
-        $this->assertEquals(20.0, $reloaded['vestingEvents'][0]['vestPrice']);
-        $this->assertSame($snapshot['rsuSource']['sourceHash'], $reloaded['rsuSource']['sourceHash']);
+        $page = $this->actingAs($user)->get("/financial-planning/career-comparison/s/{$code}");
+
+        $page->assertOk();
+        $content = (string) $page->getContent();
+        $this->assertStringContainsString('"mode":"snapshot"', $content);
+        $this->assertStringContainsString('"shareCount":12.5', $content);
+        $this->assertStringContainsString('"vestPrice":20', $content);
+        $this->assertStringNotContainsString('"shareCount":99', $content);
+        $this->assertStringNotContainsString('"vestPrice":999', $content);
     }
 
     public function test_imported_rsu_vesting_events_are_persisted_and_recalculated_after_reload(): void

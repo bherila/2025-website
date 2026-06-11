@@ -602,7 +602,13 @@ class RsuSettlementService
             ->where('link_type', $data['link_type']);
 
         if (($data['settlement_allocation_id'] ?? null) !== null) {
-            return $query->where('settlement_allocation_id', $data['settlement_allocation_id'])->exists();
+            return $query
+                ->where('settlement_allocation_id', $data['settlement_allocation_id'])
+                ->where('transaction_id', $data['transaction_id'] ?? null)
+                ->where('account_id', $data['account_id'] ?? null)
+                ->where('lot_id', $data['lot_id'] ?? null)
+                ->where('payslip_id', $data['payslip_id'] ?? null)
+                ->exists();
         }
 
         return $query
