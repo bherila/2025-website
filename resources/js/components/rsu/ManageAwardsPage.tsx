@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Pencil, Plus, RefreshCw, Trash2 } from 'luci
 import { useEffect, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
+import { getShares, sharePriceSourceLabel } from '@/components/rsu/helpers'
 import { RsuImportModal } from '@/components/rsu/RsuImportModal'
 import RsuSubNav from '@/components/rsu/RsuSubNav'
 import { Button } from '@/components/ui/button'
@@ -33,23 +34,19 @@ interface AwardSchedule {
   rows: IAward[]
 }
 
+interface BackfillVestPriceResponse {
+  updated?: number[]
+  missing?: number[]
+}
+
 function getShareCount(award: IAward): number {
-  if (typeof award.share_count === 'object') return award.share_count.value
-  return Number(award.share_count ?? 0)
+  return getShares(award) ?? 0
 }
 
 function nullableNumber(value: unknown): number | null {
   if (value === '' || value == null) return null
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : null
-}
-
-function priceSourceLabel(source: IAward['vest_price_source'] | IAward['grant_price_source']): string {
-  if (source === 'quote_close') return 'Quote close'
-  if (source === 'manual') return 'Manual'
-  if (source === 'imported') return 'Imported'
-  if (source === 'unknown') return 'Legacy'
-  return 'No source'
 }
 
 export default function ManageAwardsPage() {
@@ -64,6 +61,9 @@ export default function ManageAwardsPage() {
   const [bulkVestPrice, setBulkVestPrice] = useState('')
   const [expandedSchedules, setExpandedSchedules] = useState<Record<string, boolean>>({})
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [actionTone, setActionTone] = useState<'default' | 'warning'>('default')
+  const [isBackfilling, setIsBackfilling] = useState(false)
 
   const loadData = () => {
     setLoading(true)
@@ -123,8 +123,11 @@ export default function ManageAwardsPage() {
   const handleDelete = async () => {
     if (!deleteAward?.id) return
 
+    setActionMessage(null)
     try {
       await fetchWrapper.delete(`/api/rsu/${deleteAward.id}`, {})
+      setActionMessage('Deleted vest event.')
+      setActionTone('default')
       setDeleteAward(null)
       loadData()
     } catch (e) {
@@ -136,14 +139,47 @@ export default function ManageAwardsPage() {
   const handleDeleteSchedule = async () => {
     if (!deleteSchedule) return
 
-    try {
-      await Promise.all(deleteSchedule.rows.filter((award) => award.id).map((award) => fetchWrapper.delete(`/api/rsu/${award.id}`, {})))
+    setActionMessage(null)
+    const rowsWithIds = deleteSchedule.rows.filter((award): award is IAward & { id: number } => typeof award.id === 'number')
+    if (rowsWithIds.length === 0) {
       setDeleteSchedule(null)
-      loadData()
-    } catch (e) {
-      console.error(e)
-      setErrorMessage('Failed to delete award schedule.')
+      setActionMessage('No saved vest events were found for this schedule.')
+      setActionTone('warning')
+      return
     }
+
+    const deletedIds: number[] = []
+    const failedRows: IAward[] = []
+
+    for (const award of rowsWithIds) {
+      try {
+        await fetchWrapper.delete(`/api/rsu/${award.id}`, {})
+        deletedIds.push(award.id)
+      } catch (e) {
+        console.error(e)
+        failedRows.push(award)
+      }
+    }
+
+    setDeleteSchedule(null)
+
+    if (deletedIds.length > 0) {
+      loadData()
+    }
+
+    if (failedRows.length === 0) {
+      setActionMessage(`Deleted ${deletedIds.length} vest event${deletedIds.length === 1 ? '' : 's'} from the schedule.`)
+      setActionTone('default')
+      return
+    }
+
+    if (deletedIds.length > 0) {
+      setActionMessage(`Deleted ${deletedIds.length} of ${rowsWithIds.length} vest events; ${failedRows.length} failed.`)
+      setActionTone('warning')
+      return
+    }
+
+    setErrorMessage(`Failed to delete ${failedRows.length} vest event${failedRows.length === 1 ? '' : 's'} from the schedule.`)
   }
 
   const handleBulkVestPrice = async () => {
@@ -170,23 +206,39 @@ export default function ManageAwardsPage() {
   }
 
   const handleBackfill = async () => {
+    setIsBackfilling(true)
+    setActionMessage(null)
     try {
-      await fetchWrapper.post('/api/rsu/backfill-vest-prices', {})
+      const response = await fetchWrapper.post('/api/rsu/backfill-vest-prices', {}) as BackfillVestPriceResponse
+      const updatedCount = response.updated?.length ?? 0
+      const missingCount = response.missing?.length ?? 0
+      const updatedText = updatedCount === 1 ? 'Updated 1 vest price' : `Updated ${updatedCount} vest prices`
+      const missingText = missingCount === 1 ? '1 vest event is still missing a price' : `${missingCount} vest events are still missing prices`
+      setActionMessage(missingCount > 0 ? `${updatedText}; ${missingText}.` : `${updatedText}; no missing vest prices remain from the backfill set.`)
+      setActionTone(missingCount > 0 ? 'warning' : 'default')
       loadData()
     } catch (e) {
       console.error(e)
       setErrorMessage('Failed to backfill vest prices.')
+    } finally {
+      setIsBackfilling(false)
     }
   }
 
   const handleSave = async () => {
     if (!editingAward) return
 
+    const shareCount = getShares(editingAward)
+    if (shareCount == null || !Number.isFinite(shareCount)) {
+      setErrorMessage('Share count is required.')
+      return
+    }
+
     setIsSaving(true)
     try {
       const payload = {
         ...editingAward,
-        share_count: getShareCount(editingAward),
+        share_count: shareCount,
         grant_price: nullableNumber(editingAward.grant_price),
         vest_price: nullableNumber(editingAward.vest_price),
         clear_grant_price: editingAward.grant_price == null,
@@ -222,9 +274,9 @@ export default function ManageAwardsPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={handleBackfill}>
+              <Button variant="outline" disabled={isBackfilling} onClick={handleBackfill}>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Backfill prices
+                {isBackfilling ? 'Backfilling...' : 'Backfill prices'}
               </Button>
               <RsuImportModal onImportSuccess={loadData} />
               <Button onClick={handleAdd}>
@@ -233,6 +285,12 @@ export default function ManageAwardsPage() {
               </Button>
             </div>
           </div>
+
+          {actionMessage && (
+            <div className={`mb-4 rounded-md border px-3 py-2 text-sm ${actionTone === 'warning' ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200' : 'border-border bg-muted/40 text-muted-foreground'}`}>
+              {actionMessage}
+            </div>
+          )}
 
           {loading ? (
             <div className="flex justify-center py-8">
@@ -295,8 +353,8 @@ export default function ManageAwardsPage() {
                         <TableCell className="text-right">{getShareCount(award)}</TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1 text-sm">
-                            <span>Grant: {award.grant_price != null ? currency(award.grant_price).format() : '—'} ({priceSourceLabel(award.grant_price_source)})</span>
-                            <span>Vest: {award.vest_price != null ? currency(award.vest_price).format() : '—'} ({priceSourceLabel(award.vest_price_source)})</span>
+                            <span>Grant: {award.grant_price != null ? currency(award.grant_price).format() : '—'} ({sharePriceSourceLabel(award.grant_price_source)})</span>
+                            <span>Vest: {award.vest_price != null ? currency(award.vest_price).format() : '—'} ({sharePriceSourceLabel(award.vest_price_source)})</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-right">

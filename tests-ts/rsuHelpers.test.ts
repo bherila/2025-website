@@ -7,6 +7,6 @@ describe('RSU helpers', () => {
   })
 
   it('uses currency math for fractional share values', () => {
-    expect(shareValue(1.25, 10)?.value).toBe(12.5)
+    expect(shareValue(1.25, 10)).toBe(12.5)
   })
 })

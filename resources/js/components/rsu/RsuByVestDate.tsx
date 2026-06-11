@@ -8,7 +8,8 @@ import type { IAward } from '@/types/finance'
 
 export function RsuByVestDate(props: { rsu: IAward[] }) {
   const { rsu } = props
-  const grouped = groupBy(rsu, (r) => r.vest_date)
+  const actualRsu = rsu.filter((r) => !r.isVirtual)
+  const grouped = groupBy(actualRsu, (r) => r.vest_date)
   const now = todayIso()
   return (
     <Table>
@@ -23,12 +24,12 @@ export function RsuByVestDate(props: { rsu: IAward[] }) {
         </tr>
       </TableHeader>
       <TableBody>
-        {Object.keys(grouped).map((k, i) => {
+        {Object.keys(grouped).map((k) => {
           const lRSU = grouped[k]
           if (!lRSU) return null
 
           const vested = k <= now
-          const totalShares = lRSU.reduce((p, c) => p.add(c.share_count!), currency(0))
+          const totalShares = lRSU.reduce((p, c) => p.add(getShares(c) ?? 0), currency(0))
           // Compute weighted average price and total value using currency.js
           const totalValue = lRSU.reduce((sum, c) => {
             const shares = getShares(c)
@@ -39,14 +40,14 @@ export function RsuByVestDate(props: { rsu: IAward[] }) {
             return sum.add(shares && c.grant_price ? currency(shares).multiply(c.grant_price) : currency(0))
           }, currency(0))
           // If all have vest_price, show average price
-          const avgPrice = lRSU.every((c) => c.vest_price != null && c.share_count != null)
+          const avgPrice = totalShares.value > 0 && lRSU.every((c) => c.vest_price != null && getShares(c) != null)
             ? totalValue.divide(totalShares.value).format()
             : ''
-          const avgGrantPrice = lRSU.every((c) => c.grant_price != null && c.share_count != null)
+          const avgGrantPrice = totalShares.value > 0 && lRSU.every((c) => c.grant_price != null && getShares(c) != null)
             ? totalGrantValue.divide(totalShares.value).format()
             : ''
           return (
-            <TableRow key={i} style={vested ? vestStyle : {}}>
+            <TableRow key={k} style={vested ? vestStyle : {}}>
               <TableCell>
                 {vested && '✔ '}
                 {k}

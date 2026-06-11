@@ -1,6 +1,6 @@
 import currency from 'currency.js'
 
-import { getShares, isVested, shareValue, todayIso, toLocalIsoDate } from '@/components/rsu/helpers'
+import { getShares, isVested, sharePriceSourceLabel, shareValue, todayIso, toLocalIsoDate } from '@/components/rsu/helpers'
 
 describe('rsu/helpers', () => {
   describe('todayIso', () => {
@@ -55,6 +55,10 @@ describe('rsu/helpers', () => {
       expect(getShares({ share_count: '10.125000' })).toBe(10.125)
     })
 
+    it('treats blank string share counts as missing', () => {
+      expect(getShares({ share_count: '   ' })).toBeUndefined()
+    })
+
     it('returns undefined when share_count is missing', () => {
       expect(getShares({})).toBeUndefined()
     })
@@ -63,8 +67,7 @@ describe('rsu/helpers', () => {
   describe('shareValue', () => {
     it('multiplies shares × price using currency.js', () => {
       const v = shareValue(10, 4.5)
-      expect(v).not.toBeNull()
-      expect(v!.value).toBe(45)
+      expect(v).toBe(45)
     })
 
     it('returns null when shares is missing', () => {
@@ -74,6 +77,14 @@ describe('rsu/helpers', () => {
     it('returns null when price is missing', () => {
       expect(shareValue(10, null)).toBeNull()
       expect(shareValue(10, undefined)).toBeNull()
+    })
+  })
+
+  describe('sharePriceSourceLabel', () => {
+    it('formats known price sources for display', () => {
+      expect(sharePriceSourceLabel('quote_close')).toBe('Quote close')
+      expect(sharePriceSourceLabel('manual')).toBe('Manual')
+      expect(sharePriceSourceLabel(null)).toBe('No source')
     })
   })
 })

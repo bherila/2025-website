@@ -480,6 +480,7 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
               const { row, index: i } = item
               if (!row) return null
               const rowId = row.t_id ?? -i
+              const rsuLinkCount = row.rsu_links?.length ?? 0
               const isRowSelected = rowId >= 0 && selectedRowIds.has(rowId)
               const isFocused = i === focusedRowIndex
               // Calculate correct aria-rowindex: global index for virtual scroll, page offset + index for pagination
@@ -523,7 +524,18 @@ export default function TransactionsTable({ data, onDeleteTransaction, enableTag
                   )}
 
                   <td className={cn(tdClass, "hover:text-primary font-medium")} onDoubleClick={() => setDescriptionFilter(descriptionFilter === row.t_description ? '' : (row.t_description || ''))}>
-                    {row.t_description}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span>{row.t_description}</span>
+                      {rsuLinkCount > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="rounded-sm border-primary/30 bg-primary/10 px-1.5 py-0 font-mono text-[9px] font-semibold uppercase text-primary"
+                          title={`${rsuLinkCount} RSU settlement link${rsuLinkCount === 1 ? '' : 's'}`}
+                        >
+                          RSU
+                        </Badge>
+                      )}
+                    </div>
                   </td>
 
                   {!isTagsColumnEmpty && <td className={tdClass}>{renderTransactionTags(row)}</td>}

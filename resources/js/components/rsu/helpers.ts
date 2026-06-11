@@ -26,15 +26,26 @@ export function getShares(award: Pick<IAward, 'share_count'>): number | undefine
   if (s == null) {
     return undefined
   }
+  if (typeof s === 'string' && s.trim() === '') {
+    return undefined
+  }
   // The /api/rsu payload serializes share_count via Laravel's decimal cast, which
   // can surface as a numeric string (e.g. "10.125000"); normalize to a number so
   // callers never accidentally do string concatenation. currency.js objects expose .value.
   return typeof s === 'object' ? s.value : Number(s)
 }
 
-export function shareValue(shares: number | undefined, pricePerShare: number | null | undefined): currency | null {
+export function shareValue(shares: number | undefined, pricePerShare: number | null | undefined): number | null {
   if (shares == null || pricePerShare == null) {
     return null
   }
-  return currency(shares).multiply(pricePerShare)
+  return currency(shares).multiply(pricePerShare).value
+}
+
+export function sharePriceSourceLabel(source: IAward['vest_price_source'] | IAward['grant_price_source']): string {
+  if (source === 'quote_close') return 'Quote close'
+  if (source === 'manual') return 'Manual'
+  if (source === 'imported') return 'Imported'
+  if (source === 'unknown') return 'Legacy'
+  return 'No source'
 }
