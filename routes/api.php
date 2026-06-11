@@ -21,6 +21,7 @@ use App\Http\Controllers\ClientManagement\ClientPortalProposalApiController;
 use App\Http\Controllers\ClientManagement\ClientProposalApiController;
 use App\Http\Controllers\ClientManagement\StripeWebhookController;
 use App\Http\Controllers\FileController;
+use App\Http\Controllers\Finance\OnboardingSummaryController;
 use App\Http\Controllers\Finance\PalCarryforwardController;
 use App\Http\Controllers\Finance\ReadinessSummaryController;
 use App\Http\Controllers\Finance\TaxPreviewDataController;
@@ -612,6 +613,7 @@ Route::middleware(['web', 'auth', 'feature:utility-bills.manage'])->post('/utili
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.export'])->post('/finance/tax-preview/export-xlsx', [TaxPreviewExportController::class, 'export']);
 Route::middleware(['web', 'throttle:60,1'])->post('/financial-planning/career-comparison/export-xlsx', [CareerCompXlsxExportController::class, 'export']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-preview-data', [TaxPreviewDataController::class, 'index']);
+Route::middleware(['web', 'auth', 'feature:finance.access'])->get('/finance/onboarding-summary', [OnboardingSummaryController::class, 'show']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/readiness-summary', [ReadinessSummaryController::class, 'show']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view'])->get('/finance/tax-years/{year}/reconciliation-summary', [ReconciliationSummaryController::class, 'show']);
 Route::middleware(['web', 'auth', 'feature:finance.tax-preview.view,finance.tax-documents.view'])->get('/finance/tax-years/{year}/lot-reconciliation', [TaxDocumentLotReconciliationController::class, 'year']);

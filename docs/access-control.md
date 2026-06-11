@@ -65,6 +65,7 @@ This allows Tax Preview users to receive basic account metadata for selectors wi
 | `GET /finance/documents` | `finance.tax-documents.view` |
 | `GET /finance/tax-preview` | `finance.tax-preview.view` |
 | `GET /finance/account/all/import` | `finance.transactions.import` |
+| `GET /api/finance/onboarding-summary` | `finance.access` (per-section data gated behind each section's view permission; sections without it return `no_access`) |
 
 ## Enforcement points
 
