@@ -71,9 +71,11 @@ class FinanceOnboardingSummaryService
      * @param  list<int>  $availableYears  Pre-computed list from the caller (avoids a second DB round-trip).
      * @return array{year: int, availableYears: list<int>, sections: list<SectionPayload>, primaryActions: list<array<string, mixed>>, warnings: list<array<string, mixed>>}
      */
-    public function summaryForYear(User $user, int $year, array $availableYears): array
+    public function summaryForYear(User $user, int $year, array $availableYears = []): array
     {
-        $readiness = $this->readinessSummaryService->summaryForYear((int) $user->id, $year);
+        $readiness = $this->featureAccess->can($user, 'finance.tax-preview.view')
+            ? $this->readinessSummaryService->summaryForYear((int) $user->id, $year)
+            : null;
 
         $sections = [
             $this->accountsSection($user),
@@ -311,10 +313,17 @@ class FinanceOnboardingSummaryService
     }
 
     /**
-     * @param  array<string, mixed>  $readiness  Pre-computed readiness summary (shared with taxPreviewSection).
+     * Reconciliation health (drift/blocked) is sourced from ReadinessSummaryService,
+     * which is otherwise reachable only behind `finance.tax-preview.view`. A user
+     * holding `finance.lots.view` alone must not learn reconciliation state, so the
+     * counts and the "needs attention" status are emitted only when the user also
+     * holds `finance.tax-preview.view`. Without it, the section is computed from the
+     * lot count alone.
+     *
+     * @param  array<string, mixed>|null  $readiness  Pre-computed readiness summary (shared with taxPreviewSection); null when the caller lacks tax-preview access.
      * @return SectionPayload
      */
-    private function lotsSection(User $user, int $year, array $readiness): array
+    private function lotsSection(User $user, int $year, ?array $readiness): array
     {
         if (! $this->featureAccess->can($user, 'finance.lots.view')) {
             return $this->noAccessSection('lots', 'Lots');
@@ -324,15 +333,19 @@ class FinanceOnboardingSummaryService
             ->whereHas('account', fn ($query) => $query->withoutGlobalScopes()->where('acct_owner', $user->id))
             ->count();
 
-        $reconciliation = $readiness['reconciliation_health'];
-        $drift = (int) ($reconciliation['drift'] ?? 0);
-        $blocked = (int) ($reconciliation['blocked'] ?? 0);
+        $canSeeReconciliation = $readiness !== null && $this->featureAccess->can($user, 'finance.tax-preview.view');
 
-        $counts = [
-            'lots' => $lotCount,
-            'reconciliation_drift' => $drift,
-            'reconciliation_blocked' => $blocked,
-        ];
+        $counts = ['lots' => $lotCount];
+        $drift = 0;
+        $blocked = 0;
+        if ($canSeeReconciliation) {
+            $reconciliation = $readiness['reconciliation_health'];
+            $drift = (int) ($reconciliation['drift'] ?? 0);
+            $blocked = (int) ($reconciliation['blocked'] ?? 0);
+            $counts['reconciliation_drift'] = $drift;
+            $counts['reconciliation_blocked'] = $blocked;
+        }
+
         $actions = $this->filterActions($user, [
             $this->action('lots.view', 'Review lots', '/finance/account/all/lots', 'secondary', 'finance.lots.view'),
         ]);
@@ -341,11 +354,15 @@ class FinanceOnboardingSummaryService
             return $this->section('lots', 'not_started', 'Lots', 'No lots recorded yet.', $counts, $actions);
         }
 
-        if ($drift > 0 || $blocked > 0) {
+        if ($canSeeReconciliation && ($drift > 0 || $blocked > 0)) {
             return $this->section('lots', 'needs_attention', 'Lots', "Lot reconciliation needs attention for {$year}.", $counts, $actions);
         }
 
-        return $this->section('lots', 'ready', 'Lots', "{$lotCount} lot(s) recorded and reconciled.", $counts, $actions);
+        if ($canSeeReconciliation) {
+            return $this->section('lots', 'ready', 'Lots', "{$lotCount} lot(s) recorded and reconciled.", $counts, $actions);
+        }
+
+        return $this->section('lots', 'ready', 'Lots', "{$lotCount} lot(s) recorded.", $counts, $actions);
     }
 
     /**
@@ -397,30 +414,41 @@ class FinanceOnboardingSummaryService
         }
 
         $tagCount = FinAccountTag::query()->where('tag_userid', $user->id)->count();
-        $ruleCount = FinRule::query()->where('user_id', $user->id)->count();
 
-        $counts = [
-            'tags' => $tagCount,
-            'rules' => $ruleCount,
-        ];
+        $canManageRules = $this->featureAccess->can($user, 'finance.rules.manage');
+        $ruleCount = $canManageRules
+            ? FinRule::query()->where('user_id', $user->id)->count()
+            : 0;
+
+        $counts = ['tags' => $tagCount];
+        if ($canManageRules) {
+            $counts['rules'] = $ruleCount;
+        }
+
         $actions = $this->filterActions($user, [
             $this->action('categorization.manage', 'Manage tags and rules', '/finance/tags', 'primary', 'finance.rules.manage'),
         ]);
 
         if ($tagCount === 0 && $ruleCount === 0) {
-            return $this->section('categorization', 'optional', 'Categorization', 'No tags or rules configured yet.', $counts, $actions);
+            $summary = $canManageRules ? 'No tags or rules configured yet.' : 'No tags configured yet.';
+
+            return $this->section('categorization', 'optional', 'Categorization', $summary, $counts, $actions);
         }
 
-        return $this->section('categorization', 'ready', 'Categorization', "{$tagCount} tag(s) and {$ruleCount} rule(s) configured.", $counts, $actions);
+        $summary = $canManageRules
+            ? "{$tagCount} tag(s) and {$ruleCount} rule(s) configured."
+            : "{$tagCount} tag(s) configured.";
+
+        return $this->section('categorization', 'ready', 'Categorization', $summary, $counts, $actions);
     }
 
     /**
-     * @param  array<string, mixed>  $readiness  Pre-computed readiness summary (shared with lotsSection).
+     * @param  array<string, mixed>|null  $readiness  Pre-computed readiness summary (shared with lotsSection); null only when the user lacks tax-preview access, in which case the early return fires first.
      * @return SectionPayload
      */
-    private function taxPreviewSection(User $user, int $year, array $readiness): array
+    private function taxPreviewSection(User $user, int $year, ?array $readiness): array
     {
-        if (! $this->featureAccess->can($user, 'finance.tax-preview.view')) {
+        if (! $this->featureAccess->can($user, 'finance.tax-preview.view') || $readiness === null) {
             return $this->noAccessSection('tax_preview', 'Tax Preview');
         }
 

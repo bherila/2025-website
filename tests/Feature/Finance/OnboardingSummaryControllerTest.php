@@ -5,6 +5,7 @@ namespace Tests\Feature\Finance;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
+use App\Models\FinanceTool\FinPayslips;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -130,8 +131,9 @@ class OnboardingSummaryControllerTest extends TestCase
         $user = $this->userWithFinanceAccess(['finance.access']);
         $this->actingAs($user);
 
-        // Create payslip data as a different user so it can never leak.
+        // Seed real data for a different user; no_access must hold regardless.
         $other = $this->userWithFinanceAccess($this->allFinancePermissions);
+        $this->seedFinanceData($other);
 
         $response = $this->getJson('/api/finance/onboarding-summary?year=2024');
 
@@ -143,6 +145,23 @@ class OnboardingSummaryControllerTest extends TestCase
             $this->assertSame('', $section['summary'], "Section {$sectionId} must not expose summary text");
             $this->assertSame([], $section['actions']);
         }
+    }
+
+    public function test_summary_counts_exclude_other_users_data(): void
+    {
+        $user = $this->userWithFinanceAccess($this->allFinancePermissions);
+        $this->actingAs($user);
+
+        // Another fully-permissioned user with real data that must not leak in.
+        $other = $this->userWithFinanceAccess($this->allFinancePermissions);
+        $this->seedFinanceData($other);
+
+        $response = $this->getJson('/api/finance/onboarding-summary?year=2024');
+
+        $response->assertOk();
+        $this->assertSame(0, $this->section($response->json('sections'), 'accounts')['counts']['accounts']);
+        $this->assertSame(0, $this->section($response->json('sections'), 'transactions')['counts']['transactions']);
+        $this->assertSame(0, $this->section($response->json('sections'), 'payslips')['counts']['payslips']);
     }
 
     public function test_actions_are_permission_filtered(): void
@@ -201,6 +220,26 @@ class OnboardingSummaryControllerTest extends TestCase
                 'acct_name' => 'Test Brokerage',
                 'acct_number' => '9999',
                 'acct_last_balance' => '0',
+            ]);
+        });
+    }
+
+    /**
+     * Seed an account, a 2024 transaction, and a 2024 payslip for the given user.
+     */
+    private function seedFinanceData(User $user): void
+    {
+        $account = $this->makeFinAccount($user);
+        FinAccountLineItems::query()->create([
+            't_account' => $account->acct_id,
+            't_date' => '2024-03-15',
+            't_type' => 'buy',
+            't_amt' => '100',
+        ]);
+        FinPayslips::withoutEvents(function () use ($user): void {
+            FinPayslips::query()->forceCreate([
+                'uid' => $user->id,
+                'pay_date' => '2024-06-15',
             ]);
         });
     }

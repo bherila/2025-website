@@ -7,6 +7,7 @@ export type FinanceTopToolId =
   | 'tags'
   | 'calculators'
   | 'accounts'
+  | 'import'
   | 'config'
 
 export interface FinanceTopToolDef {
@@ -48,6 +49,9 @@ export const FINANCE_TOP_TOOLS: FinanceTopToolDef[] = [
   { id: 'tags', label: 'Tags', href: '/finance/tags', permission: 'finance.rules.manage', keywords: ['tags', 'categories', 'rules'] },
   { id: 'calculators', label: 'Calculators', href: '/financial-planning', keywords: ['calculators', 'financial planning', 'retirement', 'roth'] },
   { id: 'accounts', label: 'Accounts', href: '/finance/accounts', permission: 'finance.accounts.detail', keywords: ['accounts', 'balances'] },
+  // The Import Center is a top-level page. FinanceTopToolDef supports a single permission,
+  // so gate on the canonical import permission (finance.transactions.import).
+  { id: 'import', label: 'Import', href: '/finance/import', permission: 'finance.transactions.import', keywords: ['import', 'import center', 'upload', 'statement', 'csv'] },
   { id: 'config', label: 'Config', href: '/finance/config', permission: 'finance.config.manage', keywords: ['config', 'settings'] },
 ]
 

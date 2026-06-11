@@ -137,6 +137,38 @@ class FinanceOnboardingSummaryServiceTest extends TestCase
         }
     }
 
+    public function test_lots_section_hides_reconciliation_without_tax_preview_permission(): void
+    {
+        $user = $this->grantFeatures(User::factory()->create(), ['finance.access', 'finance.lots.view']);
+        $this->actingAs($user);
+        $this->makeFinAccount($user);
+
+        $summary = $this->service->summaryForYear($user, 2024);
+
+        $lots = $this->section($summary, 'lots');
+        $this->assertArrayHasKey('lots', $lots['counts']);
+        $this->assertArrayNotHasKey('reconciliation_drift', $lots['counts']);
+        $this->assertArrayNotHasKey('reconciliation_blocked', $lots['counts']);
+        $this->assertNotSame('needs_attention', $lots['status']);
+        $this->assertStringNotContainsStringIgnoringCase('reconciliation', $lots['summary']);
+
+        foreach ($summary['warnings'] as $warning) {
+            $this->assertNotSame('warning.lots', $warning['id']);
+        }
+    }
+
+    public function test_categorization_section_hides_rule_count_without_rules_manage(): void
+    {
+        $user = $this->grantFeatures(User::factory()->create(), ['finance.access', 'finance.accounts.basic', 'finance.transactions.view']);
+
+        $summary = $this->service->summaryForYear($user, 2024);
+
+        $categorization = $this->section($summary, 'categorization');
+        $this->assertArrayHasKey('tags', $categorization['counts']);
+        $this->assertArrayNotHasKey('rules', $categorization['counts']);
+        $this->assertStringNotContainsStringIgnoringCase('rule', $categorization['summary']);
+    }
+
     /**
      * @param  array{sections: list<array<string, mixed>>}  $summary
      * @return array<string, mixed>
