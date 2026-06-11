@@ -1,5 +1,7 @@
 import { FileText } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
+
 export default function DocumentEmptyState() {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-3 py-12 text-center">
@@ -8,8 +10,11 @@ export default function DocumentEmptyState() {
       </div>
       <div>
         <p className="text-sm font-medium text-foreground">No documents found</p>
-        <p className="text-sm text-muted-foreground">Try adjusting your filters or import new documents.</p>
+        <p className="text-sm text-muted-foreground">Try adjusting your filters, or import a new document.</p>
       </div>
+      <Button variant="outline" size="sm" asChild>
+        <a href="/finance/documents">Import W-2, 1099, K-1, or broker tax package</a>
+      </Button>
     </div>
   )
 }

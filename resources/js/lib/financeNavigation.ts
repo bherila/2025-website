@@ -1,4 +1,5 @@
 export type FinanceTopToolId =
+  | 'home'
   | 'tax-preview'
   | 'documents'
   | 'rsu'
@@ -39,6 +40,7 @@ export interface FinanceAccountToolDef {
 }
 
 export const FINANCE_TOP_TOOLS: FinanceTopToolDef[] = [
+  { id: 'home', label: 'Home', href: '/finance', permission: 'finance.access', keywords: ['home', 'dashboard', 'setup', 'readiness', 'onboarding'] },
   { id: 'tax-preview', label: 'Tax Preview', href: '/finance/tax-preview', permission: 'finance.tax-preview.view', keywords: ['tax', 'preview', '1040', 'return'] },
   { id: 'documents', label: 'Documents', href: '/finance/documents', permission: 'finance.tax-documents.view', keywords: ['documents', 'upload', '1099', 'w2', 'w-2', 'k1', 'k-1'] },
   { id: 'rsu', label: 'RSU', href: '/finance/rsu', permission: 'finance.rsu.view', keywords: ['rsu', 'stock compensation', 'vesting'] },

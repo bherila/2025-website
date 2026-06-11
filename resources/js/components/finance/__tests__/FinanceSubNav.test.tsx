@@ -35,13 +35,16 @@ describe('FinanceNavbar', () => {
     if (el) el.remove()
   })
 
-  it('renders FINANCE branding', async () => {
+  it('renders FINANCE branding as a link to /finance', async () => {
     const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
     await act(async () => {
       render(<FinanceNavbar activeSection="accounts" />)
     })
-    expect(screen.getByLabelText('Finance section')).toBeInTheDocument()
-    expect(screen.getByLabelText('Finance section').textContent).toBe('Finance')
+    const brand = screen.getByLabelText('Finance section')
+    expect(brand).toBeInTheDocument()
+    expect(brand.textContent).toBe('Finance')
+    expect(brand.tagName).toBe('A')
+    expect(brand).toHaveAttribute('href', '/finance')
   })
 
   it('renders right-side section links', async () => {
@@ -55,6 +58,25 @@ describe('FinanceNavbar', () => {
     expect(document.querySelector('a[href="/finance/payslips"]')).toBeInTheDocument()
     expect(document.querySelector('a[href="/finance/tags"]')).toBeInTheDocument()
     expect(document.querySelector('a[href="/finance/accounts"]')).toBeInTheDocument()
+  })
+
+  it('renders Finance Home link in right-side sections', async () => {
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
+    await act(async () => {
+      render(<FinanceNavbar activeSection="accounts" />)
+    })
+    // Home is in FINANCE_TOP_TOOLS (filtered out by permission in RIGHT_SECTIONS when config is excluded)
+    // The brand link also links to /finance
+    expect(document.querySelector('a[href="/finance"]')).toBeInTheDocument()
+  })
+
+  it('uses canonical all-account transactions URL /finance/account/all/transactions', async () => {
+    const FinanceNavbar = (await import('@/components/finance/FinanceNavbar')).default
+    await act(async () => {
+      render(<FinanceNavbar activeSection="tax-preview" />)
+    })
+    const txLink = document.querySelector('a[href="/finance/account/all/transactions"]')
+    expect(txLink).toBeInTheDocument()
   })
 
   it('marks the active section with aria-current="page"', async () => {

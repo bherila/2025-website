@@ -77,6 +77,7 @@ describe('FinanceCommandPalette', () => {
   })
 
   it.each([
+    ['home', 'Home'],
     ['tax preview', 'Tax Preview'],
     ['documents', 'Documents'],
     ['rsu', 'RSU'],
@@ -92,6 +93,17 @@ describe('FinanceCommandPalette', () => {
     fireEvent.change(screen.getByPlaceholderText('Jump to an account, tool, or page…'), { target: { value: query } })
 
     expect(screen.getByText(label)).toBeInTheDocument()
+  })
+
+  it('navigates to /finance when Finance Home is selected', async () => {
+    const onNavigate = jest.fn()
+    render(<FinanceCommandPalette onNavigate={onNavigate} />)
+    openPalette()
+
+    fireEvent.change(screen.getByPlaceholderText('Jump to an account, tool, or page…'), { target: { value: 'home' } })
+    fireEvent.click(await screen.findByText('Home'))
+
+    expect(onNavigate).toHaveBeenCalledWith('/finance')
   })
 
   it('uses the stored effective account year for non-transaction account pages', async () => {

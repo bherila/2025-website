@@ -26,8 +26,9 @@
 
       // Build Finance submenu (public calculators plus authenticated account tools)
       $__financeItems = array_values(array_filter([
+        ($__isAuthenticated && $__hasPermission('finance.access')) ? ['type' => 'link', 'label' => 'Finance Home', 'href' => '/finance'] : null,
         ($__isAuthenticated && $__hasPermission('finance.accounts.detail')) ? ['type' => 'link', 'label' => 'Accounts', 'href' => '/finance/accounts'] : null,
-        ($__isAuthenticated && $__hasPermission('finance.transactions.view')) ? ['type' => 'link', 'label' => 'Transactions', 'href' => '/finance/all-transactions'] : null,
+        ($__isAuthenticated && $__hasPermission('finance.transactions.view')) ? ['type' => 'link', 'label' => 'Transactions', 'href' => '/finance/account/all/transactions'] : null,
         ($__isAuthenticated && $__hasPermission('finance.rsu.view')) ? ['type' => 'link', 'label' => 'RSU', 'href' => '/finance/rsu'] : null,
         ($__isAuthenticated && $__hasPermission('finance.payslips.view')) ? ['type' => 'link', 'label' => 'Payslips', 'href' => '/finance/payslips'] : null,
         ($__isAuthenticated && $__hasPermission('utility-bills.view')) ? ['type' => 'link', 'label' => 'Utility Bill Tracker', 'href' => '/utility-bill-tracker'] : null,
