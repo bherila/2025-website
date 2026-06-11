@@ -17,6 +17,7 @@ use App\Services\Planning\CareerComp\CareerCompInputs;
 use App\Support\Agent\AgentTokenService;
 use App\Support\Agent\CapabilityRegistry;
 use App\Support\Agent\Modules\CareerComparisonCapabilities;
+use HelgeSverre\Toon\Toon;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Laravel\Mcp\Facades\Mcp;
@@ -291,6 +292,10 @@ class AgentCareerComparisonTest extends TestCase
         );
 
         $response->assertStatus(422);
+        $this->assertStringStartsWith('text/toon', (string) $response->headers->get('Content-Type'));
+        $decoded = Toon::decode($response->getContent());
+        $this->assertSame('The given data was invalid.', $decoded['message']);
+        $this->assertArrayHasKey('inputs.hypotheticalJobs', $decoded['errors']);
     }
 
     // ------------------------------------------------------------------
@@ -354,6 +359,48 @@ class AgentCareerComparisonTest extends TestCase
         $this->putJson('/api/agent/v1/career-comparison/latest', [
             'inputs' => ['horizonYears' => 5],
         ], $this->bearer($token))->assertStatus(422);
+    }
+
+    public function test_save_latest_validation_failure_returns_json_without_accept_header(): void
+    {
+        ['token' => $token] = $this->createUserWithToken(['financial-planning.career-comparison.private']);
+
+        $response = $this->call(
+            'PUT',
+            '/api/agent/v1/career-comparison/latest',
+            [],
+            [],
+            [],
+            $this->transformHeadersToServerVars(array_merge($this->bearer($token), [
+                'Content-Type' => 'application/json',
+            ])),
+            (string) json_encode(['inputs' => ['horizonYears' => 5]]),
+        );
+
+        $response->assertStatus(422)
+            ->assertJsonStructure(['message', 'errors']);
+        $this->assertStringStartsWith('application/json', (string) $response->headers->get('Content-Type'));
+    }
+
+    public function test_create_share_validation_failure_returns_json_without_accept_header(): void
+    {
+        ['token' => $token] = $this->createUserWithToken(['financial-planning.career-comparison.private']);
+
+        $response = $this->call(
+            'POST',
+            '/api/agent/v1/career-comparison/share',
+            [],
+            [],
+            [],
+            $this->transformHeadersToServerVars(array_merge($this->bearer($token), [
+                'Content-Type' => 'application/json',
+            ])),
+            (string) json_encode(['inputs' => ['horizonYears' => 5]]),
+        );
+
+        $response->assertStatus(422)
+            ->assertJsonStructure(['message', 'errors']);
+        $this->assertStringStartsWith('application/json', (string) $response->headers->get('Content-Type'));
     }
 
     public function test_share_create_update_delete_are_creator_only(): void

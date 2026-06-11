@@ -51,7 +51,8 @@ class CapabilityRegistry
         return array_values(array_filter(
             $this->capabilities,
             fn (Capability $capability): bool => $capability->isPublic()
-                || ($context->allowsModule($capability->module) && $context->can((string) $capability->requiredPermission)),
+                || ($context->allowsModule($capability->requiredModule ?? $capability->module)
+                    && $context->can((string) $capability->requiredPermission)),
         ));
     }
 

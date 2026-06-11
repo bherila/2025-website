@@ -52,6 +52,10 @@ class CompareReturnLines extends Tool implements RequiresFeature
             if (! is_array($line) || ! isset($line['form'], $line['line']) || ! array_key_exists('amount_cents', $line)) {
                 return Response::error('Each line must include form, line, and integer amount_cents.');
             }
+
+            if (! is_int($line['amount_cents'])) {
+                return Response::error('Each line amount_cents must be an integer number of cents.');
+            }
         }
 
         $result = $this->service->compareForUser(

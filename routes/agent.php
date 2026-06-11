@@ -84,7 +84,7 @@ Route::middleware(AuthenticateAgentRequest::class.':finance')->prefix('finance')
  * controller via AgentContext (token scope applies); finance.access gates the
  * whole group. Agent tokens are restricted to finance job types.
  */
-Route::middleware([AuthenticateAgentRequest::class, 'feature:finance.access'])->prefix('imports')->name('imports.')->group(function (): void {
+Route::middleware([AuthenticateAgentRequest::class.':finance', 'feature:finance.access'])->prefix('imports')->name('imports.')->group(function (): void {
     Route::post('/request-upload', [AgentImportController::class, 'requestUpload'])->name('request-upload');
     Route::post('/jobs', [AgentImportController::class, 'createJob'])->name('jobs.create');
     Route::get('/jobs', [AgentImportController::class, 'index'])->name('jobs');

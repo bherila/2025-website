@@ -152,6 +152,7 @@ class AgentImportController extends Controller
             $this->user(),
             $id,
             self::AGENT_JOB_TYPES,
+            $this->permissionChecker(),
         );
     }
 }

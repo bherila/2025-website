@@ -408,8 +408,9 @@ class GenAiImportService
      * Delete a job, its results, and the S3 file.
      *
      * @param  list<string>|null  $restrictToJobTypes
+     * @param  (callable(string): bool)|null  $can
      */
-    public function deleteJob(User $user, int $jobId, ?array $restrictToJobTypes = null): JsonResponse
+    public function deleteJob(User $user, int $jobId, ?array $restrictToJobTypes = null, ?callable $can = null): JsonResponse
     {
         $job = GenAiImportJob::where('id', $jobId)
             ->where('user_id', $user->id)
@@ -421,6 +422,10 @@ class GenAiImportService
 
         if (($rejected = $this->rejectRestrictedJobType($restrictToJobTypes, $job->job_type)) !== null) {
             return $rejected;
+        }
+
+        if ($can !== null && ($denied = $this->authorizeJobType($can, $job->job_type)) !== null) {
+            return $denied;
         }
 
         // Delete job (cascade deletes results; model boot deletes S3 file)
