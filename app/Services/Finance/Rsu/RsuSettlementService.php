@@ -140,10 +140,36 @@ class RsuSettlementService
         $summary = $this->summary($awards);
         $settlement->fill([
             'vest_price' => $summary['vestPrice'],
+            'vest_price_source' => $summary['vestPriceSource'],
             'gross_shares' => $summary['grossShares'],
             'gross_income' => $summary['grossIncome'],
         ]);
         $settlement->save();
+
+        if (! in_array($settlement->status, ['confirmed', 'partially_reconciled', 'reconciled'], true)) {
+            // Suggested settlements do not own allocation rows until they are
+            // confirmed, so refreshing the headline totals is sufficient.
+            return;
+        }
+
+        // A confirmed/reconciled settlement must always own allocation rows. The
+        // allocation FK to fin_equity_awards is cascadeOnDelete, so deleting the
+        // last award that owned an allocation can leave a confirmed settlement
+        // with priced awards still in the bucket but zero allocations. Rebuild
+        // the withholding facts and per-award allocations from the surviving
+        // awards instead of leaving stale headline-only totals behind.
+        $withholding = $this->recomputeWithholding($settlement, $summary['vestPrice'], $summary['grossShares']);
+        $settlement->fill($withholding);
+        $settlement->save();
+
+        $this->replaceAllocations(
+            $settlement,
+            $awards,
+            $withholding['withheld_shares_whole'],
+            $withholding['withheld_value'],
+            $withholding['actual_tax_remitted'],
+            $withholding['excess_refund'],
+        );
     }
 
     /**
@@ -200,9 +226,10 @@ class RsuSettlementService
         }
 
         // The vest price and/or gross share count may have changed; recompute
-        // the stored withholding fields from the current values and re-enforce
-        // the confirm-time invariants (withheld shares <= gross vested shares;
-        // actual tax <= withheld value) before re-allocating.
+        // the stored withholding fields from the current values, clamping
+        // withheld shares to the gross vested shares before re-allocating.
+        // (actual_tax_remitted is intentionally not capped at withheld_value —
+        // a negative excess_refund is a supported outcome.)
         $withholding = $this->recomputeWithholding($settlement, $summary['vestPrice'], $summary['grossShares']);
         $settlement->fill($withholding);
         $settlement->save();

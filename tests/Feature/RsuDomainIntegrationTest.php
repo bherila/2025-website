@@ -1087,6 +1087,62 @@ class RsuDomainIntegrationTest extends TestCase
             ->assertJsonPath('withholdingValue', 0);
     }
 
+    public function test_deleting_award_rebuilds_withholding_and_allocations_for_confirmed_settlement_with_no_allocations(): void
+    {
+        $user = User::factory()->create();
+        $oldAward = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-ORPHAN-OLD',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 6,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+        $keepAward = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-ORPHAN-KEEP',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 4,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 5,
+            'actualTaxRemitted' => 300,
+        ])->assertOk();
+
+        // Simulate the legacy/edge state this fix targets: a confirmed settlement
+        // whose allocation rows are gone (e.g. a cascade-on-delete that removed
+        // the last allocation) while priced awards remain in the bucket.
+        FinRsuVestSettlementAllocation::query()->where('settlement_id', $settlementId)->delete();
+        $this->assertSame(0, FinRsuVestSettlement::query()->findOrFail($settlementId)->allocations()->count());
+
+        $this->actingAs($user)->deleteJson("/api/rsu/{$oldAward->id}")->assertOk();
+
+        $settlement = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId);
+        $this->assertSame('confirmed', $settlement->status);
+        $this->assertSame('4.000000', $settlement->gross_shares);
+        $this->assertSame('400.0000', $settlement->gross_income);
+        $this->assertSame('100.000000', $settlement->vest_price);
+        // withheld shares clamped from 5 to the 4 surviving shares; value/refund re-derived.
+        $this->assertSame('4.000000', $settlement->withheld_shares_whole);
+        $this->assertSame('400.0000', $settlement->withheld_value);
+        $this->assertSame('100.0000', $settlement->excess_refund);
+
+        $this->assertCount(1, $settlement->allocations);
+        $allocation = $settlement->allocations->firstWhere('equity_award_id', $keepAward->id);
+        $this->assertNotNull($allocation);
+        $this->assertSame('400.0000', $allocation->allocated_withheld_value);
+        $this->assertSame('300.0000', $allocation->allocated_tax_remitted);
+        $this->assertSame('100.0000', $allocation->allocated_excess_refund);
+    }
+
     public function test_deleting_unconfirmed_suggested_award_removes_no_allocation_settlement(): void
     {
         $user = User::factory()->create();
