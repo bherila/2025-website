@@ -251,9 +251,31 @@ class FinanceDownloadTest extends TestCase
             ->assertJsonPath('message', 'No file associated with this document.');
     }
 
-    public function test_fin_document_tax_form_kind_delegates_to_tax_document(): void
+    public function test_fin_document_tax_form_kind_requires_tax_document_permission(): void
     {
         ['user' => $user, 'token' => $token] = $this->createUserWithToken(['finance.accounts.detail']);
+        $doc = $this->makeFinDocument($user, [
+            'document_kind' => FinDocument::KIND_TAX_FORM,
+            's3_path' => null,
+            'tax_year' => 2025,
+        ]);
+        $this->makeTaxDocument($user, [
+            'document_id' => $doc->id,
+            'original_filename' => 'k1.pdf',
+            's3_path' => "tax_docs/{$user->id}/stored-k1.pdf",
+        ]);
+
+        $this->getJson("/api/agent/v1/finance/documents/{$doc->id}/download-url", $this->bearer($token))
+            ->assertStatus(403)
+            ->assertJsonPath('required_permission', 'finance.tax-documents.view');
+    }
+
+    public function test_fin_document_tax_form_kind_delegates_to_tax_document(): void
+    {
+        ['user' => $user, 'token' => $token] = $this->createUserWithToken([
+            'finance.accounts.detail',
+            'finance.tax-documents.view',
+        ]);
         $doc = $this->makeFinDocument($user, [
             'document_kind' => FinDocument::KIND_TAX_FORM,
             's3_path' => null,

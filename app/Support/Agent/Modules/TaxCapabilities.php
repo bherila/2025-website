@@ -14,6 +14,115 @@ final class TaxCapabilities
     public static function register(CapabilityRegistry $registry): void
     {
         $registry->register(new Capability(
+            id: 'tax.preview.get',
+            module: 'tax',
+            label: 'Get tax preview',
+            description: 'Agent-safe tax preview dataset for a year. ?include_tax_facts=1 adds backend tax fact source lines.',
+            requiredPermission: 'finance.tax-preview.view',
+            risk: 'read',
+            restMethod: 'GET',
+            restPath: '/tax/preview/{year}',
+            mcpTool: 'get-tax-preview',
+            openApiTag: 'tax',
+            requestSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'include_tax_facts' => ['type' => 'boolean', 'default' => false],
+                ],
+            ],
+            responseSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'year' => ['type' => 'integer'],
+                    'availableYears' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                ],
+            ],
+            pathParameters: [self::yearPathParameter()],
+            examples: ['GET /api/agent/v1/tax/preview/2024?include_tax_facts=1'],
+            routeName: 'agent.tax.preview',
+        ));
+
+        $registry->register(new Capability(
+            id: 'tax.documents.list',
+            module: 'tax',
+            label: 'List tax documents',
+            description: 'Tax document metadata (W-2, 1099 variants, K-1, Form 1116). parsed_data is only available on the detail endpoint.',
+            requiredPermission: 'finance.tax-documents.view',
+            risk: 'read',
+            restMethod: 'GET',
+            restPath: '/tax/documents',
+            openApiTag: 'tax',
+            requestSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'year' => ['type' => 'integer'],
+                    'form_type' => ['type' => 'string', 'description' => 'Comma-separated form types, e.g. w2,1099_int,broker_1099'],
+                    'is_reviewed' => ['type' => 'boolean'],
+                    'limit' => ['type' => 'integer', 'default' => 100, 'maximum' => 500],
+                    'cursor' => ['type' => 'integer'],
+                ],
+            ],
+            responseSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'tax_documents' => ['type' => 'array', 'items' => ['type' => 'object']],
+                    'next_cursor' => ['type' => ['integer', 'null']],
+                ],
+            ],
+            examples: ['GET /api/agent/v1/tax/documents?year=2024&is_reviewed=true'],
+            routeName: 'agent.tax.documents',
+        ));
+
+        $registry->register(new Capability(
+            id: 'tax.documents.get',
+            module: 'tax',
+            label: 'Get tax document',
+            description: 'Single tax document by ID including the full parsed_data blob. Non-owned IDs return 404.',
+            requiredPermission: 'finance.tax-documents.view',
+            risk: 'read',
+            restMethod: 'GET',
+            restPath: '/tax/documents/{id}',
+            openApiTag: 'tax',
+            responseSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer'],
+                    'tax_year' => ['type' => 'integer'],
+                    'form_type' => ['type' => 'string'],
+                    'parsed_data' => ['type' => ['object', 'null']],
+                ],
+            ],
+            pathParameters: [self::documentIdPathParameter()],
+            examples: ['GET /api/agent/v1/tax/documents/42'],
+            routeName: 'agent.tax.documents.show',
+        ));
+
+        $registry->register(new Capability(
+            id: 'tax.documents.download_url',
+            module: 'tax',
+            label: 'Get tax document download URL',
+            description: 'Owner-scoped one-hour signed download and inline-view URLs for a stored tax document file.',
+            requiredPermission: 'finance.tax-documents.view',
+            risk: 'download',
+            restMethod: 'GET',
+            restPath: '/tax/documents/{id}/download-url',
+            openApiTag: 'tax',
+            responseSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'download_url' => ['type' => 'string'],
+                    'view_url' => ['type' => 'string'],
+                    'expires_in_seconds' => ['type' => 'integer'],
+                    'filename' => ['type' => 'string'],
+                    'content_type' => ['type' => ['string', 'null']],
+                ],
+            ],
+            pathParameters: [self::documentIdPathParameter()],
+            examples: ['GET /api/agent/v1/tax/documents/42/download-url'],
+            routeName: 'agent.tax.documents.download-url',
+        ));
+
+        $registry->register(new Capability(
             id: 'tax.compare_return_lines',
             module: 'tax',
             label: 'Compare return lines',
@@ -82,19 +191,35 @@ final class TaxCapabilities
                     'unmatched_inputs' => ['type' => 'array', 'items' => ['type' => 'object']],
                 ],
             ],
-            pathParameters: [
-                [
-                    'name' => 'year',
-                    'in' => 'path',
-                    'required' => true,
-                    'schema' => ['type' => 'integer'],
-                    'description' => 'Tax year to compare against',
-                ],
-            ],
+            pathParameters: [self::yearPathParameter()],
             examples: [
                 'POST /api/agent/v1/tax/preview/2024/compare-return-lines {"tolerance_cents":100,"lines":[{"form":"1040","line":"1z","amount_cents":12345600}]}',
             ],
             routeName: 'agent.tax.compare-return-lines',
         ));
+    }
+
+    /** @return array<string, mixed> */
+    private static function yearPathParameter(): array
+    {
+        return [
+            'name' => 'year',
+            'in' => 'path',
+            'required' => true,
+            'schema' => ['type' => 'integer'],
+            'description' => 'Tax year',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function documentIdPathParameter(): array
+    {
+        return [
+            'name' => 'id',
+            'in' => 'path',
+            'required' => true,
+            'schema' => ['type' => 'integer'],
+            'description' => 'Tax document ID',
+        ];
     }
 }
