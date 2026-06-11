@@ -7,6 +7,7 @@ use App\Http\Middleware\AuthenticateAgentRequest;
 use App\Http\Middleware\NegotiatesAgentPayload;
 use App\Http\Middleware\OptionalAgentRequest;
 use App\Mcp\Servers\CareerComparison as CareerComparisonServer;
+use App\Models\AgentApiToken;
 use App\Models\CareerComparison;
 use App\Models\CareerJob;
 use App\Models\FinanceTool\FinEquityAwards;
@@ -40,46 +41,59 @@ class AgentCareerComparisonTest extends TestCase
         // test are genuinely non-admin.
         $this->createAdminUser();
 
-        // Mirror the routes/agent.php chokepoint registration (this vertical
-        // branch does not edit shared route files; the integrator wires the
-        // identical block into routes/agent.php).
-        Route::prefix('api/agent/v1')->name('agent.')->middleware([NegotiatesAgentPayload::class])->group(function (): void {
-            Route::prefix('career-comparison')->name('career-comparison.')->group(function (): void {
-                Route::middleware(OptionalAgentRequest::class)->group(function (): void {
-                    Route::get('/shares/{code}', [AgentCareerComparisonController::class, 'publicShare'])
-                        ->name('shares.show');
-                    Route::post('/compute', [AgentCareerComparisonController::class, 'compute'])
-                        ->middleware('throttle:60,1')
-                        ->name('compute');
-                });
+        $this->registerCareerComparisonSurfaceIfMissing();
+    }
 
-                Route::middleware(AuthenticateAgentRequest::class.':career-comparison')->group(function (): void {
-                    Route::get('/latest', [AgentCareerComparisonController::class, 'latest'])
-                        ->middleware('feature:financial-planning.career-comparison.private')
-                        ->name('latest');
-                    Route::put('/latest', [AgentCareerComparisonController::class, 'saveLatest'])
-                        ->middleware('feature:financial-planning.career-comparison.private')
-                        ->name('latest.save');
-                    Route::post('/share', [AgentCareerComparisonController::class, 'createShare'])
-                        ->middleware('feature:financial-planning.career-comparison.private')
-                        ->name('share');
-                    Route::patch('/shares/{code}', [AgentCareerComparisonController::class, 'updateShare'])
-                        ->middleware('feature:financial-planning.career-comparison.private')
-                        ->name('shares.update');
-                    Route::delete('/shares/{code}', [AgentCareerComparisonController::class, 'deleteShare'])
-                        ->middleware('feature:financial-planning.career-comparison.private')
-                        ->name('shares.delete');
-                    Route::post('/import-rsu', [AgentCareerComparisonController::class, 'importRsu'])
-                        ->middleware('feature:finance.rsu.view')
-                        ->name('import-rsu');
+    /**
+     * Mirror the routes/agent.php and routes/ai.php chokepoint registrations
+     * only when the integrated routes are absent, so the shipped wiring is
+     * what gets exercised once the integrator has wired the chokepoints. The
+     * blocks below must stay byte-equivalent to the integrated wiring.
+     */
+    private function registerCareerComparisonSurfaceIfMissing(): void
+    {
+        if (! Route::has('agent.career-comparison.shares.show')) {
+            Route::prefix('api/agent/v1')->name('agent.')->middleware([NegotiatesAgentPayload::class])->group(function (): void {
+                Route::prefix('career-comparison')->name('career-comparison.')->group(function (): void {
+                    Route::middleware(OptionalAgentRequest::class)->group(function (): void {
+                        Route::get('/shares/{code}', [AgentCareerComparisonController::class, 'publicShare'])
+                            ->name('shares.show');
+                        Route::post('/compute', [AgentCareerComparisonController::class, 'compute'])
+                            ->middleware('throttle:60,1')
+                            ->name('compute');
+                    });
+
+                    Route::middleware(AuthenticateAgentRequest::class.':career-comparison')->group(function (): void {
+                        Route::get('/latest', [AgentCareerComparisonController::class, 'latest'])
+                            ->middleware('feature:financial-planning.career-comparison.private')
+                            ->name('latest');
+                        Route::put('/latest', [AgentCareerComparisonController::class, 'saveLatest'])
+                            ->middleware('feature:financial-planning.career-comparison.private')
+                            ->name('latest.save');
+                        Route::post('/share', [AgentCareerComparisonController::class, 'createShare'])
+                            ->middleware('feature:financial-planning.career-comparison.private')
+                            ->name('share');
+                        Route::patch('/shares/{code}', [AgentCareerComparisonController::class, 'updateShare'])
+                            ->middleware('feature:financial-planning.career-comparison.private')
+                            ->name('shares.update');
+                        Route::delete('/shares/{code}', [AgentCareerComparisonController::class, 'deleteShare'])
+                            ->middleware('feature:financial-planning.career-comparison.private')
+                            ->name('shares.delete');
+                        Route::post('/import-rsu', [AgentCareerComparisonController::class, 'importRsu'])
+                            ->middleware('feature:finance.rsu.view')
+                            ->name('import-rsu');
+                    });
                 });
             });
-        });
+        }
 
-        // Mirror the routes/ai.php chokepoint registration for the minimal
-        // career-comparison MCP server (same integrator wiring note).
-        Mcp::web('/mcp/career-comparison', CareerComparisonServer::class)
-            ->middleware(AuthenticateAgentRequest::class.':career-comparison');
+        $mcpRegistered = collect(Route::getRoutes()->getRoutes())
+            ->contains(fn ($route): bool => $route->uri() === 'mcp/career-comparison' && in_array('POST', $route->methods(), true));
+
+        if (! $mcpRegistered) {
+            Mcp::web('/mcp/career-comparison', CareerComparisonServer::class)
+                ->middleware(AuthenticateAgentRequest::class.':career-comparison');
+        }
     }
 
     /** @return array{user: User, token: string} */
@@ -175,6 +189,40 @@ class AgentCareerComparisonTest extends TestCase
         $this->assertNotNull($response->json('inputs.currentJob'));
     }
 
+    public function test_creator_share_read_with_finance_scoped_token_is_redacted(): void
+    {
+        $owner = $this->grantFeatures($this->createUser(), [
+            'financial-planning.career-comparison.private', 'finance.access',
+        ]);
+        $share = $this->createShareFor($owner, includesCurrent: false);
+        $result = app(AgentTokenService::class)->createQuickSetupToken($owner, 'finance', null);
+
+        $response = $this->getJson("/api/agent/v1/career-comparison/shares/{$share->short_code}", $this->bearer($result['token']));
+
+        $response->assertStatus(200)
+            ->assertJsonPath('isCreator', false)
+            ->assertJsonPath('inputs.currentJob', null);
+    }
+
+    public function test_creator_share_read_with_module_less_token_is_unredacted(): void
+    {
+        $owner = $this->grantFeatures($this->createUser(), ['financial-planning.career-comparison.private']);
+        $share = $this->createShareFor($owner, includesCurrent: false);
+
+        $rawToken = 'bha_'.bin2hex(random_bytes(32));
+        AgentApiToken::factory()->create([
+            'user_id' => $owner->id,
+            'token_hash' => hash('sha256', $rawToken),
+            'module' => null,
+            'allowed_permissions' => null,
+        ]);
+
+        $response = $this->getJson("/api/agent/v1/career-comparison/shares/{$share->short_code}", $this->bearer($rawToken));
+
+        $response->assertStatus(200)->assertJsonPath('isCreator', true);
+        $this->assertNotNull($response->json('inputs.currentJob'));
+    }
+
     public function test_expired_share_returns_404(): void
     {
         $owner = $this->createUser();
@@ -225,6 +273,24 @@ class AgentCareerComparisonTest extends TestCase
     {
         $this->postJson('/api/agent/v1/career-comparison/compute', ['inputs' => ['horizonYears' => 5]])
             ->assertStatus(422);
+    }
+
+    public function test_compute_validation_failure_returns_422_for_toon_clients(): void
+    {
+        $response = $this->call(
+            'POST',
+            '/api/agent/v1/career-comparison/compute',
+            [],
+            [],
+            [],
+            $this->transformHeadersToServerVars([
+                'Content-Type' => 'application/json',
+                'Accept' => 'text/toon',
+            ]),
+            (string) json_encode(['inputs' => ['horizonYears' => 5]]),
+        );
+
+        $response->assertStatus(422);
     }
 
     // ------------------------------------------------------------------
@@ -413,6 +479,23 @@ class AgentCareerComparisonTest extends TestCase
         $this->assertFalse($payload['isCreator']);
         $this->assertNull($payload['inputs']['currentJob']);
         $this->assertSame('Career comparison', $payload['title']);
+    }
+
+    public function test_mcp_get_public_share_redacts_for_creator_whose_token_scope_lacks_private(): void
+    {
+        ['user' => $owner, 'token' => $token] = $this->createUserWithToken(['finance.rsu.view']);
+        $share = $this->createShareFor($owner, includesCurrent: false);
+
+        $response = $this->mcp($token, 'tools/call', [
+            'name' => 'career_get_public_share',
+            'arguments' => ['code' => $share->short_code],
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertNotTrue($response->json('result.isError'));
+        $payload = json_decode((string) $response->json('result.content.0.text'), true);
+        $this->assertFalse($payload['isCreator']);
+        $this->assertNull($payload['inputs']['currentJob']);
     }
 
     public function test_mcp_save_and_get_latest_round_trip(): void
