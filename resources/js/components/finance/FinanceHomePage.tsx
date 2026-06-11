@@ -23,7 +23,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { fetchWrapper } from '@/fetchWrapper'
-import type { FinanceAction, FinanceOnboardingSummary, FinanceReadinessSection } from '@/types/finance/onboarding-summary'
+import type {
+  FinanceAction,
+  FinanceOnboardingSummary,
+  FinanceReadinessSection,
+  FinanceReadinessSectionId,
+} from '@/types/finance/onboarding-summary'
 import { financeOnboardingSummarySchema } from '@/types/finance/onboarding-summary'
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
@@ -63,9 +68,102 @@ function sectionIcon(id: string): React.ReactNode {
   return icons[id] ?? <FileText className="h-4 w-4" />
 }
 
+// ── section links ─────────────────────────────────────────────────────────────
+
+const sectionActionPriority: Record<FinanceReadinessSectionId, string[]> = {
+  accounts: ['accounts.view', 'accounts.add'],
+  transactions: ['transactions.view', 'transactions.import'],
+  documents: ['documents.review', 'documents.upload'],
+  employment: ['employment.manage', 'employment.career'],
+  payslips: ['payslips.view', 'payslips.add'],
+  rsu: ['rsu.view', 'rsu.add'],
+  k1_basis: ['k1.review', 'k1.upload'],
+  lots: ['lots.view'],
+  carryovers: ['carryovers.manage'],
+  categorization: ['categorization.manage'],
+  tax_preview: ['tax_preview.open'],
+}
+
+function preferredSectionAction(section: FinanceReadinessSection): FinanceAction | null {
+  const primaryAction = section.actions.find((action) => action.kind === 'primary') ?? null
+  if (section.status === 'not_started' || section.status === 'optional') {
+    return primaryAction
+      ?? section.actions.find((action) => action.kind === 'secondary')
+      ?? section.actions[0]
+      ?? null
+  }
+
+  const preferredIds = sectionActionPriority[section.id]
+  for (const id of preferredIds) {
+    const action = section.actions.find((candidate) => candidate.id === id)
+    if (action) {
+      return action
+    }
+  }
+
+  return section.actions.find((action) => action.kind === 'secondary')
+    ?? primaryAction
+    ?? section.actions[0]
+    ?? null
+}
+
+function withLinkContext(
+  href: string,
+  params: Record<string, string>,
+  hash?: string,
+): string {
+  const hashIndex = href.indexOf('#')
+  const hrefWithoutHash = hashIndex === -1 ? href : href.slice(0, hashIndex)
+  const existingHash = hashIndex === -1 ? '' : href.slice(hashIndex)
+  const queryIndex = hrefWithoutHash.indexOf('?')
+  const path = queryIndex === -1 ? hrefWithoutHash : hrefWithoutHash.slice(0, queryIndex)
+  const search = new URLSearchParams(queryIndex === -1 ? '' : hrefWithoutHash.slice(queryIndex + 1))
+
+  Object.entries(params).forEach(([key, value]) => {
+    search.set(key, value)
+  })
+
+  const query = search.toString()
+  return `${path}${query ? `?${query}` : ''}${hash ?? existingHash}`
+}
+
+function sectionHref(section: FinanceReadinessSection, year: number): string | null {
+  const action = preferredSectionAction(section)
+  if (!action) {
+    return null
+  }
+
+  if (action.href === '/finance/account/all/transactions') {
+    return withLinkContext(action.href, { year: String(year) })
+  }
+  if (action.href === '/finance/documents') {
+    return withLinkContext(action.href, {
+      document_kind: 'tax_form',
+      tax_year: String(year),
+    })
+  }
+  if (action.href === '/finance/payslips' || action.href === '/finance/payslips/entry') {
+    return withLinkContext(action.href, { year: String(year) })
+  }
+  if (action.href === '/finance/account/all/lots') {
+    return withLinkContext(action.href, { year: String(year) })
+  }
+  if (action.href === '/finance/tax-preview') {
+    let hash: string | undefined
+    if (section.id === 'employment') {
+      hash = '#/sch-c'
+    } else if (section.id === 'carryovers') {
+      hash = '#/sch-d'
+    }
+    return withLinkContext(action.href, { year: String(year) }, hash)
+  }
+
+  return action.href
+}
+
 // ── sub-components ────────────────────────────────────────────────────────────
 
-function SectionListItem({ section }: { section: FinanceReadinessSection }) {
+function SectionListItem({ section, year }: { section: FinanceReadinessSection; year: number }) {
   if (section.status === 'no_access') {
     return (
       <li
@@ -78,15 +176,34 @@ function SectionListItem({ section }: { section: FinanceReadinessSection }) {
     )
   }
 
-  return (
-    <li className="flex items-center gap-2 text-sm" data-testid={`section-${section.id}`}>
+  const href = sectionHref(section, year)
+  const contents = (
+    <>
       {sectionIcon(section.id)}
-      <span>{section.title}</span>
+      <span className="min-w-0 truncate">{section.title}</span>
       {section.summary ? (
-        <span className="ml-auto text-xs text-muted-foreground" data-testid={`section-${section.id}-summary`}>
+        <span
+          className="ml-auto shrink-0 truncate text-xs text-muted-foreground"
+          data-testid={`section-${section.id}-summary`}
+        >
           {section.summary}
         </span>
       ) : null}
+    </>
+  )
+
+  return (
+    <li className="text-sm" data-testid={`section-${section.id}`}>
+      {href ? (
+        <a
+          href={href}
+          className="-mx-2 flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {contents}
+        </a>
+      ) : (
+        <div className="flex min-w-0 items-center gap-2 py-1.5">{contents}</div>
+      )}
     </li>
   )
 }
@@ -250,7 +367,7 @@ export default function FinanceHomePage() {
               <CardContent>
                 <ul className="space-y-2" aria-label="Setup checklist">
                   {allSections.map((section) => (
-                    <SectionListItem key={section.id} section={section} />
+                    <SectionListItem key={section.id} section={section} year={selectedYear} />
                   ))}
                 </ul>
               </CardContent>

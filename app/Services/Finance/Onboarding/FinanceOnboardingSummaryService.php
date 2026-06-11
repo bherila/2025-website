@@ -303,6 +303,7 @@ class FinanceOnboardingSummaryService
             ->count();
         $actions = $this->filterActions($user, [
             $this->action('k1.upload', 'Upload K-1 documents', '/finance/documents', 'primary', 'finance.tax-documents.manage'),
+            $this->action('k1.review', 'Review K-1 documents', '/finance/documents', 'secondary', 'finance.tax-documents.view'),
         ]);
 
         if ($k1Count === 0) {

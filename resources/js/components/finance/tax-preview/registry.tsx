@@ -39,6 +39,7 @@ import WorksheetSE401k from '@/components/finance/worksheets/WorksheetSE401k'
 import WorksheetTaxableSS from '@/components/finance/worksheets/WorksheetTaxableSS'
 import type { fin_payslip } from '@/components/payslip/payslipDbCols'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fetchWrapper } from '@/fetchWrapper'
 import WorksheetColumn1116 from '@/finance/1116/WorksheetColumn'
@@ -67,6 +68,10 @@ function tabToDrill(onDrill: (t: DrillTarget) => void): (tab: TaxTabId) => void 
 }
 
 function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 1040" />
+  }
+
   return (
     <Form1040Preview
       facts={state.taxFacts?.form1040}
@@ -78,6 +83,10 @@ function Form1040Adapter({ state, onDrill }: FormRenderProps): React.ReactElemen
 }
 
 function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule 1" />
+  }
+
   return (
     <Schedule1Preview
       selectedYear={state.year}
@@ -89,6 +98,10 @@ function Schedule1Adapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 }
 
 function Schedule2Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule 2" />
+  }
+
   return (
     <AdditionalTaxesPreview
       taxFacts={state.taxFacts}
@@ -101,6 +114,10 @@ function Schedule2Adapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 }
 
 function ScheduleAAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule A" />
+  }
+
   return (
     <ScheduleAPreview
       selectedYear={state.year}
@@ -113,6 +130,10 @@ function ScheduleAAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 
 function ScheduleBAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule B" />
+  }
+
   return (
     <ScheduleBPreview
       taxFacts={state.taxFacts?.scheduleB ?? null}
@@ -125,6 +146,10 @@ function ScheduleBAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 
 function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { openTaxDocumentDetail } = useDockActions()
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule D" />
+  }
+
   return (
     <ScheduleDPreview
       taxFacts={state.taxFacts?.scheduleD ?? null}
@@ -142,6 +167,10 @@ function ScheduleDAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 
 function Form6781Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { openTaxDocumentDetail } = useDockActions()
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 6781" />
+  }
+
   return (
     <Form6781Preview
       form6781Facts={state.taxFacts?.form6781 ?? null}
@@ -153,6 +182,10 @@ function Form6781Adapter({ state, onDrill }: FormRenderProps): React.ReactElemen
 
 function ScheduleEAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { openTaxDocumentDetail } = useDockActions()
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule E" />
+  }
+
   return (
     <ScheduleEPreview
       taxFacts={state.taxFacts?.scheduleE ?? null}
@@ -165,6 +198,10 @@ function ScheduleEAdapter({ state, onDrill }: FormRenderProps): React.ReactEleme
 
 function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule SE" />
+  }
+
   return (
     <ScheduleSEPreview
       taxFacts={state.taxFacts?.scheduleSE ?? null}
@@ -179,6 +216,10 @@ function ScheduleSEAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
 
 function Form4952Adapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 4952" />
+  }
+
   return (
     <Form4952Preview
       form4952Facts={state.taxFacts?.form4952 ?? null}
@@ -197,6 +238,9 @@ function Form4952DetailAdapter({ state, instance, onDrill }: FormRenderProps): R
   const { reviewK1Doc } = useDockActions()
   const facts = state.taxFacts?.form4952
   if (!facts) {
+    if (loadingTaxFacts(state)) {
+      return <TaxPreviewColumnSkeleton label="Form 4952 detail" />
+    }
     return <StubCard title="Form 4952 detail" note="No Form 4952 facts are available." />
   }
   const handleGoToSource = (source: TaxFactSource): void => {
@@ -211,6 +255,10 @@ function Form4952DetailAdapter({ state, instance, onDrill }: FormRenderProps): R
 
 function TaxSourceDetailAdapter({ state, instance }: FormRenderProps): React.ReactElement {
   const { openTaxDocumentDetail } = useDockActions()
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="source details" />
+  }
+
   const handleGoToSource = (source: TaxFactSource): void => {
     if (source.taxDocumentId != null) {
       openTaxDocumentDetail(source.taxDocumentId)
@@ -220,10 +268,18 @@ function TaxSourceDetailAdapter({ state, instance }: FormRenderProps): React.Rea
 }
 
 function Form6251Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 6251" />
+  }
+
   return <Form6251Preview form6251={state.taxFacts?.form6251 ?? null} selectedYear={state.year} />
 }
 
 function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 8995" />
+  }
+
   return (
     <Form8995Preview
       taxFacts={state.taxFacts?.form8995 ?? null}
@@ -234,6 +290,10 @@ function Form8995Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form8582Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 8582" />
+  }
+
   return (
     <Form8582Preview
       form8582={state.taxFacts?.form8582 ?? null}
@@ -257,6 +317,55 @@ function HomePlaceholder(): React.ReactElement {
   )
 }
 
+function TaxPreviewColumnSkeleton({ label }: { label: string }): React.ReactElement {
+  return (
+    <div
+      className="space-y-4"
+      aria-busy="true"
+      aria-label={`Loading ${label}`}
+      data-testid="tax-preview-column-skeleton"
+    >
+      <div className="space-y-2">
+        <Skeleton className="h-5 w-48 max-w-full" />
+        <Skeleton className="h-3 w-72 max-w-full" />
+      </div>
+      <div className="space-y-3 rounded-md border border-border p-4">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-11/12" />
+        <Skeleton className="h-3 w-2/3" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    </div>
+  )
+}
+
+function loadingTaxFacts(state: FormRenderProps['state']): boolean {
+  return state.isLoading && state.taxFacts === null
+}
+
+function loadingEmptyArray<T>(state: FormRenderProps['state'], rows: readonly T[]): boolean {
+  return state.isLoading && rows.length === 0
+}
+
+function loadingScheduleC(state: FormRenderProps['state']): boolean {
+  return state.isLoading && state.scheduleCData === null
+}
+
+function loadingForm8949(state: FormRenderProps['state']): boolean {
+  return loadingEmptyArray(state, state.reviewed1099Docs) && state.taxFacts?.form8949 === undefined
+}
+
+function loadingActionItems(state: FormRenderProps['state']): boolean {
+  return loadingTaxFacts(state)
+    && state.reviewedK1Docs.length === 0
+    && state.reviewed1099Docs.length === 0
+    && state.reviewedW2Docs.length === 0
+}
+
 function StubCard({ title, note }: { title: string; note: string }): React.ReactElement {
   return (
     <div className="space-y-3 rounded-md border border-dashed border-border bg-muted/30 p-4">
@@ -269,6 +378,9 @@ function StubCard({ title, note }: { title: string; note: string }): React.React
 function Schedule3Adapter({ state }: FormRenderProps): React.ReactElement {
   const facts = state.taxFacts?.schedule3
   if (!facts) {
+    if (loadingTaxFacts(state)) {
+      return <TaxPreviewColumnSkeleton label="Schedule 3" />
+    }
     return (
       <StubCard
         title="Schedule 3 — Additional Credits & Payments"
@@ -284,6 +396,9 @@ function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.R
   const { reviewK1Doc, bulkSetSbpElection } = useDockActions()
   const facts = state.taxFacts?.form1116
   if (!facts) {
+    if (loadingTaxFacts(state)) {
+      return <TaxPreviewColumnSkeleton label="Form 1116" />
+    }
     return (
       <StubCard
         title="Form 1116 — Foreign Tax Credit"
@@ -311,6 +426,10 @@ function Form1116Adapter({ state, instance, onDrill }: FormRenderProps): React.R
 
 function Worksheet1116Adapter({ state }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
+  if (loadingEmptyArray(state, state.foreignTaxSummaries)) {
+    return <TaxPreviewColumnSkeleton label="Form 1116 apportionment worksheet" />
+  }
+
   return (
     <WorksheetColumn1116
       foreignTaxSummaries={state.foreignTaxSummaries}
@@ -321,6 +440,10 @@ function Worksheet1116Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingScheduleC(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule C" />
+  }
+
   return (
     <ScheduleCTab
       selectedYear={state.year}
@@ -334,6 +457,10 @@ function ScheduleCAdapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form4797Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 4797" />
+  }
+
   return (
     <Form4797Preview
       selectedYear={state.year}
@@ -343,6 +470,10 @@ function Form4797Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function ScheduleFAdapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Schedule F" />
+  }
+
   return (
     <ScheduleFPreview
       selectedYear={state.year}
@@ -352,6 +483,10 @@ function ScheduleFAdapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form8606Adapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 8606" />
+  }
+
   return (
     <Form8606Preview
       selectedYear={state.year}
@@ -361,6 +496,10 @@ function Form8606Adapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function Form8949Adapter({ state, instance }: FormRenderProps): React.ReactElement {
+  if (loadingForm8949(state)) {
+    return <TaxPreviewColumnSkeleton label="Form 8949" />
+  }
+
   const accountId = instance?.key !== undefined && instance.key !== 'all' ? Number(instance.key) : undefined
   const accountFilter = typeof accountId === 'number' && Number.isFinite(accountId) ? { accountId } : {}
   const factFilter = accountId === undefined ? { form8949Facts: state.taxFacts?.form8949 ?? null } : {}
@@ -404,6 +543,10 @@ function form8949Instances(state: FormRenderProps['state']): { key: string; labe
 }
 
 function ActionItemsAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
+  if (loadingActionItems(state)) {
+    return <TaxPreviewColumnSkeleton label="action items" />
+  }
+
   const w2GrossIncome = state.payslips.reduce(
     (acc, row) =>
       acc
@@ -436,6 +579,10 @@ function ActionItemsAdapter({ state, onDrill }: FormRenderProps): React.ReactEle
 }
 
 function EstimateAdapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingTaxFacts(state)) {
+    return <TaxPreviewColumnSkeleton label="tax estimate" />
+  }
+
   const summary = summarizeTaxEstimate({
     taxFacts: state.taxFacts,
     accountDocuments: state.accountDocuments,
@@ -446,6 +593,10 @@ function EstimateAdapter({ state }: FormRenderProps): React.ReactElement {
 }
 
 function W2IncomeSummaryAdapter({ state }: FormRenderProps): React.ReactElement {
+  if (loadingEmptyArray(state, state.payslips)) {
+    return <TaxPreviewColumnSkeleton label="W-2 income summary" />
+  }
+
   return <W2IncomeSummary payslips={state.payslips} />
 }
 
@@ -654,6 +805,10 @@ export function saveParsedDataOverride(
 
 function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc, exportXlsx, isExportingXlsx } = useDockActions()
+  if (loadingEmptyArray(state, state.reviewedK1Docs)) {
+    return <TaxPreviewColumnSkeleton label="All-in-One K-1" />
+  }
+
   return (
     <K1AllInOneView
       k1Docs={state.reviewedK1Docs}
@@ -669,6 +824,10 @@ function K1AllInOneAdapter({ state, onDrill }: FormRenderProps): React.ReactElem
 
 function K1MultiYearAdapter({ state }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
+  if (loadingEmptyArray(state, state.allK1Documents)) {
+    return <TaxPreviewColumnSkeleton label="Multi-Year K-1" />
+  }
+
   return (
     <K1MultiYearView
       k1Docs={state.allK1Documents}
@@ -681,6 +840,10 @@ function K1MultiYearAdapter({ state }: FormRenderProps): React.ReactElement {
 
 function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc, exportXlsx, isExportingXlsx } = useDockActions()
+  if (loadingEmptyArray(state, state.reviewedK1Docs)) {
+    return <TaxPreviewColumnSkeleton label="All-in-One K-3" />
+  }
+
   return (
     <K3AllInOneView
       k1Docs={state.reviewedK1Docs}
@@ -694,6 +857,10 @@ function K3AllInOneAdapter({ state }: FormRenderProps): React.ReactElement {
 
 function SourceValueOverridesAdapter({ state, onDrill }: FormRenderProps): React.ReactElement {
   const { reviewK1Doc } = useDockActions()
+  if (loadingEmptyArray(state, state.reviewedK1Docs)) {
+    return <TaxPreviewColumnSkeleton label="source value overrides" />
+  }
+
   return (
     <SourceValueOverridesView
       k1Docs={state.reviewedK1Docs}
@@ -775,6 +942,9 @@ function PartnershipBasisInterestRow({ interest }: { interest: PartnershipBasisI
 function PartnershipBasisAdapter({ state }: FormRenderProps): React.ReactElement {
   const facts = state.taxFacts?.partnershipBasis
   if (!facts || facts.interests.length === 0) {
+    if (loadingTaxFacts(state)) {
+      return <TaxPreviewColumnSkeleton label="partnership outside basis" />
+    }
     return (
       <StubCard
         title="Partnership Outside Basis"

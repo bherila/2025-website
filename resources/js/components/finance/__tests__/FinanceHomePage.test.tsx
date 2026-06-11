@@ -108,21 +108,28 @@ function makeSummary(overrides: Partial<Parameters<typeof Object.assign>[0]> = {
         title: 'Accounts',
         summary: '3 accounts',
         counts: { accounts: 3 },
-        actions: [],
+        actions: [
+          { id: 'accounts.view', label: 'Review accounts', href: '/finance/accounts', kind: 'secondary' },
+        ],
       },
       {
         id: 'transactions',
         status: 'in_progress',
         title: 'Transactions',
         summary: '',
-        actions: [],
+        actions: [
+          { id: 'transactions.import', label: 'Import transactions', href: '/finance/account/all/import', kind: 'primary' },
+          { id: 'transactions.view', label: 'Review transactions', href: '/finance/account/all/transactions', kind: 'secondary' },
+        ],
       },
       {
         id: 'documents',
         status: 'needs_attention',
         title: 'Documents',
         summary: '2 missing',
-        actions: [],
+        actions: [
+          { id: 'documents.review', label: 'Review tax documents', href: '/finance/documents', kind: 'secondary' },
+        ],
       },
     ],
     primaryActions: [
@@ -179,6 +186,94 @@ describe('FinanceHomePage', () => {
     expect(screen.getByTestId('section-documents-summary')).toHaveTextContent('2 missing')
   })
 
+  it('links accessible setup checklist sections to their finance tools', async () => {
+    window.history.replaceState({}, '', '/finance?year=2025')
+    await renderAndWait()
+
+    expect(screen.getByText('Accounts').closest('a')).toHaveAttribute('href', '/finance/accounts')
+    expect(screen.getByText('Transactions').closest('a')).toHaveAttribute(
+      'href',
+      '/finance/account/all/transactions?year=2025',
+    )
+    expect(screen.getByText('Documents').closest('a')).toHaveAttribute(
+      'href',
+      '/finance/documents?document_kind=tax_form&tax_year=2025',
+    )
+  })
+
+  it('prefers primary setup actions for empty checklist sections', async () => {
+    await renderAndWait({
+      sections: [
+        {
+          id: 'transactions',
+          status: 'not_started',
+          title: 'Transactions',
+          summary: 'No transactions recorded for 2025 yet.',
+          counts: { transactions: 0 },
+          actions: [
+            {
+              id: 'transactions.import',
+              label: 'Import transactions',
+              href: '/finance/account/all/import',
+              kind: 'primary',
+            },
+            {
+              id: 'transactions.view',
+              label: 'Review transactions',
+              href: '/finance/account/all/transactions',
+              kind: 'secondary',
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(screen.getByText('Transactions').closest('a')).toHaveAttribute(
+      'href',
+      '/finance/account/all/import',
+    )
+  })
+
+  it('does not invent checklist links when the API returns no allowed actions', async () => {
+    await renderAndWait({
+      sections: [
+        {
+          id: 'accounts',
+          status: 'ready',
+          title: 'Accounts',
+          summary: '3 accounts',
+          counts: { accounts: 3 },
+          actions: [],
+        },
+      ],
+    })
+
+    expect(screen.getByText('Accounts').closest('a')).toBeNull()
+  })
+
+  it('deep-links K-1 basis through the allowed documents action', async () => {
+    window.history.replaceState({}, '', '/finance?year=2025')
+    await renderAndWait({
+      sections: [
+        {
+          id: 'k1_basis',
+          status: 'optional',
+          title: 'K-1 / partnership basis',
+          summary: 'No K-1 documents recorded for 2025.',
+          counts: { k1_documents: 0 },
+          actions: [
+            { id: 'k1.upload', label: 'Upload K-1 documents', href: '/finance/documents', kind: 'primary' },
+          ],
+        },
+      ],
+    })
+
+    expect(screen.getByText('K-1 / partnership basis').closest('a')).toHaveAttribute(
+      'href',
+      '/finance/documents?document_kind=tax_form&tax_year=2025',
+    )
+  })
+
   it('renders pending work / warnings from API data', async () => {
     await renderAndWait()
 
@@ -232,6 +327,7 @@ describe('FinanceHomePage', () => {
 
     // RSU section title still shows (UX dimmed) but no summary/counts
     expect(screen.getByText('RSU')).toBeInTheDocument()
+    expect(screen.getByText('RSU').closest('a')).toBeNull()
     expect(screen.queryByTestId('section-rsu-summary')).not.toBeInTheDocument()
 
     // Accounts section summary is visible
