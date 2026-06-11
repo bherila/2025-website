@@ -82,6 +82,20 @@ describe('rsuUiHelpers', () => {
     expect(rows[0]?.share_count).toBe(32.8125)
   })
 
+  it('assigns unique negative IDs to virtual refreshers across jobs', () => {
+    const rows = virtualRefreshersFromCareerComp({
+      ...inputs,
+      currentJobs: [
+        inputs.currentJobs[0]!,
+        { ...inputs.currentJobs[0]!, id: 'current-copy', name: 'CurrentCo Copy' },
+      ],
+    })
+    const ids = rows.map((row) => row.id)
+
+    expect(ids.every((id) => typeof id === 'number' && id < 0)).toBe(true)
+    expect(new Set(ids).size).toBe(rows.length)
+  })
+
   it('anchors virtual current-job refreshers to jobs starting after the projection start year', () => {
     const rows = virtualRefreshersFromCareerComp({
       ...inputs,

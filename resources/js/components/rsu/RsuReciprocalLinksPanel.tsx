@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { fetchWrapper } from '@/fetchWrapper'
 import { hasPermission } from '@/lib/permissions'
-import type { IRsuLink } from '@/types/finance'
+import type { IRsuLink, IRsuSettlement } from '@/types/finance'
 
 import { linkTypeLabel, reconciliationRows, settlementHref, settlementLabel } from './rsuUiHelpers'
 
@@ -64,12 +64,10 @@ export default function RsuReciprocalLinksPanel({
   if (!endpoint || !canViewRsu) return null
 
   const localRows = [
-    ['Payslip RSU income', localRsuIncome],
-    ['Payslip RSU tax offset', localTaxOffset],
-    ['Payslip excess refund', localExcessRefund],
-  ]
-    .filter(([, value]) => value !== null && value !== undefined && Number(value) !== 0)
-    .map(([label, value]) => ({ label: String(label), value: currency(Number(value)).format() }))
+    localComparisonRow('Payslip RSU income', localRsuIncome, expectedSettlementTotal(links, ['payslip_rsu_income'], 'gross_income')),
+    localComparisonRow('Payslip RSU tax offset', localTaxOffset, expectedSettlementTotal(links, ['payslip_rsu_tax_offset'], 'actual_tax_remitted')),
+    localComparisonRow('Payslip excess refund', localExcessRefund, expectedSettlementTotal(links, ['payslip_rsu_excess_refund'], 'excess_refund')),
+  ].filter((row): row is LocalComparisonRow => row !== null)
 
   return (
     <div className={compact ? 'rounded-md border border-border p-3' : 'border border-border rounded-sm bg-card'}>
@@ -85,11 +83,15 @@ export default function RsuReciprocalLinksPanel({
           <p className="text-xs text-muted-foreground">No RSU settlement links.</p>
         )}
         {localRows.length > 0 && (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-1 text-xs">
             {localRows.map((row) => (
               <div key={row.label} className="contents">
                 <span className="text-muted-foreground">{row.label}</span>
-                <span className="text-right font-medium">{row.value}</span>
+                <span className="text-right font-medium">{row.actualLabel}</span>
+                <span className="text-right text-muted-foreground">{row.expectedLabel}</span>
+                <span className={`text-right ${row.delta !== null && row.delta !== 0 ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'}`}>
+                  {row.deltaLabel}
+                </span>
               </div>
             ))}
           </div>
@@ -134,4 +136,61 @@ export default function RsuReciprocalLinksPanel({
       </div>
     </div>
   )
+}
+
+interface LocalComparisonRow {
+  label: string
+  actualLabel: string
+  expectedLabel: string
+  delta: number | null
+  deltaLabel: string
+}
+
+function localComparisonRow(label: string, actualValue: number | string | null | undefined, expectedValue: number | null): LocalComparisonRow | null {
+  const actual = Number(actualValue)
+  if (actualValue === null || actualValue === undefined || !Number.isFinite(actual) || actual === 0) return null
+
+  const delta = expectedValue === null ? null : currency(actual).subtract(expectedValue).value
+
+  return {
+    label,
+    actualLabel: `Actual ${currency(actual).format()}`,
+    expectedLabel: expectedValue === null ? 'Expected -' : `Expected ${currency(expectedValue).format()}`,
+    delta,
+    deltaLabel: delta === null ? 'Delta -' : `Delta ${formatSignedMoney(delta)}`,
+  }
+}
+
+function expectedSettlementTotal(
+  links: IRsuLink[],
+  linkTypes: IRsuLink['link_type'][],
+  field: keyof Pick<IRsuSettlement, 'gross_income' | 'actual_tax_remitted' | 'excess_refund'>,
+): number | null {
+  let total = currency(0)
+  let found = false
+  const seen = new Set<string>()
+
+  for (const link of links) {
+    if (!linkTypes.includes(link.link_type)) continue
+    const settlement = link.settlement
+    if (!settlement?.id) continue
+
+    const key = `${settlement.id}:${link.link_type}:${link.payslip_id ?? 'none'}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const value = settlement[field]
+    if (value === null || value === undefined) continue
+
+    total = total.add(Number(value))
+    found = true
+  }
+
+  return found ? total.value : null
+}
+
+function formatSignedMoney(value: number): string {
+  const formatted = currency(Math.abs(value)).format()
+
+  return value < 0 ? `-${formatted}` : `+${formatted}`
 }

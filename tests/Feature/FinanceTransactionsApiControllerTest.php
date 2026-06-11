@@ -8,6 +8,8 @@ use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinDocument;
+use App\Models\FinanceTool\FinRsuLink;
+use App\Models\FinanceTool\FinRsuVestSettlement;
 use App\Models\FinanceTool\FinStatement;
 use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
@@ -67,6 +69,38 @@ class FinanceTransactionsApiControllerTest extends TestCase
         $data = $response->json();
         $this->assertIsArray($data);
         $this->assertCount(2, $data);
+    }
+
+    public function test_get_line_items_includes_rsu_link_metadata_when_permitted(): void
+    {
+        $user = $this->grantFeatures($this->createUser(), ['finance.transactions.view', 'finance.rsu.view']);
+        $account = $this->createAccountWithTransactions($user->id);
+        $transaction = FinAccountLineItems::query()
+            ->where('t_account', $account->acct_id)
+            ->where('t_symbol', 'AAPL')
+            ->firstOrFail();
+        $settlement = FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2023-06-15',
+            'symbol' => 'AAPL',
+            'gross_shares' => '5.000000',
+            'gross_income' => '1000.0000',
+            'status' => 'confirmed',
+        ]);
+        $link = FinRsuLink::query()->create([
+            'uid' => $user->id,
+            'settlement_id' => $settlement->id,
+            'transaction_id' => $transaction->t_id,
+            'link_type' => 'share_deposit',
+            'status' => 'confirmed',
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/{$account->acct_id}/line_items");
+
+        $response->assertOk();
+        $row = collect($response->json())->firstWhere('t_id', $transaction->t_id);
+        $this->assertSame($link->id, $row['rsu_links'][0]['id'] ?? null);
+        $this->assertSame($settlement->id, $row['rsu_links'][0]['settlement']['id'] ?? null);
     }
 
     public function test_get_line_items_filters_by_year(): void

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import Container from '@/components/container'
 import type { CareerCompWorkflow } from '@/components/planning/CareerComp/types'
-import { getShares, isVested, shareValue, todayIso } from '@/components/rsu/helpers'
+import { getShares, isVested, sharePriceSourceLabel, shareValue, todayIso } from '@/components/rsu/helpers'
 import { RsuByAward } from '@/components/rsu/RsuByAward'
 import { RsuByVestDate } from '@/components/rsu/RsuByVestDate'
 import RsuChart from '@/components/rsu/RsuChart'
@@ -74,6 +74,7 @@ const PAYSLIP_LINK_TYPES: RsuLinkType[] = ['payslip_rsu_income', 'payslip_rsu_ta
 
 export default function RsuPage() {
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [rsu, setRsu] = useState<IAward[]>([])
   const [careerWorkflow, setCareerWorkflow] = useState<CareerCompWorkflow | null>(null)
   const [chartMode, setChartMode] = useState<'shares' | 'value'>('shares')
@@ -96,6 +97,7 @@ export default function RsuPage() {
   }, [])
   const loadRsuData = useCallback(() => {
     setLoading(true)
+    setLoadError(null)
     Promise.all([
       fetchWrapper.get('/api/rsu'),
       fetchWrapper.get('/api/financial-planning/career-comparison/latest').catch(() => ({ workflow: null })),
@@ -104,7 +106,11 @@ export default function RsuPage() {
         setRsu(Array.isArray(rsuResponse) ? rsuResponse : [])
         setCareerWorkflow(workflowResponse?.workflow ?? null)
       })
-      .catch((e) => console.error(e))
+      .catch((e) => {
+        console.error(e)
+        setRsu([])
+        setLoadError('RSU dashboard data could not be loaded.')
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -134,6 +140,7 @@ export default function RsuPage() {
     if (filter === 'needs-refund-reconciliation') return rsu.filter((r) => needsRefundReconciliation(r))
     return rows
   }, [actualAndVirtual, filter, now, rsu])
+  const aggregateRsu = useMemo(() => filteredRsu.filter((award) => !award.isVirtual), [filteredRsu])
 
   const filterButtons: { value: RsuDashboardFilter; label: string }[] = [
     { value: 'actual', label: 'Actual only' },
@@ -158,6 +165,16 @@ export default function RsuPage() {
         </Tabs>
         <RsuChart rsu={rsu} mode={chartMode} />
       </div>
+      {loadError && (
+        <Card className="mb-4 border-destructive/40">
+          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-destructive">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={loadRsuData}>
+              Retry
+            </Button>
+          </div>
+        </Card>
+      )}
       {focusQuery.settlementId && (
         <Card className="mb-4">
           <div className="p-4">
@@ -240,7 +257,7 @@ export default function RsuPage() {
                     const total = shareValue(shares, price)
                     const grantPrice = r.grant_price ?? null
                     const grantValue = shareValue(shares, grantPrice)
-                    const displayGrantValue = grantValue ?? (r.virtualValue != null ? currency(r.virtualValue) : null)
+                    const displayGrantValue = grantValue ?? r.virtualValue ?? null
                     const settlement = primarySettlement(r)
                     const transactionLink = firstTransactionLink(r.rsu_links)
                     const transactionUrl = transactionLink ? transactionHref(transactionLink) : null
@@ -248,7 +265,7 @@ export default function RsuPage() {
                     const refundReconciliationNeeded = needsRefundReconciliation(r)
                     const focused = settlement?.id === focusQuery.settlementId
                     return (
-                      <TableRow key={r.isVirtual ? `virtual-${r.virtualYear}-${i}` : r.id ?? i} className={focused ? 'bg-primary/10' : vested && !r.isVirtual ? 'opacity-50 line-through' : r.isVirtual ? 'bg-muted/30' : ''}>
+                      <TableRow key={r.id ?? `${r.award_id ?? 'award'}-${r.vest_date ?? i}`} className={focused ? 'bg-primary/10' : vested && !r.isVirtual ? 'opacity-50 line-through' : r.isVirtual ? 'bg-muted/30' : ''}>
                         <TableCell>
                           {vested && !r.isVirtual && '✔ '}
                           {r.vest_date}
@@ -257,11 +274,11 @@ export default function RsuPage() {
                         <TableCell>{r.grant_date}</TableCell>
                         <TableCell>{shares != null ? Number(shares.toFixed(6)) : '—'}</TableCell>
                         <TableCell>{grantPrice != null ? currency(grantPrice).format() : ''}</TableCell>
-                        <TableCell>{displayGrantValue ? displayGrantValue.format() : ''}</TableCell>
+                        <TableCell>{displayGrantValue != null ? currency(displayGrantValue).format() : ''}</TableCell>
                         <TableCell style={{ borderLeft: '2px solid #e5e7eb' }}>
                           {price != null ? currency(price).format() : ''}
                         </TableCell>
-                        <TableCell>{total ? total.format() : ''}</TableCell>
+                        <TableCell>{total != null ? currency(total).format() : ''}</TableCell>
                         <TableCell>{r.award_id}</TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1 text-xs">
@@ -272,7 +289,7 @@ export default function RsuPage() {
                               </>
                             ) : (
                               <>
-                                <span>{r.vest_price_source === 'quote_close' ? 'Quote-derived price' : r.vest_price_source ?? 'Price source missing'}</span>
+                                <span>Price source: {sharePriceSourceLabel(r.vest_price_source)}</span>
                                 <span>{settlementLabel(settlement)}</span>
                                 <span>{hasBrokerageLink(r) ? 'Brokerage linked' : 'Missing brokerage link'}</span>
                                 <span>{hasPayslipLink(r) ? 'Payslip linked' : 'Missing payslip link'}</span>
@@ -353,7 +370,12 @@ export default function RsuPage() {
           <Card className="mb-8">
             <div className="p-6">
               <h3 className="text-xl font-semibold mb-4">Per vest date</h3>
-              <RsuByVestDate rsu={filteredRsu} />
+              {filter === 'actual-and-virtual' && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Projected refresher rows are shown in All vests only; aggregate totals below use actual vest events.
+                </p>
+              )}
+              <RsuByVestDate rsu={aggregateRsu} />
             </div>
           </Card>
         </TabsContent>
@@ -361,7 +383,12 @@ export default function RsuPage() {
           <Card className="mb-8">
             <div className="p-6">
               <h3 className="text-xl font-semibold mb-4">Per award</h3>
-              <RsuByAward rsu={filteredRsu} hideFullyVested={filter === 'unvested'} />
+              {filter === 'actual-and-virtual' && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Projected refresher rows are shown in All vests only; aggregate totals below use actual vest events.
+                </p>
+              )}
+              <RsuByAward rsu={aggregateRsu} hideFullyVested={filter === 'unvested'} />
             </div>
           </Card>
         </TabsContent>
@@ -430,6 +457,7 @@ function RsuLinkWorkflow({
   const [failed, setFailed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [messageTone, setMessageTone] = useState<'default' | 'error'>('default')
   const [selectedCandidateKey, setSelectedCandidateKey] = useState('')
   const [selectedAllocationKey, setSelectedAllocationKey] = useState('settlement')
   const [linkType, setLinkType] = useState<RsuLinkType>(defaultLinkType ?? defaultLinkTypeForTarget(linkTarget))
@@ -437,6 +465,7 @@ function RsuLinkWorkflow({
   useEffect(() => {
     setCandidates({})
     setMessage(null)
+    setMessageTone('default')
     setSelectedCandidateKey('')
     setSelectedAllocationKey('settlement')
     setLinkType(defaultLinkType ?? defaultLinkTypeForTarget(linkTarget))
@@ -508,22 +537,39 @@ function RsuLinkWorkflow({
 
     setSaving(true)
     setMessage(null)
-    try {
-      await Promise.all(targetAllocations.map((allocation) => {
+    setMessageTone('default')
+
+    const successfulAllocations: Array<FocusedAllocationChoice | null> = []
+    const failedAllocations: Array<FocusedAllocationChoice | null> = []
+
+    for (const allocation of targetAllocations) {
+      try {
         const payload = { ...basePayload }
         if (allocation?.allocationId) payload.settlement_allocation_id = allocation.allocationId
         if (allocation?.equityAwardId) payload.equity_award_id = allocation.equityAwardId
 
-        return fetchWrapper.post(`/api/rsu/settlements/${settlementId}/links`, payload)
-      }))
-      setMessage(linkTargetCount === 1 ? 'RSU link created.' : `RSU links created for ${linkTargetCount} awards.`)
-      onLinked()
-    } catch (error) {
-      console.error('Failed to create RSU settlement link', error)
-      setMessage('RSU link could not be created.')
-    } finally {
-      setSaving(false)
+        await fetchWrapper.post(`/api/rsu/settlements/${settlementId}/links`, payload)
+        successfulAllocations.push(allocation)
+      } catch (error) {
+        console.error('Failed to create RSU settlement link', error)
+        failedAllocations.push(allocation)
+      }
     }
+
+    if (successfulAllocations.length > 0) {
+      if (failedAllocations.length > 0) {
+        setMessage(`Created ${successfulAllocations.length} of ${targetAllocations.length} RSU links; ${failedAllocations.length} failed.`)
+        setMessageTone('error')
+      } else {
+        setMessage(linkTargetCount === 1 ? 'RSU link created.' : `RSU links created for ${linkTargetCount} awards.`)
+      }
+      onLinked()
+    } else {
+      setMessage(linkTargetCount === 1 ? 'RSU link could not be created.' : `RSU links could not be created for ${linkTargetCount} awards.`)
+      setMessageTone('error')
+    }
+
+    setSaving(false)
   }
 
   if (!canManageRsu) {
@@ -593,7 +639,7 @@ function RsuLinkWorkflow({
               <LinkIcon className="h-3.5 w-3.5" />
               {saving ? 'Creating...' : 'Create RSU link'}
             </Button>
-            {message && <span className={message.includes('could not') ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{message}</span>}
+            {message && <span className={messageTone === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{message}</span>}
           </div>
         </div>
       )}

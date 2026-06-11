@@ -108,13 +108,13 @@ export function virtualRefreshersFromCareerComp(inputs: CareerCompInputs | null 
   if (!inputs?.currentJobs?.length) return []
 
   const rows: IAward[] = []
-  for (const job of inputs.currentJobs) {
-    rows.push(...virtualRefreshersForJob(job, inputs.startYear, inputs.horizonYears))
-  }
+  inputs.currentJobs.forEach((job, jobIndex) => {
+    rows.push(...virtualRefreshersForJob(job, inputs.startYear, inputs.horizonYears, jobIndex))
+  })
   return rows
 }
 
-function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: number): IAward[] {
+function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: number, jobIndex: number): IAward[] {
   if (!job.grantTypes.rsu || job.refresher.pctOfBase <= 0) return []
 
   const cadence = Math.max(1, Math.round(job.refresher.cadenceYears))
@@ -138,7 +138,7 @@ function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: 
     const symbol = job.rsuGrants.find((grant) => grant.symbol)?.symbol
     vestEvents.forEach((event, eventIndex) => {
       const row: IAward = {
-        id: -Number(`${year}${rows.length}${eventIndex}`),
+        id: -virtualAwardStableId(`${job.id}:${jobIndex}:${year}:${event.vestDate}:${eventIndex}`),
         award_id: `Projected refresher ${year}`,
         grant_date: `${year}-01-01`,
         vest_date: event.vestDate,
@@ -161,6 +161,16 @@ function virtualRefreshersForJob(job: JobSpec, startYear: number, horizonYears: 
   }
 
   return rows
+}
+
+function virtualAwardStableId(key: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < key.length; i += 1) {
+    hash ^= key.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+
+  return (hash >>> 0) + 1
 }
 
 function cashCompRaiseOffset(jobStartYear: number | null, projectionOffset: number, year: number): number {

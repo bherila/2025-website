@@ -145,4 +145,12 @@ class FinAccountLineItems extends Model
     {
         return $this->hasOne(ClientExpense::class, 'fin_line_item_id', 't_id');
     }
+
+    /**
+     * @return HasMany<FinRsuLink, $this>
+     */
+    public function rsuLinks(): HasMany
+    {
+        return $this->hasMany(FinRsuLink::class, 'transaction_id', 't_id');
+    }
 }
