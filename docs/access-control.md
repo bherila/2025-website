@@ -56,6 +56,16 @@ finance.payslips.view
 
 This allows Tax Preview users to receive basic account metadata for selectors without exposing account detail pages, transaction history, or import workflows.
 
+## Web route → permission map (Finance)
+
+| Route | Permission |
+|---|---|
+| `GET /finance` | `finance.access` |
+| `GET /finance/accounts` | `finance.accounts.detail` |
+| `GET /finance/documents` | `finance.tax-documents.view` |
+| `GET /finance/tax-preview` | `finance.tax-preview.view` |
+| `GET /finance/account/all/import` | `finance.transactions.import` |
+
 ## Enforcement points
 
 Feature checks are server enforced in these places:
