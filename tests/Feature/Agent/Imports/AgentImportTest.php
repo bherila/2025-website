@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\FileStorageService;
 use App\Services\Finance\Locks\PartnershipBasisLockGuard;
 use App\Support\Accounting\AccountingPeriodLockGuard;
+use App\Support\Agent\AgentContext;
 use App\Support\Agent\AgentTokenService;
 use App\Support\Agent\Capability;
 use App\Support\Agent\CapabilityRegistry;
@@ -53,7 +54,7 @@ class AgentImportTest extends TestCase
         }
 
         Route::prefix('api/agent/v1')->name('agent.')->middleware([NegotiatesAgentPayload::class])->group(function (): void {
-            Route::middleware([AuthenticateAgentRequest::class, 'feature:finance.access'])->prefix('imports')->name('imports.')->group(function (): void {
+            Route::middleware([AuthenticateAgentRequest::class.':finance', 'feature:finance.access'])->prefix('imports')->name('imports.')->group(function (): void {
                 Route::post('/request-upload', [AgentImportController::class, 'requestUpload'])->name('request-upload');
                 Route::post('/jobs', [AgentImportController::class, 'createJob'])->name('jobs.create');
                 Route::get('/jobs', [AgentImportController::class, 'index'])->name('jobs');
@@ -150,6 +151,17 @@ class AgentImportTest extends TestCase
         ], $this->bearer($token))
             ->assertStatus(403)
             ->assertJsonPath('required_permission', 'finance.transactions.import');
+    }
+
+    public function test_import_routes_are_pinned_to_finance_tokens(): void
+    {
+        ['token' => $token] = $this->createUserWithToken([
+            'finance.access',
+            'finance.tax-documents.manage',
+        ], 'tax');
+
+        $this->getJson('/api/agent/v1/imports/jobs', $this->bearer($token))
+            ->assertStatus(401);
     }
 
     public function test_token_scope_restricts_job_type_even_with_user_permission(): void
@@ -325,6 +337,18 @@ class AgentImportTest extends TestCase
         $this->assertDatabaseHas('genai_import_jobs', ['id' => $phrJob->id]);
     }
 
+    public function test_delete_requires_job_type_permission(): void
+    {
+        ['user' => $user, 'token' => $token] = $this->createUserWithToken(['finance.access']);
+        $job = GenAiImportJob::create($this->jobRow($user));
+
+        $this->deleteJson("/api/agent/v1/imports/jobs/{$job->id}", [], $this->bearer($token))
+            ->assertStatus(403)
+            ->assertJsonPath('required_permission', 'finance.transactions.import');
+
+        $this->assertDatabaseHas('genai_import_jobs', ['id' => $job->id]);
+    }
+
     public function test_import_capabilities_are_registered_with_expected_metadata(): void
     {
         $registry = new CapabilityRegistry;
@@ -348,7 +372,42 @@ class AgentImportTest extends TestCase
 
         foreach ($capabilities as $capability) {
             $this->assertSame('finance.access', $capability->requiredPermission);
+            $this->assertSame('finance', $capability->requiredModule);
             $this->assertStringStartsWith('/imports/', (string) $capability->restPath);
         }
+
+        foreach (['imports.get_job', 'imports.retry_job', 'imports.delete_job'] as $id) {
+            $this->assertSame('id', $capabilities[$id]->pathParameters[0]['name'] ?? null);
+            $this->assertSame('path', $capabilities[$id]->pathParameters[0]['in'] ?? null);
+            $this->assertSame(['type' => 'integer'], $capabilities[$id]->pathParameters[0]['schema'] ?? null);
+        }
+    }
+
+    public function test_import_capabilities_are_visible_only_to_finance_scoped_tokens(): void
+    {
+        $registry = new CapabilityRegistry;
+        ImportCapabilities::register($registry);
+
+        $financeUser = $this->grantFeatures($this->createUser(), ['finance.access']);
+        $financeToken = app(AgentTokenService::class)->createQuickSetupToken($financeUser, 'finance', null)['model'];
+        $taxUser = $this->grantFeatures($this->createUser(), ['finance.access']);
+        $taxToken = app(AgentTokenService::class)->createQuickSetupToken($taxUser, 'tax', null)['model'];
+
+        $this->assertEqualsCanonicalizing(
+            [
+                'imports.request_upload',
+                'imports.create_job',
+                'imports.list_jobs',
+                'imports.get_job',
+                'imports.retry_job',
+                'imports.delete_job',
+            ],
+            array_map(
+                fn (Capability $capability): string => $capability->id,
+                $registry->visibleTo(new AgentContext($financeUser, $financeToken)),
+            ),
+        );
+
+        $this->assertSame([], $registry->visibleTo(new AgentContext($taxUser, $taxToken)));
     }
 }

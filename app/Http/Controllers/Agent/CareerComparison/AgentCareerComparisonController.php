@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Agent\CareerComparison;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\FinancialPlanning\ComputeCareerCompRequest;
-use App\Http\Requests\FinancialPlanning\SaveCareerCompComparisonRequest;
-use App\Http\Requests\FinancialPlanning\ShareCareerCompComparisonRequest;
+use App\Http\Requests\Agent\CareerComparison\AgentComputeCareerCompRequest;
+use App\Http\Requests\Agent\CareerComparison\AgentSaveCareerCompComparisonRequest;
+use App\Http\Requests\Agent\CareerComparison\AgentShareCareerCompComparisonRequest;
 use App\Models\CareerComparison;
 use App\Services\Planning\CareerComp\CareerComparisonWorkflowService;
 use App\Services\Planning\CareerComp\CareerCompCalculator;
@@ -25,8 +25,8 @@ use Illuminate\Support\Facades\Auth;
  * exposed here. Private CRUD requires a bearer token plus the
  * financial-planning.career-comparison.private feature (import-rsu requires
  * finance.rsu.view), enforced by route middleware. All behavior delegates to
- * CareerComparisonWorkflowService and the same Form Requests the web
- * controller uses.
+ * CareerComparisonWorkflowService and agent Form Requests that reuse the web
+ * validation rules while returning stateless JSON validation errors.
  */
 class AgentCareerComparisonController extends Controller
 {
@@ -51,7 +51,7 @@ class AgentCareerComparisonController extends Controller
     /**
      * Public, stateless projection compute — nothing is persisted.
      */
-    public function compute(ComputeCareerCompRequest $request): JsonResponse
+    public function compute(AgentComputeCareerCompRequest $request): JsonResponse
     {
         return response()->json($this->calculator
             ->project(CareerCompInputs::fromArray($request->validated('inputs')))
@@ -72,7 +72,7 @@ class AgentCareerComparisonController extends Controller
     /**
      * Upsert the token owner's private latest (NULL short_code) comparison.
      */
-    public function saveLatest(SaveCareerCompComparisonRequest $request): JsonResponse
+    public function saveLatest(AgentSaveCareerCompComparisonRequest $request): JsonResponse
     {
         $inputs = CareerCompInputs::fromArray($request->validated('inputs'));
         $comparison = $this->workflows->saveLatest((int) Auth::id(), $inputs);
@@ -83,7 +83,7 @@ class AgentCareerComparisonController extends Controller
     /**
      * Fork the submitted inputs into a new, link-shareable copy owned by the caller.
      */
-    public function createShare(ShareCareerCompComparisonRequest $request): JsonResponse
+    public function createShare(AgentShareCareerCompComparisonRequest $request): JsonResponse
     {
         $inputs = CareerCompInputs::fromArray($request->validated('inputs'));
         $share = $this->workflows->createShare(

@@ -382,5 +382,20 @@ class CompareReturnLinesTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertTrue($response->json('result.isError'));
+
+        $response = $this->mcp($token, 'tools/call', [
+            'name' => 'tax_compare_return_lines',
+            'arguments' => [
+                'year' => 2024,
+                'lines' => [['form' => '1040', 'line' => '1z', 'amount_cents' => '123']],
+            ],
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertTrue($response->json('result.isError'));
+        $this->assertStringContainsString(
+            'integer number of cents',
+            (string) $response->json('result.content.0.text'),
+        );
     }
 }

@@ -17,6 +17,8 @@ use App\Support\Agent\CapabilityRegistry;
  */
 final class ImportCapabilities
 {
+    private const REQUIRED_MODULE = 'finance';
+
     public static function register(CapabilityRegistry $registry): void
     {
         $jobTypeDescription = 'Agent job types: '.implode(', ', AgentImportController::AGENT_JOB_TYPES).'. PHR and class-action types are not available via the agent API.';
@@ -51,6 +53,7 @@ final class ImportCapabilities
             ],
             examples: ['POST /api/agent/v1/imports/request-upload {"filename":"statement.pdf","content_type":"application/pdf","file_size":12345,"job_type":"finance_transactions"}'],
             routeName: 'agent.imports.request-upload',
+            requiredModule: self::REQUIRED_MODULE,
         ));
 
         $registry->register(new Capability(
@@ -86,6 +89,7 @@ final class ImportCapabilities
             ],
             examples: ['POST /api/agent/v1/imports/jobs {"s3_key":"genai-import/1/.../statement.pdf","original_filename":"statement.pdf","file_size_bytes":12345,"job_type":"finance_transactions","acct_id":12}'],
             routeName: 'agent.imports.jobs.create',
+            requiredModule: self::REQUIRED_MODULE,
         ));
 
         $registry->register(new Capability(
@@ -113,6 +117,7 @@ final class ImportCapabilities
             ],
             examples: ['GET /api/agent/v1/imports/jobs?job_type=finance_transactions'],
             routeName: 'agent.imports.jobs',
+            requiredModule: self::REQUIRED_MODULE,
         ));
 
         $registry->register(new Capability(
@@ -134,8 +139,10 @@ final class ImportCapabilities
                     'results' => ['type' => 'array', 'items' => ['type' => 'object']],
                 ],
             ],
+            pathParameters: [self::jobIdPathParameter()],
             examples: ['GET /api/agent/v1/imports/jobs/42'],
             routeName: 'agent.imports.jobs.show',
+            requiredModule: self::REQUIRED_MODULE,
         ));
 
         $registry->register(new Capability(
@@ -155,8 +162,10 @@ final class ImportCapabilities
                     'status' => ['type' => 'string'],
                 ],
             ],
+            pathParameters: [self::jobIdPathParameter()],
             examples: ['POST /api/agent/v1/imports/jobs/42/retry'],
             routeName: 'agent.imports.jobs.retry',
+            requiredModule: self::REQUIRED_MODULE,
         ));
 
         $registry->register(new Capability(
@@ -175,8 +184,22 @@ final class ImportCapabilities
                     'success' => ['type' => 'boolean'],
                 ],
             ],
+            pathParameters: [self::jobIdPathParameter()],
             examples: ['DELETE /api/agent/v1/imports/jobs/42'],
             routeName: 'agent.imports.jobs.delete',
+            requiredModule: self::REQUIRED_MODULE,
         ));
+    }
+
+    /** @return array<string, mixed> */
+    private static function jobIdPathParameter(): array
+    {
+        return [
+            'name' => 'id',
+            'in' => 'path',
+            'required' => true,
+            'schema' => ['type' => 'integer'],
+            'description' => 'Import job ID',
+        ];
     }
 }

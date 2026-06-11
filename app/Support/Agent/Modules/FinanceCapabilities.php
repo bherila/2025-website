@@ -6,9 +6,9 @@ use App\Support\Agent\Capability;
 use App\Support\Agent\CapabilityRegistry;
 
 /**
- * Finance module capability registrations — one per agent REST read endpoint
- * (routes/agent.php), each mirrored by the matching finance MCP tool. Wired
- * into the registry by AgentServiceProvider.
+ * Finance module capability registrations — agent REST endpoints
+ * (routes/agent.php), mirrored by finance MCP tools where a tool exists.
+ * Wired into the registry by AgentServiceProvider.
  */
 final class FinanceCapabilities
 {
@@ -183,6 +183,72 @@ final class FinanceCapabilities
             ],
             examples: ['GET /api/agent/v1/finance/tax-documents/42'],
             routeName: 'agent.finance.tax-documents.show',
+        ));
+
+        $registry->register(new Capability(
+            id: 'finance.tax_documents.download_url',
+            module: 'finance',
+            label: 'Get tax document download URL',
+            description: 'Owner-scoped one-hour signed download and inline-view URLs for a stored tax document file.',
+            requiredPermission: 'finance.tax-documents.view',
+            risk: 'download',
+            restMethod: 'GET',
+            restPath: '/finance/tax-documents/{id}/download-url',
+            openApiTag: 'finance',
+            responseSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'download_url' => ['type' => 'string'],
+                    'view_url' => ['type' => 'string'],
+                    'expires_in_seconds' => ['type' => 'integer'],
+                    'filename' => ['type' => 'string'],
+                    'content_type' => ['type' => ['string', 'null']],
+                ],
+            ],
+            pathParameters: [
+                [
+                    'name' => 'id',
+                    'in' => 'path',
+                    'required' => true,
+                    'schema' => ['type' => 'integer'],
+                    'description' => 'Tax document ID',
+                ],
+            ],
+            examples: ['GET /api/agent/v1/finance/tax-documents/42/download-url'],
+            routeName: 'agent.finance.tax-documents.download-url',
+        ));
+
+        $registry->register(new Capability(
+            id: 'finance.documents.download_url',
+            module: 'finance',
+            label: 'Get finance document download URL',
+            description: 'Owner-scoped one-hour signed download and inline-view URLs for a stored finance document file.',
+            requiredPermission: 'finance.accounts.detail',
+            risk: 'download',
+            restMethod: 'GET',
+            restPath: '/finance/documents/{id}/download-url',
+            openApiTag: 'finance',
+            responseSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'download_url' => ['type' => 'string'],
+                    'view_url' => ['type' => 'string'],
+                    'expires_in_seconds' => ['type' => 'integer'],
+                    'filename' => ['type' => 'string'],
+                    'content_type' => ['type' => ['string', 'null']],
+                ],
+            ],
+            pathParameters: [
+                [
+                    'name' => 'id',
+                    'in' => 'path',
+                    'required' => true,
+                    'schema' => ['type' => 'integer'],
+                    'description' => 'Finance document ID',
+                ],
+            ],
+            examples: ['GET /api/agent/v1/finance/documents/42/download-url'],
+            routeName: 'agent.finance.documents.download-url',
         ));
 
         $registry->register(new Capability(

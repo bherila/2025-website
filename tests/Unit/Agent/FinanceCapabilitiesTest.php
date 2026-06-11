@@ -21,6 +21,8 @@ class FinanceCapabilitiesTest extends TestCase
         'finance.tax_preview.get' => ['finance.tax-preview.view', 'get-tax-preview', '/finance/tax-preview/{year}'],
         'finance.tax_documents.list' => ['finance.tax-documents.view', 'list-tax-documents', '/finance/tax-documents'],
         'finance.tax_documents.get' => ['finance.tax-documents.view', 'get-tax-document', '/finance/tax-documents/{id}'],
+        'finance.tax_documents.download_url' => ['finance.tax-documents.view', null, '/finance/tax-documents/{id}/download-url'],
+        'finance.documents.download_url' => ['finance.accounts.detail', null, '/finance/documents/{id}/download-url'],
         'finance.lots.list' => ['finance.lots.view', 'list-lots', '/finance/lots'],
         'finance.payslips.list' => ['finance.payslips.view', 'list-payslips', '/finance/payslips'],
     ];
@@ -65,11 +67,16 @@ class FinanceCapabilitiesTest extends TestCase
             $this->assertSame($restPath, $capability->restPath, $id);
             $this->assertSame($permission, $capability->requiredPermission, $id);
             $this->assertSame($mcpTool, $capability->mcpTool, $id);
-            $this->assertSame('read', $capability->risk, $id);
+            $this->assertSame(str_ends_with($id, '.download_url') ? 'download' : 'read', $capability->risk, $id);
             $this->assertNotEmpty($capability->examples, $id);
             $this->assertNotNull($capability->responseSchema, $id);
             $this->assertNotNull($capability->routeName, $id);
             $this->assertTrue(Route::has($capability->routeName), "Route [{$capability->routeName}] for [{$id}] must exist.");
+
+            if (str_contains($restPath, '{id}')) {
+                $this->assertSame('id', $capability->pathParameters[0]['name'] ?? null, $id);
+                $this->assertSame('path', $capability->pathParameters[0]['in'] ?? null, $id);
+            }
         }
     }
 
@@ -83,6 +90,10 @@ class FinanceCapabilitiesTest extends TestCase
         );
 
         foreach ($this->registry()->forModule('finance') as $capability) {
+            if ($capability->mcpTool === null) {
+                continue;
+            }
+
             $this->assertContains($capability->mcpTool, $serverToolNames, $capability->id);
         }
     }
@@ -114,6 +125,7 @@ class FinanceCapabilitiesTest extends TestCase
     {
         $user = $this->grantFeatures($this->createUser(), [
             'finance.accounts.basic',
+            'finance.accounts.detail',
             'finance.transactions.view',
             'finance.tax-preview.view',
             'finance.tax-documents.view',
