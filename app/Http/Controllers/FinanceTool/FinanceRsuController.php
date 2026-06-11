@@ -97,13 +97,15 @@ class FinanceRsuController extends Controller
 
     public function confirmSettlement(Request $request, FinRsuVestSettlement $settlement): JsonResponse
     {
-        $this->authorizeSettlement($settlement);
-        $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, ['settlement_id' => $settlement->id] + $request->all());
-
-        return response()->json($confirmed->load(['allocations.award', 'links']));
+        return $this->confirmOrUpdateSettlement($request, $settlement);
     }
 
     public function updateSettlement(Request $request, FinRsuVestSettlement $settlement): JsonResponse
+    {
+        return $this->confirmOrUpdateSettlement($request, $settlement);
+    }
+
+    private function confirmOrUpdateSettlement(Request $request, FinRsuVestSettlement $settlement): JsonResponse
     {
         $this->authorizeSettlement($settlement);
         $confirmed = $this->settlementService->confirm((int) Auth::id(), Carbon::parse($settlement->vest_date)->format('Y-m-d'), $settlement->symbol, ['settlement_id' => $settlement->id] + $request->all());
@@ -212,7 +214,11 @@ class FinanceRsuController extends Controller
             ->whereHas('account', fn ($query) => $query->withoutGlobalScopes()->where('acct_owner', Auth::id()))
             ->firstOrFail();
 
-        return response()->json(FinRsuLink::query()->where('transaction_id', $lineItem->t_id)->with('settlement')->get());
+        return response()->json(FinRsuLink::query()
+            ->where('uid', Auth::id())
+            ->where('transaction_id', $lineItem->t_id)
+            ->with('settlement')
+            ->get());
     }
 
     public function payslipRsuLinks(int $payslip): JsonResponse
