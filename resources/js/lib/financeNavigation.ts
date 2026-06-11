@@ -1,4 +1,5 @@
 export type FinanceTopToolId =
+  | 'home'
   | 'tax-preview'
   | 'documents'
   | 'rsu'
@@ -6,6 +7,7 @@ export type FinanceTopToolId =
   | 'tags'
   | 'calculators'
   | 'accounts'
+  | 'import'
   | 'config'
 
 export interface FinanceTopToolDef {
@@ -39,6 +41,7 @@ export interface FinanceAccountToolDef {
 }
 
 export const FINANCE_TOP_TOOLS: FinanceTopToolDef[] = [
+  { id: 'home', label: 'Home', href: '/finance', permission: 'finance.access', keywords: ['home', 'dashboard', 'setup', 'readiness', 'onboarding'] },
   { id: 'tax-preview', label: 'Tax Preview', href: '/finance/tax-preview', permission: 'finance.tax-preview.view', keywords: ['tax', 'preview', '1040', 'return'] },
   { id: 'documents', label: 'Documents', href: '/finance/documents', permission: 'finance.tax-documents.view', keywords: ['documents', 'upload', '1099', 'w2', 'w-2', 'k1', 'k-1'] },
   { id: 'rsu', label: 'RSU', href: '/finance/rsu', permission: 'finance.rsu.view', keywords: ['rsu', 'stock compensation', 'vesting'] },
@@ -46,6 +49,9 @@ export const FINANCE_TOP_TOOLS: FinanceTopToolDef[] = [
   { id: 'tags', label: 'Tags', href: '/finance/tags', permission: 'finance.rules.manage', keywords: ['tags', 'categories', 'rules'] },
   { id: 'calculators', label: 'Calculators', href: '/financial-planning', keywords: ['calculators', 'financial planning', 'retirement', 'roth'] },
   { id: 'accounts', label: 'Accounts', href: '/finance/accounts', permission: 'finance.accounts.detail', keywords: ['accounts', 'balances'] },
+  // The Import Center is a top-level page. FinanceTopToolDef supports a single permission,
+  // so gate on the canonical import permission (finance.transactions.import).
+  { id: 'import', label: 'Import', href: '/finance/import', permission: 'finance.transactions.import', keywords: ['import', 'import center', 'upload', 'statement', 'csv'] },
   { id: 'config', label: 'Config', href: '/finance/config', permission: 'finance.config.manage', keywords: ['config', 'settings'] },
 ]
 

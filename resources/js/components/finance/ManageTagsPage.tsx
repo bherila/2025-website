@@ -491,7 +491,7 @@ export default function ManageTagsPage() {
                                 asChild
                                 aria-label={`View all transactions tagged ${tag.tag_label}`}
                               >
-                                <a href={`/finance/all-transactions?tag=${encodeURIComponent(tag.tag_label)}`}>
+                                <a href={`/finance/account/all/transactions?tag=${encodeURIComponent(tag.tag_label)}`}>
                                   <Search className="h-4 w-4" aria-hidden="true" />
                                 </a>
                               </Button>

@@ -17,14 +17,17 @@ interface Props {
   accountId: number
   accountName: string
   whenClosed: string | null
+  acctNumber?: string | null
 }
 
-export default function AccountMaintenanceClient({ accountId, accountName, whenClosed: initialWhenClosed }: Props) {
+export default function AccountMaintenanceClient({ accountId, accountName, whenClosed: initialWhenClosed, acctNumber: initialAcctNumber = null }: Props) {
   const [newName, setNewName] = useState(accountName)
   const [error, setError] = useState('')
   const [whenClosed, setWhenClosed] = useState<Date | null>(initialWhenClosed ? new Date(initialWhenClosed) : null)
   const [isAccountClosed, setIsAccountClosed] = useState(!!initialWhenClosed)
   const [isClosed, setIsClosed] = useState(!!initialWhenClosed)
+  const [acctNumber, setAcctNumber] = useState(initialAcctNumber ?? '')
+  const [acctNumberSaved, setAcctNumberSaved] = useState(false)
 
   const handleRename = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,6 +36,18 @@ export default function AccountMaintenanceClient({ accountId, accountName, whenC
       window.location.reload()
     } catch (err) {
       setError('Failed to rename account')
+    }
+  }
+
+  const handleSaveAcctNumber = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setAcctNumberSaved(false)
+    try {
+      await fetchWrapper.post(`/api/finance/${accountId}/update-flags`, { acctNumber: acctNumber.trim() || null })
+      setAcctNumberSaved(true)
+    } catch (err) {
+      setError('Failed to update account number')
     }
   }
 
@@ -66,6 +81,34 @@ export default function AccountMaintenanceClient({ accountId, accountName, whenC
               <Input id="account-name" value={newName} onChange={(e) => setNewName(e.target.value)} required />
             </div>
             <Button type="submit">Save New Name</Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle>Account Number</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSaveAcctNumber} className="space-y-4">
+            <div className="grid w-full max-w-sm items-center gap-1.5">
+              <Label htmlFor="account-number">Account number (or last 4)</Label>
+              <Input
+                id="account-number"
+                value={acctNumber}
+                onChange={(e) => {
+                  setAcctNumber(e.target.value)
+                  setAcctNumberSaved(false)
+                }}
+                autoComplete="off"
+                placeholder="e.g. last 4 digits"
+              />
+              <p className="text-xs text-muted-foreground">
+                Account suffix helps match broker/bank PDFs to the correct account. Store only the last 4 digits when possible.
+              </p>
+            </div>
+            {acctNumberSaved && <p className="text-sm text-green-600">Account number saved.</p>}
+            <Button type="submit">Save Account Number</Button>
           </form>
         </CardContent>
       </Card>

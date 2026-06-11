@@ -71,6 +71,21 @@ describe('TransactionsPage source highlight', () => {
     jest.restoreAllMocks()
   })
 
+  it('renders the all-account import link in the blank state', async () => {
+    ;(syncCachedTransactions as jest.Mock).mockResolvedValue({ transactions: [] })
+    ;(getCachedTransactions as jest.Mock).mockResolvedValue([])
+    window.history.pushState(null, '', '/finance/account/all/transactions')
+
+    render(<TransactionsPage accountId="all" initialAvailableYears={[2025]} userId={7} />)
+
+    const link = await screen.findByRole('link', { name: /import multi-account statement/i })
+    expect(link).toHaveAttribute('href', '/finance/account/all/import')
+
+    act(() => {
+      jest.runOnlyPendingTimers()
+    })
+  })
+
   it('scrolls to and flashes the transaction row from the hash target', async () => {
     const scrollIntoView = jest.fn()
     HTMLElement.prototype.scrollIntoView = scrollIntoView

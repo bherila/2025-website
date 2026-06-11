@@ -139,6 +139,7 @@ class FinanceApiController extends Controller
             'accountName' => 'required|string',
             'isDebt' => 'boolean',
             'isRetirement' => 'boolean',
+            'acctNumber' => 'nullable|string|max:255',
             'capitalCommitment' => 'nullable|numeric|min:0',
             'capitalCommitmentCurrency' => 'nullable|string|size:3',
             'capitalCommitmentDate' => 'nullable|date',
@@ -147,12 +148,17 @@ class FinanceApiController extends Controller
 
         $uid = Auth::id();
 
+        $acctNumber = $request->has('acctNumber')
+            ? (trim((string) $request->input('acctNumber')) ?: null)
+            : null;
+
         FinAccounts::create([
             'acct_owner' => $uid,
             'acct_name' => $request->accountName,
             'acct_is_debt' => $request->isDebt,
             'acct_is_retirement' => $request->isRetirement,
             'acct_last_balance' => '0',
+            'acct_number' => $acctNumber,
             'acct_capital_commitment' => $request->input('capitalCommitment'),
             'acct_capital_commitment_currency' => $request->has('capitalCommitmentCurrency')
                 ? $this->capitalCommitmentCurrency($request->input('capitalCommitmentCurrency'))

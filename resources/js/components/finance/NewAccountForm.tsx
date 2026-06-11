@@ -15,6 +15,7 @@ const formSchema = z.object({
   accountName: z.string().min(1, 'Account name is required'),
   isDebt: z.boolean().optional().default(false),
   isRetirement: z.boolean().optional().default(false),
+  acctNumber: z.string().optional().default(''),
 })
 
 export default function NewAccountForm({ onUpdate }: { onUpdate: () => void }) {
@@ -24,10 +25,11 @@ export default function NewAccountForm({ onUpdate }: { onUpdate: () => void }) {
       accountName: '',
       isDebt: false,
       isRetirement: false,
+      acctNumber: '',
     },
   })
 
-  const onSubmit = async (values: { accountName: string; isDebt: boolean; isRetirement: boolean }) => {
+  const onSubmit = async (values: { accountName: string; isDebt: boolean; isRetirement: boolean; acctNumber: string }) => {
     try {
       const response = await fetch('/api/finance/accounts', {
         method: 'POST',
@@ -36,7 +38,10 @@ export default function NewAccountForm({ onUpdate }: { onUpdate: () => void }) {
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          acctNumber: values.acctNumber?.trim() || undefined,
+        }),
       })
       if (response.ok) {
         form.reset()
@@ -97,6 +102,22 @@ export default function NewAccountForm({ onUpdate }: { onUpdate: () => void }) {
                   Check this box if the account is a retirement account (e.g., 401k, IRA)
                 </FormDescription>
               </div>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="acctNumber"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Account number (or last 4)</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g. 1234" {...field} autoComplete="off" />
+              </FormControl>
+              <FormDescription>
+                Account suffix helps match broker/bank PDFs to the correct account. Store only the last 4 digits when possible.
+              </FormDescription>
+              <FormMessage />
             </FormItem>
           )}
         />

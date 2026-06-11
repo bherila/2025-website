@@ -270,7 +270,11 @@ export default function TransactionsPage({ accountId, initialAvailableYears = []
                     : "This account doesn't have any transactions yet."
                   : `No transactions found for ${selectedYear}.`}
           </p>
-          {!isAllAccounts && (
+          {isAllAccounts ? (
+            <a href={importUrl('all')}>
+              <Button>Import multi-account statement</Button>
+            </a>
+          ) : (
             <a href={importUrl(accountId as number)}>
               <Button>Import Transactions</Button>
             </a>

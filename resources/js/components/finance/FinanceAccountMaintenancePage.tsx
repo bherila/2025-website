@@ -25,10 +25,10 @@ export default function FinanceAccountMaintenancePage({
       <MainTitle>Account Maintenance</MainTitle>
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] lg:items-start">
         <div>
-          <AccountMaintenanceClient accountId={accountId} accountName={accountName} whenClosed={whenClosed} />
+          <AccountMaintenanceClient accountId={accountId} accountName={accountName} whenClosed={whenClosed} acctNumber={acctNumber} />
         </div>
         <div>
-          <EditAccountFlags accountId={accountId.toString()} isDebt={isDebt} isRetirement={isRetirement} acctNumber={acctNumber} />
+          <EditAccountFlags accountId={accountId.toString()} isDebt={isDebt} isRetirement={isRetirement} />
         </div>
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">

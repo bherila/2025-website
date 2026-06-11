@@ -30,7 +30,7 @@ import { type FinAccount, useFinanceAccounts } from './useFinanceAccounts'
 
 const ALL_ACCOUNTS_SENTINEL: FinAccount = { acct_id: 0, acct_name: 'All Accounts' }
 
-export type FinanceSection = FinanceTopToolId | 'all-transactions'
+export type FinanceSection = FinanceTopToolId
 
 const RIGHT_SECTIONS = FINANCE_TOP_TOOLS.filter((tool) => tool.id !== 'config' && (!tool.permission || hasPermission(tool.permission))).map((tool) => ({
   value: tool.id,
@@ -127,12 +127,13 @@ export default function FinanceNavbar({
           </Tooltip>
 
           {/* FINANCE branding */}
-          <span
-            className="text-xs font-bold tracking-widest uppercase text-foreground select-none"
+          <a
+            href="/finance"
+            className="text-xs font-bold tracking-widest uppercase text-foreground select-none hover:text-muted-foreground transition-colors"
             aria-label="Finance section"
           >
             Finance
-          </span>
+          </a>
 
           <FinanceCommandPaletteTrigger />
 

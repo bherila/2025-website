@@ -464,7 +464,13 @@ function W2IncomeSummary({ payslips }: { payslips: fin_payslip[] }): React.React
   if (payslips.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-muted p-3 text-sm text-muted-foreground">
-        No W-2 payslip data for this year yet.
+        <p>No W-2 payslip data for this year yet.</p>
+        <p className="mt-1">
+          <a href="/finance" className="underline hover:text-foreground">
+            Check the Finance Home checklist
+          </a>{' '}
+          to see what needs to be set up.
+        </p>
       </div>
     )
   }
