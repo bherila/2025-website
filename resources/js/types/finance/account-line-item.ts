@@ -68,6 +68,27 @@ export const ClientExpenseLinkSchema = z.object({
   client_company: ClientCompanyLinkSchema.nullable().optional(),
 })
 
+export const AccountLineItemRsuSettlementSchema = z.object({
+  id: z.number(),
+  vest_date: z.string().nullable().optional(),
+  symbol: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+})
+
+export const AccountLineItemRsuLinkSchema = z.object({
+  id: z.number(),
+  settlement_id: z.number().nullable().optional(),
+  settlement_allocation_id: z.number().nullable().optional(),
+  equity_award_id: z.number().nullable().optional(),
+  link_type: z.string(),
+  transaction_id: z.number().nullable().optional(),
+  account_id: z.number().nullable().optional(),
+  lot_id: z.number().nullable().optional(),
+  payslip_id: z.number().nullable().optional(),
+  status: z.string().nullable().optional(),
+  settlement: AccountLineItemRsuSettlementSchema.nullable().optional(),
+})
+
 // Schema validation for the account_line_items table
 export const AccountLineItemSchema = z.object({
   t_id: z.number().optional(),
@@ -102,6 +123,7 @@ export const AccountLineItemSchema = z.object({
   child_transactions: z.array(LinkedTransactionSchema).optional(),
   tags: z.array(AccountLineItemTagSchema).optional(),
   client_expense: ClientExpenseLinkSchema.nullable().optional(),
+  rsu_links: z.array(AccountLineItemRsuLinkSchema).optional(),
   created_at: z.string().nullable().optional(),
   updated_at: z.string().nullable().optional(),
 })
@@ -110,4 +132,5 @@ export type AccountLineItemTag = z.infer<typeof AccountLineItemTagSchema>
 export type LinkedTransaction = z.infer<typeof LinkedTransactionSchema>
 export type ClientCompanyLink = z.infer<typeof ClientCompanyLinkSchema>
 export type ClientExpenseLink = z.infer<typeof ClientExpenseLinkSchema>
+export type AccountLineItemRsuLink = z.infer<typeof AccountLineItemRsuLinkSchema>
 export type AccountLineItem = z.infer<typeof AccountLineItemSchema>

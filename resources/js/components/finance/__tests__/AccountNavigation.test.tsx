@@ -26,7 +26,7 @@ describe('AccountNavigation', () => {
     expect(importLink).toHaveAttribute('href', '/finance/account/1/import')
   })
 
-  it('renders Maintenance button', async () => {
+  it('renders Maintenance button for numeric accountId', async () => {
     const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
     await act(async () => {
       render(<AccountNavigation accountId={1} activeTab="transactions" />)
@@ -36,16 +36,50 @@ describe('AccountNavigation', () => {
     expect(maintenanceLink).toHaveAttribute('href', '/finance/account/1/maintenance')
   })
 
+  it('does not render Maintenance button for all context', async () => {
+    const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
+    await act(async () => {
+      render(<AccountNavigation accountId="all" activeTab="transactions" />)
+    })
+    expect(screen.queryByRole('link', { name: /maintenance/i })).not.toBeInTheDocument()
+  })
+
+  it('renders Import button for all context', async () => {
+    const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
+    await act(async () => {
+      render(<AccountNavigation accountId="all" activeTab="transactions" />)
+    })
+    const importLink = screen.getByRole('link', { name: /import/i })
+    expect(importLink).toBeInTheDocument()
+    expect(importLink).toHaveAttribute('href', '/finance/account/all/import')
+  })
+
+  it('does not render a duplicate tab row (tabs are owned by FinanceNavbar)', async () => {
+    const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
+    await act(async () => {
+      render(<AccountNavigation accountId={1} activeTab="transactions" />)
+    })
+    // TabsList role is "tablist" — AccountNavigation must NOT render any tablist
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+  })
+
+  it('does not render a tab row for all context either', async () => {
+    const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
+    await act(async () => {
+      render(<AccountNavigation accountId="all" activeTab="transactions" />)
+    })
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+  })
+
   it('shows year selector for year-enabled tabs', async () => {
     const AccountNavigation = (await import('@/components/finance/AccountNavigation')).default
     await act(async () => {
       render(<AccountNavigation accountId={1} activeTab="transactions" />)
     })
-    // AccountYearSelector renders a combobox/select for year selection
-    const yearSelector = document.getElementById('year-selector-1') ?? screen.queryByRole('combobox')
-    // The year selector renders when showYearSelector is true for the active tab
-    // We just verify the component renders without error
+    // Import button remains present regardless of year selector state
     expect(screen.getByRole('link', { name: /import/i })).toBeInTheDocument()
+    // Year selector (combobox) must be rendered for year-enabled tabs
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
   })
 
   it('does not render FinanceNavbar (FINANCE branding not present)', async () => {

@@ -107,4 +107,42 @@ describe('ManageAwardsPage', () => {
       }),
     ]))
   })
+
+  it('surfaces the backfill success and still-missing summary', async () => {
+    jest.mocked(fetchWrapper.post).mockResolvedValue({ updated: [1, 2], missing: [3] })
+
+    render(<ManageAwardsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /backfill prices/i }))
+
+    expect(await screen.findByText('Updated 2 vest prices; 1 vest event is still missing a price.')).toBeInTheDocument()
+  })
+
+  it('does not save a blank share count as zero', async () => {
+    render(<ManageAwardsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /add vest event/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Share count is required.')).toBeInTheDocument()
+    expect(fetchWrapper.post).not.toHaveBeenCalled()
+  })
+
+  it('deletes schedule rows sequentially and reports partial failure', async () => {
+    jest.mocked(fetchWrapper.get)
+      .mockResolvedValueOnce(awards)
+      .mockResolvedValueOnce([awards[1]])
+    jest.mocked(fetchWrapper.delete)
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('failed'))
+
+    render(<ManageAwardsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Schedule' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete schedule' }))
+
+    await waitFor(() => expect(fetchWrapper.delete).toHaveBeenNthCalledWith(1, '/api/rsu/1', {}))
+    expect(fetchWrapper.delete).toHaveBeenNthCalledWith(2, '/api/rsu/2', {})
+    expect(await screen.findByText('Deleted 1 of 2 vest events; 1 failed.')).toBeInTheDocument()
+  })
 })

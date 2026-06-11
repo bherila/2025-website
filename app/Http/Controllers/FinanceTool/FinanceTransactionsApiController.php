@@ -9,6 +9,7 @@ use App\Models\FinanceTool\FinAccountLineItemDeletion;
 use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinDocument;
+use App\Models\FinanceTool\FinRsuLink;
 use App\Models\FinanceTool\FinStatement;
 use App\Models\User;
 use App\Services\Finance\CapitalGains\LotMatcherAutoDispatchService;
@@ -42,6 +43,9 @@ class FinanceTransactionsApiController extends Controller
             'source_document_id' => 'sometimes|integer|min:1',
         ]);
 
+        $user = $request->user();
+        $includeRsuLinks = $user instanceof User && $this->featureAccess->can($user, 'finance.rsu.view');
+
         if ($account_id && $account_id !== 'all') {
             $account = $this->resolveOwnedAccount($account_id);
             $query = FinAccountLineItems::where('t_account', $account->acct_id);
@@ -49,7 +53,12 @@ class FinanceTransactionsApiController extends Controller
             $query = FinAccountLineItems::whereIn('t_account', $this->getUserAccountIds());
         }
 
-        $query->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
+        $relations = ['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'];
+        if ($includeRsuLinks) {
+            $relations[] = 'rsuLinks.settlement';
+        }
+
+        $query->with($relations)
             ->orderBy('t_date', 'desc');
 
         // This endpoint also backs the lots view, which can be reached with
@@ -58,7 +67,6 @@ class FinanceTransactionsApiController extends Controller
         // (the only rows lot/wash-sale analysis consumes) and redact the
         // ledger-detail fields that lots do not need.
         $redactTransactionDetails = false;
-        $user = $request->user();
         if ($user instanceof User && ! $this->featureAccess->can($user, 'finance.transactions.view')) {
             $redactTransactionDetails = true;
             $query->whereNotNull('t_symbol')->where('t_symbol', '!=', '');
@@ -98,7 +106,7 @@ class FinanceTransactionsApiController extends Controller
             }
         }
 
-        return $this->streamLineItems($query, $redactTransactionDetails);
+        return $this->streamLineItems($query, $redactTransactionDetails, $includeRsuLinks);
     }
 
     /**
@@ -110,6 +118,8 @@ class FinanceTransactionsApiController extends Controller
         $serverTime = now();
 
         $isAllAccounts = ! $account_id || $account_id === 'all';
+        $user = $request->user();
+        $includeRsuLinks = $user instanceof User && $this->featureAccess->can($user, 'finance.rsu.view');
 
         if (! $isAllAccounts) {
             $account = $this->resolveOwnedAccount($account_id);
@@ -118,8 +128,13 @@ class FinanceTransactionsApiController extends Controller
             $accountIds = $this->getUserAccountIds()->all();
         }
 
+        $relations = ['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'];
+        if ($includeRsuLinks) {
+            $relations[] = 'rsuLinks.settlement';
+        }
+
         $transactionsQuery = FinAccountLineItems::whereIn('t_account', $accountIds)
-            ->with(['tags', 'parentTransactions.account', 'childTransactions.account', 'clientExpense.clientCompany'])
+            ->with($relations)
             ->orderBy('t_date', 'desc');
 
         if ($since !== null) {
@@ -137,9 +152,9 @@ class FinanceTransactionsApiController extends Controller
             $deletionsQuery->where('deleted_at', '>=', $since);
         }
 
-        return response()->stream(function () use ($serverTime, $transactionsQuery, $deletionsQuery): void {
+        return response()->stream(function () use ($serverTime, $transactionsQuery, $deletionsQuery, $includeRsuLinks): void {
             echo '{"server_time":'.json_encode($serverTime->toJSON()).',"transactions":';
-            $this->writeJsonArray($transactionsQuery->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item));
+            $this->writeJsonArray($transactionsQuery->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item, false, $includeRsuLinks));
             echo ',"deleted":';
             $this->writeJsonArray(
                 $deletionsQuery->select(['t_id', 't_account', 'deleted_at'])->lazy(),
@@ -184,10 +199,10 @@ class FinanceTransactionsApiController extends Controller
     /**
      * @param  Builder<FinAccountLineItems>  $query
      */
-    private function streamLineItems(Builder $query, bool $redactTransactionDetails = false): StreamedResponse
+    private function streamLineItems(Builder $query, bool $redactTransactionDetails = false, bool $includeRsuLinks = false): StreamedResponse
     {
-        return response()->stream(function () use ($query, $redactTransactionDetails): void {
-            $this->writeJsonArray($query->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item, $redactTransactionDetails));
+        return response()->stream(function () use ($query, $redactTransactionDetails, $includeRsuLinks): void {
+            $this->writeJsonArray($query->lazy(), fn (FinAccountLineItems $item): array => $this->transformLineItem($item, $redactTransactionDetails, $includeRsuLinks));
         }, 200, $this->streamJsonHeaders());
     }
 
@@ -468,7 +483,7 @@ class FinanceTransactionsApiController extends Controller
      *
      * @return array<string, mixed>
      */
-    protected function transformLineItem(FinAccountLineItems $item, bool $redactTransactionDetails = false): array
+    protected function transformLineItem(FinAccountLineItems $item, bool $redactTransactionDetails = false, bool $includeRsuLinks = false): array
     {
         $itemArray = $item->toArray();
 
@@ -485,6 +500,7 @@ class FinanceTransactionsApiController extends Controller
                 $itemArray['parent_transactions'],
                 $itemArray['child_transactions'],
                 $itemArray['client_expense'],
+                $itemArray['rsu_links'],
             );
 
             return $itemArray;
@@ -539,6 +555,7 @@ class FinanceTransactionsApiController extends Controller
         // Remove the raw relationship data
         unset($itemArray['parent_transactions']);
         unset($itemArray['client_expense']); // Remove the raw Eloquent relation data
+        unset($itemArray['rsu_links']);
 
         // Add the formatted client expense data back
         if ($clientExpenseData) {
@@ -550,6 +567,29 @@ class FinanceTransactionsApiController extends Controller
         }
         if (empty($itemArray['parent_of_t_ids'])) {
             unset($itemArray['parent_of_t_ids']);
+        }
+        if ($includeRsuLinks && $item->relationLoaded('rsuLinks') && $item->rsuLinks->isNotEmpty()) {
+            $itemArray['rsu_links'] = $item->rsuLinks
+                ->map(fn (FinRsuLink $link): array => [
+                    'id' => $link->id,
+                    'settlement_id' => $link->settlement_id,
+                    'settlement_allocation_id' => $link->settlement_allocation_id,
+                    'equity_award_id' => $link->equity_award_id,
+                    'link_type' => $link->link_type,
+                    'transaction_id' => $link->transaction_id,
+                    'account_id' => $link->account_id,
+                    'lot_id' => $link->lot_id,
+                    'payslip_id' => $link->payslip_id,
+                    'status' => $link->status,
+                    'settlement' => $link->settlement ? [
+                        'id' => $link->settlement->id,
+                        'vest_date' => $link->settlement->vest_date,
+                        'symbol' => $link->settlement->symbol,
+                        'status' => $link->settlement->status,
+                    ] : null,
+                ])
+                ->values()
+                ->all();
         }
 
         return $itemArray;

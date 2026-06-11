@@ -14,6 +14,7 @@ use App\Models\FinanceTool\StockQuotesDaily;
 use App\Models\User;
 use App\Models\UserFeaturePermission;
 use App\Services\Finance\CapitalGains\CapitalGainsTaxReportService;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
@@ -135,6 +136,72 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertSame(1, FinRsuVestSettlement::query()->where('uid', $user->id)->count());
     }
 
+    public function test_settlement_natural_key_is_unique(): void
+    {
+        $user = User::factory()->create();
+        FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'META',
+            'gross_shares' => 10,
+            'gross_income' => 1000,
+            'status' => 'suggested',
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        FinRsuVestSettlement::query()->create([
+            'uid' => $user->id,
+            'vest_date' => '2026-06-01',
+            'symbol' => 'META',
+            'gross_shares' => 10,
+            'gross_income' => 1000,
+            'status' => 'suggested',
+        ]);
+    }
+
+    public function test_settlement_state_transitions_do_not_silently_flip_ignored_or_confirmed(): void
+    {
+        $user = User::factory()->create();
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-STATE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $confirmedId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$confirmedId}/confirm")->assertOk();
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$confirmedId}/ignore")->assertStatus(409);
+        $this->assertSame('confirmed', FinRsuVestSettlement::query()->findOrFail($confirmedId)->status);
+
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-IGNORED',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-07-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $ignoredSuggestion = collect($this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk()->json())
+            ->firstWhere('vestDate', '2026-07-01');
+        $this->assertNotNull($ignoredSuggestion);
+        $ignoredId = $ignoredSuggestion['id'];
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$ignoredId}/ignore")->assertOk();
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$ignoredId}/confirm")->assertStatus(409);
+        $this->actingAs($user)->putJson("/api/rsu/settlements/{$ignoredId}")->assertStatus(409);
+        $this->assertSame('ignored', FinRsuVestSettlement::query()->findOrFail($ignoredId)->status);
+    }
+
     public function test_settlement_confirmation_uses_route_settlement_for_updates(): void
     {
         $user = User::factory()->create();
@@ -222,6 +289,51 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertSame('quote_close', $missing->vest_price_source);
         $this->assertSame('99.000000', $manual->refresh()->vest_price);
         $this->assertSame('manual', $manual->vest_price_source);
+        Carbon::setTestNow();
+    }
+
+    public function test_quote_backfill_reconciles_confirmed_settlement_totals(): void
+    {
+        Carbon::setTestNow('2026-06-09');
+        $user = $this->grantFeatures(User::factory()->create(), ['finance.rsu.manage']);
+        $priced = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-BACKFILL-A',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 6,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+        $missing = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-BACKFILL-B',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 4,
+            'symbol' => 'META',
+        ]);
+        StockQuotesDaily::query()->create(['c_symb' => 'META', 'c_date' => '2026-06-01', 'c_open' => 200, 'c_high' => 200, 'c_low' => 200, 'c_close' => 200, 'c_vol' => 0]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 3,
+            'actualTaxRemitted' => 250,
+        ])->assertOk()->assertJsonPath('gross_shares', '6.000000');
+
+        $this->actingAs($user)->getJson('/api/rsu')->assertOk();
+
+        $this->assertSame('200.000000', $missing->refresh()->vest_price);
+        $settlement = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId);
+        $this->assertSame('10.000000', $settlement->gross_shares);
+        $this->assertSame('140.000000', $settlement->vest_price);
+        $this->assertSame('1400.0000', $settlement->gross_income);
+        $this->assertSame('420.0000', $settlement->withheld_value);
+        $this->assertSame('170.0000', $settlement->excess_refund);
+        $this->assertSame(2, $settlement->allocations->count());
+        $this->assertSame('800.0000', $settlement->allocations->firstWhere('equity_award_id', $missing->id)->gross_income);
+        $this->assertSame('600.0000', $settlement->allocations->firstWhere('equity_award_id', $priced->id)->gross_income);
         Carbon::setTestNow();
     }
 
@@ -350,6 +462,60 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertFalse($laterTransaction->isShortTerm);
     }
 
+    public function test_settlement_confirmation_allows_negative_excess_refund(): void
+    {
+        $user = User::factory()->create();
+        FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-NEG-REFUND',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 2,
+            'actualTaxRemitted' => 250,
+        ])->assertOk()->assertJsonPath('withheld_value', '200.0000')->assertJsonPath('excess_refund', '-50.0000');
+
+        $settlement = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId);
+        $this->assertSame('-50.0000', $settlement->excess_refund);
+        $this->assertSame('-50.0000', $settlement->allocations->first()->allocated_excess_refund);
+    }
+
+    public function test_allocation_rounding_residuals_sum_to_settlement_totals(): void
+    {
+        $user = User::factory()->create();
+        foreach (['A', 'B', 'C'] as $suffix) {
+            FinEquityAwards::query()->create([
+                'uid' => $user->id,
+                'award_id' => 'RSU-ROUND-'.$suffix,
+                'grant_date' => '2025-01-01',
+                'vest_date' => '2026-06-01',
+                'share_count' => 1,
+                'symbol' => 'META',
+                'vest_price' => 100,
+                'vest_price_source' => 'manual',
+            ]);
+        }
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
+            'withheldSharesWhole' => 1,
+            'actualTaxRemitted' => 100,
+        ])->assertOk();
+
+        $allocations = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId)->allocations;
+        $this->assertSame('1.0000000000', number_format((float) $allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->allocation_ratio), 10, '.', ''));
+        $this->assertSame('1.000000', number_format((float) $allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->allocated_withheld_shares), 6, '.', ''));
+        $this->assertSame('100.0000', number_format((float) $allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->allocated_withheld_value), 4, '.', ''));
+        $this->assertSame('100.0000', number_format((float) $allocations->sum(fn (FinRsuVestSettlementAllocation $allocation): float => (float) $allocation->allocated_tax_remitted), 4, '.', ''));
+    }
+
     public function test_rsu_links_are_user_scoped_to_transactions_lots_and_payslips(): void
     {
         $user = User::factory()->create();
@@ -473,6 +639,39 @@ class RsuDomainIntegrationTest extends TestCase
         $this->assertContains('payslip_rsu_excess_refund', collect($refundLinks->json())->pluck('link_type')->all());
     }
 
+    public function test_transaction_rsu_links_are_uid_scoped(): void
+    {
+        $user = $this->grantFeatures(User::factory()->create(), ['finance.rsu.view']);
+        $other = User::factory()->create();
+
+        $this->actingAs($user);
+        $account = FinAccounts::query()->create(['acct_name' => 'Brokerage']);
+        $transaction = FinAccountLineItems::query()->create([
+            't_account' => $account->acct_id,
+            't_date' => '2026-06-01',
+            't_amt' => 700,
+            't_symbol' => 'META',
+            't_qty' => 7,
+        ]);
+
+        $ownLink = FinRsuLink::query()->create([
+            'uid' => $user->id,
+            'link_type' => 'share_deposit',
+            'transaction_id' => $transaction->t_id,
+            'status' => 'confirmed',
+        ]);
+        FinRsuLink::query()->create([
+            'uid' => $other->id,
+            'link_type' => 'share_deposit',
+            'transaction_id' => $transaction->t_id,
+            'status' => 'confirmed',
+        ]);
+
+        $response = $this->actingAs($user)->getJson("/api/finance/transactions/{$transaction->t_id}/rsu-links")->assertOk();
+
+        $this->assertSame([$ownLink->id], collect($response->json())->pluck('id')->all());
+    }
+
     public function test_settlement_confirmation_rejects_invalid_domain_values_and_other_user_targets(): void
     {
         $user = User::factory()->create();
@@ -501,7 +700,7 @@ class RsuDomainIntegrationTest extends TestCase
 
         $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm", [
             'withheldSharesWhole' => 2,
-            'actualTaxRemitted' => 250,
+            'actualTaxRemitted' => -1,
         ])->assertUnprocessable();
 
         $this->actingAs($other);
@@ -720,6 +919,40 @@ class RsuDomainIntegrationTest extends TestCase
         ])->assertCreated();
     }
 
+    public function test_rsu_links_reject_all_null_targets_and_duplicate_targets(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-LINK-HARDEN',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->json('0.id');
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/confirm")->assertOk();
+        $allocation = FinRsuVestSettlement::query()->with('allocations')->findOrFail($settlementId)->allocations->first();
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/links", [
+            'link_type' => 'tax_lot',
+        ])->assertUnprocessable()->assertJsonValidationErrorFor('target');
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/links", [
+            'link_type' => 'tax_lot',
+            'settlement_allocation_id' => $allocation->id,
+        ])->assertCreated();
+
+        $this->actingAs($user)->postJson("/api/rsu/settlements/{$settlementId}/links", [
+            'link_type' => 'tax_lot',
+            'settlement_allocation_id' => $allocation->id,
+        ])->assertUnprocessable()->assertJsonValidationErrorFor('target');
+
+        $this->assertSame((int) $award->id, (int) FinRsuLink::query()->firstOrFail()->equity_award_id);
+    }
+
     public function test_get_rsu_data_serializes_share_count_as_number(): void
     {
         $user = User::factory()->create();
@@ -852,6 +1085,28 @@ class RsuDomainIntegrationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('ordinaryIncomeAtVest', 600)
             ->assertJsonPath('withholdingValue', 0);
+    }
+
+    public function test_deleting_unconfirmed_suggested_award_removes_no_allocation_settlement(): void
+    {
+        $user = User::factory()->create();
+        $award = FinEquityAwards::query()->create([
+            'uid' => $user->id,
+            'award_id' => 'RSU-SUGGEST-DELETE',
+            'grant_date' => '2025-01-01',
+            'vest_date' => '2026-06-01',
+            'share_count' => 10,
+            'symbol' => 'META',
+            'vest_price' => 100,
+            'vest_price_source' => 'manual',
+        ]);
+
+        $settlementId = $this->actingAs($user)->postJson('/api/rsu/settlements/suggest')->assertOk()->json('0.id');
+        $this->assertSame(0, FinRsuVestSettlement::query()->findOrFail($settlementId)->allocations()->count());
+
+        $this->actingAs($user)->deleteJson("/api/rsu/{$award->id}")->assertOk();
+
+        $this->assertDatabaseMissing('fin_rsu_vest_settlements', ['id' => $settlementId]);
     }
 
     public function test_award_id_longer_than_column_width_is_rejected(): void

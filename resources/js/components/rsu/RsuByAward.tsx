@@ -7,7 +7,8 @@ import type { IAward } from '@/types/finance'
 
 export function RsuByAward(props: { rsu: IAward[]; hideFullyVested?: boolean }) {
   const { rsu, hideFullyVested = false } = props
-  const grouped = groupBy(rsu, (r) => r.award_id)
+  const actualRsu = rsu.filter((r) => !r.isVirtual)
+  const grouped = groupBy(actualRsu, (r) => r.award_id)
   const now = todayIso()
   return (
     <Table>
@@ -24,7 +25,7 @@ export function RsuByAward(props: { rsu: IAward[]; hideFullyVested?: boolean }) 
         </tr>
       </TableHeader>
       <TableBody>
-        {Object.keys(grouped).map((k, i) => {
+        {Object.keys(grouped).map((k) => {
           const lRSU = grouped[k]
           if (!lRSU) return null
           if (hideFullyVested && lRSU.every((r) => isVested(r, now))) return null
@@ -69,7 +70,7 @@ export function RsuByAward(props: { rsu: IAward[]; hideFullyVested?: boolean }) 
           const avgPrice = weightedShares > 0 ? weightedSum.divide(weightedShares).format() : ''
           const avgGrantPrice = weightedGrantShares > 0 ? weightedGrantSum.divide(weightedGrantShares).format() : ''
           return (
-            <TableRow key={i}>
+            <TableRow key={k}>
               <TableCell>
                 {k}
                 <br />

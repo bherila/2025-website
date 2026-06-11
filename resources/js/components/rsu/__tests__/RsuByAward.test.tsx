@@ -30,4 +30,14 @@ describe('RsuByAward', () => {
     render(<RsuByAward rsu={[awards[0]!, awards[1]!]} hideFullyVested />)
     expect(screen.getByText('A1')).toBeInTheDocument()
   })
+
+  it('does not include virtual rows in aggregate totals', () => {
+    render(<RsuByAward rsu={[
+      { award_id: 'A1', vest_date: future, share_count: 10, vest_price: 100, grant_price: 50 },
+      { award_id: 'A1', vest_date: future, share_count: 90, vest_price: 100, grant_price: 50, isVirtual: true },
+    ]} />)
+
+    expect(screen.getByText((_, element) => element?.textContent === '0/10')).toBeInTheDocument()
+    expect(screen.queryByText((_, element) => element?.textContent === '0/100')).not.toBeInTheDocument()
+  })
 })

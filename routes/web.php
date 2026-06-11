@@ -13,6 +13,9 @@ use App\Http\Controllers\ClientManagement\ClientProposalController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finance\TaxPreviewController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
+use App\Http\Controllers\FinanceTool\FinanceCategorizationController;
+use App\Http\Controllers\FinanceTool\FinanceHomeController;
+use App\Http\Controllers\FinanceTool\FinanceImportCenterController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\FinanceTool\TaxReturnPdfExportController;
@@ -46,6 +49,9 @@ Route::post('/login/dev-by-id', [LoginController::class, 'devLoginById'])->name(
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
+    Route::get('/finance', [FinanceHomeController::class, 'index'])->middleware('feature:finance.access');
+    Route::get('/finance/import', [FinanceImportCenterController::class, 'index'])->middleware('feature:finance.access');
+
     Route::get('/finance/rsu', function () {
         return view('finance.rsu');
     })->middleware('feature:finance.rsu.view');
@@ -70,9 +76,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/finance/tax-documents/{id}/lot-reconciliation', [TaxDocumentLotReconciliationPageController::class, 'show'])->middleware('feature:finance.tax-documents.view')->where('id', '[0-9]+');
     // Backward compat redirect for old Schedule C URL
     Route::redirect('/finance/schedule-c', '/finance/tax-preview', 301);
-    Route::get('/finance/tags', function () {
-        return view('finance.tags');
-    })->middleware('feature:finance.rules.manage');
+    Route::get('/finance/categorization', [FinanceCategorizationController::class, 'index'])->middleware('feature:finance.access');
+    Route::redirect('/finance/tags', '/finance/categorization', 301);
     Route::get('/finance/config', function () {
         return view('finance.config');
     })->middleware('feature:finance.config.manage');
