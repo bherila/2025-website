@@ -3,11 +3,9 @@ import { Settings, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FINANCE_ACCOUNT_TOOLS } from '@/lib/financeNavigation'
 import {
   getEffectiveYear,
-  getTabUrl,
   importUrl,
   maintenanceUrl,
   type YearSelection,
@@ -55,18 +53,6 @@ export default function AccountNavigation({
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-border/40">
       <div className="flex items-center gap-4">
-        {typeof accountId === 'number' && (
-          <Tabs value={activeTab} className="w-auto">
-            <TabsList>
-              {TAB_ITEMS.map((item) => (
-                <TabsTrigger key={item.value} value={item.value} asChild>
-                  <a href={getTabUrl(item.value, accountId, selectedYear)}>{item.title}</a>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        )}
-
         {showYearSelector && typeof accountId === 'number' && (
           <AccountYearSelector
             accountId={accountId}
