@@ -2,9 +2,14 @@
 
 namespace App\Providers;
 
+use App\Services\Finance\Locks\PartnershipBasisLockGuard;
+use App\Support\Accounting\AccountingPeriodLockGuard;
 use App\Support\Agent\AgentContext;
 use App\Support\Agent\CapabilityRegistry;
+use App\Support\Agent\Modules\CareerComparisonCapabilities;
 use App\Support\Agent\Modules\FinanceCapabilities;
+use App\Support\Agent\Modules\ImportCapabilities;
+use App\Support\Agent\Modules\TaxCapabilities;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -20,12 +25,15 @@ class AgentServiceProvider extends ServiceProvider
     {
         $this->app->scoped(AgentContext::class, fn (): AgentContext => new AgentContext(null, null));
 
+        $this->app->bind(AccountingPeriodLockGuard::class, PartnershipBasisLockGuard::class);
+
         $this->app->singleton(CapabilityRegistry::class, function (): CapabilityRegistry {
             $registry = new CapabilityRegistry;
 
-            // Module capability registrations. Career-comparison, tax, and
-            // import modules are added in later PRs.
             FinanceCapabilities::register($registry);
+            ImportCapabilities::register($registry);
+            CareerComparisonCapabilities::register($registry);
+            TaxCapabilities::register($registry);
 
             return $registry;
         });
