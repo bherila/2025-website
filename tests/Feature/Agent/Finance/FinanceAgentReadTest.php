@@ -7,6 +7,7 @@ use App\Models\FinanceTool\FinAccountLineItems;
 use App\Models\FinanceTool\FinAccountLot;
 use App\Models\FinanceTool\FinAccounts;
 use App\Models\FinanceTool\FinPayslips;
+use App\Models\FinanceTool\TaxDocumentAccount;
 use App\Models\User;
 use App\Services\Finance\DocumentIngestionService;
 use App\Support\Agent\AgentTokenService;
@@ -223,6 +224,43 @@ class FinanceAgentReadTest extends TestCase
 
         $withFacts = $this->getJson('/api/agent/v1/finance/tax-preview/2024?include_tax_facts=1', $this->bearer($token));
         $this->assertArrayHasKey('taxFacts', $withFacts->json());
+    }
+
+    public function test_tax_preview_sanitizes_account_numbers_for_agent_payload(): void
+    {
+        ['user' => $user, 'token' => $token] = $this->createUserWithToken(['finance.tax-preview.view']);
+
+        $this->actingAs($user);
+        $account = FinAccounts::create([
+            'acct_name' => 'Brokerage',
+            'acct_number' => '123456789',
+            'acct_last_balance' => '9876.54',
+        ]);
+        $document = $this->createTaxDocumentFor($user, [
+            'tax_year' => 2024,
+            'form_type' => '1099_int',
+            'account_id' => $account->acct_id,
+            'parsed_data' => [
+                'payer_name' => 'Broker',
+                'account_number' => '123456789',
+                'box1_interest' => 123,
+            ],
+        ]);
+        TaxDocumentAccount::createLink((int) $document->id, $account->acct_id, '1099_int', 2024, aiIdentifier: '123456789');
+
+        $response = $this->getJson('/api/agent/v1/finance/tax-preview/2024', $this->bearer($token));
+
+        $response->assertStatus(200);
+        $accountPayload = $response->json('accounts.0');
+        $this->assertArrayHasKey('acct_id', $accountPayload);
+        $this->assertArrayNotHasKey('acct_number', $accountPayload);
+        $this->assertArrayNotHasKey('acct_last_balance', $accountPayload);
+
+        $encoded = json_encode($response->json(), JSON_THROW_ON_ERROR);
+        $this->assertStringNotContainsString('123456789', $encoded);
+        $this->assertStringNotContainsString('acct_number', $encoded);
+        $this->assertStringNotContainsString('account_number', $encoded);
+        $this->assertStringNotContainsString('ai_identifier', $encoded);
     }
 
     public function test_tax_documents_list_excludes_parsed_data(): void

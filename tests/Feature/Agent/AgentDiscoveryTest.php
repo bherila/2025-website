@@ -51,6 +51,13 @@ class AgentDiscoveryTest extends TestCase
             restPath: '/finance/transactions',
             mcpTool: 'finance_list_transactions',
             openApiTag: 'finance',
+            requestSchema: [
+                'type' => 'object',
+                'properties' => [
+                    'year' => ['type' => 'integer', 'description' => 'Filter by transaction year'],
+                    'limit' => ['type' => 'integer', 'default' => 100, 'maximum' => 500],
+                ],
+            ],
         ));
 
         $registry->register(new Capability(
@@ -184,6 +191,41 @@ class AgentDiscoveryTest extends TestCase
         $this->assertSame(['career.compute'], $this->capabilityIds($manifest));
     }
 
+    public function test_discovery_omits_permissioned_capabilities_for_other_module_tokens(): void
+    {
+        app(CapabilityRegistry::class)->register(new Capability(
+            id: 'finance.tax_documents.list',
+            module: 'finance',
+            label: 'List tax documents',
+            description: 'List tax documents.',
+            requiredPermission: 'finance.tax-documents.view',
+            risk: 'read',
+            restMethod: 'GET',
+            restPath: '/finance/tax-documents',
+            openApiTag: 'finance',
+        ));
+
+        // The tax token scope includes finance.tax-documents.view, but the
+        // finance REST routes are pinned to the finance module. Discovery
+        // must not advertise finance operations that the token cannot call.
+        ['token' => $rawToken] = $this->createTokenForUser(['finance.tax-documents.view'], 'tax');
+
+        $manifest = $this->getJson('/api/agent/v1/capabilities', ['Authorization' => 'Bearer '.$rawToken])
+            ->assertStatus(200)
+            ->json();
+        $this->assertSame(['career.compute'], $this->capabilityIds($manifest));
+
+        $financeManifest = $this->getJson('/api/agent/v1/finance/capabilities', ['Authorization' => 'Bearer '.$rawToken])
+            ->assertStatus(200)
+            ->json();
+        $this->assertSame([], $this->capabilityIds($financeManifest));
+
+        $document = $this->getJson('/api/agent/v1/openapi.json', ['Authorization' => 'Bearer '.$rawToken])
+            ->assertStatus(200)
+            ->json();
+        $this->assertArrayNotHasKey('/finance/tax-documents', $document['paths']);
+    }
+
     public function test_capabilities_toon_endpoint_returns_toon_that_round_trips(): void
     {
         ['token' => $rawToken] = $this->createTokenForUser(['finance.payslips.view']);
@@ -259,6 +301,27 @@ class AgentDiscoveryTest extends TestCase
         $this->assertSame(['application/json', 'text/toon'], $operation['x-bh-output-formats']);
         $this->assertSame([['bearerAuth' => []]], $operation['security']);
         $this->assertArrayHasKey('200', $operation['responses']);
+    }
+
+    public function test_openapi_exposes_get_request_schemas_as_query_parameters(): void
+    {
+        ['token' => $rawToken] = $this->createTokenForUser(['finance.transactions.view']);
+
+        $document = $this->getJson('/api/agent/v1/openapi.json', ['Authorization' => 'Bearer '.$rawToken])
+            ->assertStatus(200)
+            ->json();
+
+        $operation = $document['paths']['/finance/transactions']['get'];
+        $this->assertArrayNotHasKey('requestBody', $operation);
+
+        $parameters = collect($operation['parameters'])->keyBy('name');
+        $this->assertSame('query', $parameters['year']['in']);
+        $this->assertFalse($parameters['year']['required']);
+        $this->assertSame(['type' => 'integer'], $parameters['year']['schema']);
+        $this->assertSame('Filter by transaction year', $parameters['year']['description']);
+
+        $this->assertSame('query', $parameters['limit']['in']);
+        $this->assertSame(['type' => 'integer', 'default' => 100, 'maximum' => 500], $parameters['limit']['schema']);
     }
 
     public function test_openapi_declares_path_parameters_for_templated_paths(): void
