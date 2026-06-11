@@ -66,6 +66,8 @@ This allows Tax Preview users to receive basic account metadata for selectors wi
 | `GET /finance/documents` | `finance.tax-documents.view` |
 | `GET /finance/tax-preview` | `finance.tax-preview.view` |
 | `GET /finance/account/all/import` | `finance.transactions.import` |
+| `GET /finance/categorization` | `finance.access` (tabs for Tags, Rules, Tax Characteristics filtered to `finance.rules.manage` client- and server-side; Schedule C Mapping is a deep link, always visible) |
+| `GET /finance/tags` | 301 redirect → `GET /finance/categorization` |
 | `GET /api/finance/onboarding-summary` | `finance.access` (per-section data gated behind each section's view permission; sections without it return `no_access`) |
 
 ## Enforcement points
