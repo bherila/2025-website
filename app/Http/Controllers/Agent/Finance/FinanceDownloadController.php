@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinDocument;
 use App\Services\FileStorageService;
+use App\Support\Agent\AgentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 
@@ -48,6 +49,15 @@ class FinanceDownloadController extends Controller
             ->where('id', $id)
             ->where('user_id', (int) Auth::id())
             ->firstOrFail();
+
+        if ($document->document_kind === FinDocument::KIND_TAX_FORM) {
+            if (! app(AgentContext::class)->can('finance.tax-documents.view')) {
+                return response()->json([
+                    'message' => 'Forbidden',
+                    'required_permission' => 'finance.tax-documents.view',
+                ], 403);
+            }
+        }
 
         if ($document->document_kind === FinDocument::KIND_TAX_FORM && $document->taxDocument) {
             $taxDocument = $document->taxDocument;

@@ -39,7 +39,7 @@ class AccountingLockGuardTest extends TestCase
         // branch does not edit shared route files; the integrator wires the
         // identical block into routes/agent.php).
         Route::prefix('api/agent/v1')->name('agent.')->middleware([NegotiatesAgentPayload::class])->group(function (): void {
-            Route::middleware([AuthenticateAgentRequest::class, 'feature:finance.access'])->prefix('imports')->name('imports.')->group(function (): void {
+            Route::middleware([AuthenticateAgentRequest::class.':finance', 'feature:finance.access'])->prefix('imports')->name('imports.')->group(function (): void {
                 Route::post('/jobs', [AgentImportController::class, 'createJob'])->name('jobs.create');
                 Route::post('/jobs/{id}/retry', [AgentImportController::class, 'retry'])->whereNumber('id')->name('jobs.retry');
             });
@@ -237,6 +237,26 @@ class AccountingLockGuardTest extends TestCase
                 'year' => 2024,
                 'unlock_required' => true,
             ]);
+
+        $this->assertDatabaseCount('genai_import_jobs', 0);
+    }
+
+    public function test_agent_import_without_account_checks_all_locked_basis_years(): void
+    {
+        ['user' => $user, 'token' => $token] = $this->createUserWithToken(['finance.tax-documents.manage']);
+        $account = $this->makeAccount($user, 'Partnership Brokerage');
+        $interest = $this->makeInterest($user, $account);
+        $this->lockYear($user, $interest, 2024);
+
+        $this->postJson('/api/agent/v1/imports/jobs', [
+            's3_key' => "genai-import/{$user->id}/uuid/k1.pdf",
+            'original_filename' => 'k1.pdf',
+            'file_size_bytes' => 1024,
+            'job_type' => 'document_extract',
+            'context' => ['tax_year' => 2024],
+        ], $this->bearer($token))
+            ->assertStatus(409)
+            ->assertJsonPath('domain', 'partnership_basis');
 
         $this->assertDatabaseCount('genai_import_jobs', 0);
     }

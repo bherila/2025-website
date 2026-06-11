@@ -3,6 +3,9 @@
 namespace Tests\Feature\Agent\Tax;
 
 use App\GenAiProcessor\Models\GenAiImportJob;
+use App\Http\Controllers\Agent\Finance\AgentFinanceTaxDocumentsController;
+use App\Http\Controllers\Agent\Finance\AgentFinanceTaxPreviewController;
+use App\Http\Controllers\Agent\Finance\FinanceDownloadController;
 use App\Http\Controllers\Agent\Tax\AgentTaxController;
 use App\Http\Middleware\AuthenticateAgentRequest;
 use App\Http\Middleware\NegotiatesAgentPayload;
@@ -11,6 +14,7 @@ use App\Models\AgentApiToken;
 use App\Models\Files\FileForTaxDocument;
 use App\Models\FinanceTool\FinDocument;
 use App\Models\User;
+use App\Services\FileStorageService;
 use App\Services\Finance\DocumentIngestionService;
 use App\Support\Agent\AgentTokenService;
 use HelgeSverre\Toon\Toon;
@@ -52,6 +56,21 @@ class CompareReturnLinesTest extends TestCase
                 ->middleware([NegotiatesAgentPayload::class])
                 ->group(function (): void {
                     Route::middleware(AuthenticateAgentRequest::class.':tax')->prefix('tax')->name('tax.')->group(function (): void {
+                        Route::get('/preview/{year}', AgentFinanceTaxPreviewController::class)
+                            ->whereNumber('year')
+                            ->middleware('feature:finance.tax-preview.view')
+                            ->name('preview');
+                        Route::get('/documents', [AgentFinanceTaxDocumentsController::class, 'index'])
+                            ->middleware('feature:finance.tax-documents.view')
+                            ->name('documents');
+                        Route::get('/documents/{id}', [AgentFinanceTaxDocumentsController::class, 'show'])
+                            ->whereNumber('id')
+                            ->middleware('feature:finance.tax-documents.view')
+                            ->name('documents.show');
+                        Route::get('/documents/{id}/download-url', [FinanceDownloadController::class, 'taxDocumentDownloadUrl'])
+                            ->whereNumber('id')
+                            ->middleware('feature:finance.tax-documents.view')
+                            ->name('documents.download-url');
                         Route::post('/preview/{year}/compare-return-lines', [AgentTaxController::class, 'compareReturnLines'])
                             ->whereNumber('year')
                             ->middleware('feature:finance.tax-preview.view')
@@ -157,6 +176,53 @@ class CompareReturnLinesTest extends TestCase
         $this->compare($token, ['lines' => [['form' => '1040', 'line' => '1z', 'amount_cents' => 'twelve']]])
             ->assertStatus(422)
             ->assertJsonStructure(['message', 'errors']);
+    }
+
+    public function test_tax_scoped_token_can_read_tax_preview_and_documents(): void
+    {
+        ['user' => $user, 'token' => $token] = $this->createUserWithTaxToken([
+            'finance.tax-preview.view',
+            'finance.tax-documents.view',
+        ]);
+        $this->createW2For($user, ['box1_wages' => 123400]);
+        $doc = FileForTaxDocument::where('user_id', $user->id)->sole();
+
+        $this->getJson('/api/agent/v1/tax/preview/2024', $this->bearer($token))
+            ->assertOk()
+            ->assertJsonPath('year', 2024);
+
+        $this->getJson('/api/agent/v1/tax/documents?year=2024', $this->bearer($token))
+            ->assertOk()
+            ->assertJsonPath('tax_documents.0.id', $doc->id);
+
+        $this->getJson("/api/agent/v1/tax/documents/{$doc->id}", $this->bearer($token))
+            ->assertOk()
+            ->assertJsonPath('id', $doc->id)
+            ->assertJsonPath('parsed_data.box1_wages', 123400);
+    }
+
+    public function test_tax_document_download_alias_is_discoverable_and_callable(): void
+    {
+        ['user' => $user, 'token' => $token] = $this->createUserWithTaxToken([
+            'finance.tax-documents.view',
+        ]);
+        $this->createW2For($user, ['box1_wages' => 123400]);
+        $doc = FileForTaxDocument::where('user_id', $user->id)->sole();
+
+        $this->mock(FileStorageService::class, function ($mock): void {
+            $mock->shouldReceive('getSignedDownloadUrl')->once()->andReturn('https://s3.example.com/download');
+            $mock->shouldReceive('getSignedViewUrl')->once()->andReturn('https://s3.example.com/view');
+        });
+
+        $this->getJson("/api/agent/v1/tax/documents/{$doc->id}/download-url", $this->bearer($token))
+            ->assertOk()
+            ->assertJsonPath('download_url', 'https://s3.example.com/download');
+
+        $manifest = $this->getJson('/api/agent/v1/tax/capabilities', $this->bearer($token))
+            ->assertOk()
+            ->json();
+
+        $this->assertContains('tax.documents.download_url', array_column($manifest['capabilities'], 'id'));
     }
 
     // -------------------------------------------------------------------

@@ -58,8 +58,10 @@ class AgentImportController extends Controller
      * account that holds a partnership interest can feed basis data, so when
      * the job carries both an account and a tax year (e.g. K-1
      * document_extract jobs) the partnership-basis year lock must be
-     * respected. Jobs without an account or a determinable year cannot be
-     * attributed to a lockable period and pass through.
+     * respected. Jobs without an account check all partnership interests for
+     * the user because multi-account documents can omit acct_id before
+     * account matching. Jobs without a determinable year cannot be attributed
+     * to a lockable period and pass through.
      *
      * @param  array<string, mixed>|null  $context
      *
@@ -67,10 +69,6 @@ class AgentImportController extends Controller
      */
     private function assertBasisPeriodUnlocked(?int $acctId, ?array $context): void
     {
-        if ($acctId === null) {
-            return;
-        }
-
         $taxYear = $context['tax_year'] ?? null;
         if (! is_numeric($taxYear)) {
             return;

@@ -136,6 +136,21 @@ Route::prefix('career-comparison')->name('career-comparison.')->group(function (
  * computation, no document storage.
  */
 Route::middleware(AuthenticateAgentRequest::class.':tax')->prefix('tax')->name('tax.')->group(function (): void {
+    Route::get('/preview/{year}', AgentFinanceTaxPreviewController::class)
+        ->whereNumber('year')
+        ->middleware('feature:finance.tax-preview.view')
+        ->name('preview');
+    Route::get('/documents', [AgentFinanceTaxDocumentsController::class, 'index'])
+        ->middleware('feature:finance.tax-documents.view')
+        ->name('documents');
+    Route::get('/documents/{id}', [AgentFinanceTaxDocumentsController::class, 'show'])
+        ->whereNumber('id')
+        ->middleware('feature:finance.tax-documents.view')
+        ->name('documents.show');
+    Route::get('/documents/{id}/download-url', [FinanceDownloadController::class, 'taxDocumentDownloadUrl'])
+        ->whereNumber('id')
+        ->middleware('feature:finance.tax-documents.view')
+        ->name('documents.download-url');
     Route::post('/preview/{year}/compare-return-lines', [AgentTaxController::class, 'compareReturnLines'])
         ->whereNumber('year')
         ->middleware('feature:finance.tax-preview.view')

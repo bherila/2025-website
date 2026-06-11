@@ -27,9 +27,22 @@ class TaxCapabilitiesTest extends TestCase
         return $registry;
     }
 
-    public function test_registers_compare_return_lines_capability(): void
+    public function test_registers_tax_capabilities(): void
     {
-        $capability = $this->registry()->find('tax.compare_return_lines');
+        $registry = $this->registry();
+
+        $this->assertEqualsCanonicalizing([
+            'tax.preview.get',
+            'tax.documents.list',
+            'tax.documents.get',
+            'tax.documents.download_url',
+            'tax.compare_return_lines',
+        ], array_map(
+            fn (Capability $capability): string => $capability->id,
+            $registry->forModule('tax'),
+        ));
+
+        $capability = $registry->find('tax.compare_return_lines');
 
         $this->assertNotNull($capability);
         $this->assertSame('tax', $capability->module);
@@ -42,21 +55,42 @@ class TaxCapabilitiesTest extends TestCase
         $this->assertNotNull($capability->responseSchema);
         $this->assertNotEmpty($capability->examples);
         $this->assertSame('agent.tax.compare-return-lines', $capability->routeName);
+
+        $preview = $registry->find('tax.preview.get');
+        $this->assertNotNull($preview);
+        $this->assertSame('/tax/preview/{year}', $preview->restPath);
+        $this->assertSame('get-tax-preview', $preview->mcpTool);
+        $this->assertSame('agent.tax.preview', $preview->routeName);
+
+        $download = $registry->find('tax.documents.download_url');
+        $this->assertNotNull($download);
+        $this->assertSame('download', $download->risk);
+        $this->assertSame('/tax/documents/{id}/download-url', $download->restPath);
+        $this->assertSame('finance.tax-documents.view', $download->requiredPermission);
     }
 
-    public function test_visibility_requires_tax_preview_view(): void
+    public function test_visibility_filters_by_tax_permissions(): void
     {
         $registry = $this->registry();
 
         $denied = $this->grantFeatures($this->createUser(), ['finance.access']);
         $this->assertSame([], $registry->visibleTo(new AgentContext($denied, null)));
 
-        $allowed = $this->grantFeatures($this->createUser(), ['finance.tax-preview.view']);
+        $previewOnly = $this->grantFeatures($this->createUser(), ['finance.tax-preview.view']);
         $this->assertSame(
-            ['tax.compare_return_lines'],
+            ['tax.preview.get', 'tax.compare_return_lines'],
             array_map(
                 fn (Capability $capability): string => $capability->id,
-                $registry->visibleTo(new AgentContext($allowed, null)),
+                $registry->visibleTo(new AgentContext($previewOnly, null)),
+            ),
+        );
+
+        $documentsOnly = $this->grantFeatures($this->createUser(), ['finance.tax-documents.view']);
+        $this->assertEqualsCanonicalizing(
+            ['tax.documents.list', 'tax.documents.get', 'tax.documents.download_url'],
+            array_map(
+                fn (Capability $capability): string => $capability->id,
+                $registry->visibleTo(new AgentContext($documentsOnly, null)),
             ),
         );
     }
