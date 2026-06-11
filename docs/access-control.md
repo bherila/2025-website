@@ -61,6 +61,7 @@ This allows Tax Preview users to receive basic account metadata for selectors wi
 | Route | Permission |
 |---|---|
 | `GET /finance` | `finance.access` |
+| `GET /finance/import` | `finance.access` (per-card data gated behind each card's view/manage permission; cards without it are hidden in the UI) |
 | `GET /finance/accounts` | `finance.accounts.detail` |
 | `GET /finance/documents` | `finance.tax-documents.view` |
 | `GET /finance/tax-preview` | `finance.tax-preview.view` |

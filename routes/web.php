@@ -14,6 +14,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finance\TaxPreviewController;
 use App\Http\Controllers\FinanceTool\FinanceAccountsController;
 use App\Http\Controllers\FinanceTool\FinanceHomeController;
+use App\Http\Controllers\FinanceTool\FinanceImportCenterController;
 use App\Http\Controllers\FinanceTool\FinancePayslipController;
 use App\Http\Controllers\FinanceTool\TaxDocumentLotReconciliationPageController;
 use App\Http\Controllers\FinanceTool\TaxReturnPdfExportController;
@@ -48,6 +49,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
     Route::get('/finance', [FinanceHomeController::class, 'index'])->middleware('feature:finance.access');
+    Route::get('/finance/import', [FinanceImportCenterController::class, 'index'])->middleware('feature:finance.access');
 
     Route::get('/finance/rsu', function () {
         return view('finance.rsu');
