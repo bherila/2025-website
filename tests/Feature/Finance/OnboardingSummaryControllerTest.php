@@ -180,6 +180,27 @@ class OnboardingSummaryControllerTest extends TestCase
         $this->assertContains('accounts.view', $actionIds);
     }
 
+    public function test_k1_basis_view_only_user_receives_review_action(): void
+    {
+        $user = $this->userWithFinanceAccess(['finance.access', 'finance.tax-documents.view']);
+        $this->actingAs($user);
+        $this->createTaxDocument($user, [
+            'form_type' => 'k1_1065',
+            'is_reviewed' => true,
+            'genai_status' => 'completed',
+        ]);
+
+        $response = $this->getJson('/api/finance/onboarding-summary?year=2024');
+
+        $response->assertOk();
+        $k1Basis = $this->section($response->json('sections'), 'k1_basis');
+        $this->assertSame('ready', $k1Basis['status']);
+        $this->assertSame(1, $k1Basis['counts']['k1_documents']);
+        $actionIds = array_column($k1Basis['actions'], 'id');
+        $this->assertContains('k1.review', $actionIds);
+        $this->assertNotContains('k1.upload', $actionIds);
+    }
+
     public function test_rejects_out_of_range_year(): void
     {
         $user = $this->userWithFinanceAccess(['finance.access']);

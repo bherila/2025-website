@@ -1,7 +1,21 @@
+import '@testing-library/jest-dom'
+
+import { render, screen } from '@testing-library/react'
+
 import type { TaxPreviewState } from '../formRegistry'
 import { ALL_FORM_IDS } from '../formRegistry'
 import { formRegistry } from '../registry'
 import { FORM_IDS } from '../taxRoute'
+
+jest.mock('../DockActions', () => ({
+  useDockActions: () => ({
+    reviewK1Doc: jest.fn(),
+    openTaxDocumentDetail: jest.fn(),
+    bulkSetSbpElection: jest.fn(),
+    exportXlsx: jest.fn(),
+    isExportingXlsx: false,
+  }),
+}))
 
 describe('formRegistry', () => {
   it('registers entries with matching id field', () => {
@@ -191,6 +205,57 @@ describe('formRegistry', () => {
         },
       } as unknown as TaxPreviewState
       expect(entry.keyAmounts!(state)).toEqual([{ label: 'Ending basis', value: 50_000 }])
+    })
+  })
+
+  describe('loading skeletons', () => {
+    const renderEntry = (id: keyof typeof formRegistry, overrides: Partial<TaxPreviewState> = {}) => {
+      const Component = formRegistry[id]!.component
+      const state = {
+        isLoading: true,
+        taxFacts: null,
+        payslips: [],
+        reviewedK1Docs: [],
+        reviewed1099Docs: [],
+        reviewedW2Docs: [],
+        allK1Documents: [],
+        foreignTaxSummaries: [],
+        scheduleCData: null,
+        year: 2025,
+        ...overrides,
+      } as unknown as TaxPreviewState
+
+      render(<Component state={state} onDrill={jest.fn()} />)
+    }
+
+    it('renders a skeleton for Form 1116 while initial tax facts are loading', () => {
+      renderEntry('form-1116')
+
+      expect(screen.getByTestId('tax-preview-column-skeleton')).toHaveAttribute(
+        'aria-label',
+        'Loading Form 1116',
+      )
+      expect(screen.queryByText(/No foreign tax data detected/i)).not.toBeInTheDocument()
+    })
+
+    it('renders a skeleton for W-2 summary while payslips are loading', () => {
+      renderEntry('w2-summary')
+
+      expect(screen.getByTestId('tax-preview-column-skeleton')).toHaveAttribute(
+        'aria-label',
+        'Loading W-2 income summary',
+      )
+      expect(screen.queryByText(/No W-2 payslip data/i)).not.toBeInTheDocument()
+    })
+
+    it('renders a skeleton for partnership basis while initial tax facts are loading', () => {
+      renderEntry('partnership-basis')
+
+      expect(screen.getByTestId('tax-preview-column-skeleton')).toHaveAttribute(
+        'aria-label',
+        'Loading partnership outside basis',
+      )
+      expect(screen.queryByText(/No partnership basis interests found/i)).not.toBeInTheDocument()
     })
   })
 
