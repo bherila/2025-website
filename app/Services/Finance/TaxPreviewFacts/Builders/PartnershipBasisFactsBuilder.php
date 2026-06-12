@@ -16,6 +16,7 @@ use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisEventFact;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisInterestFacts;
 use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisWorksheetFacts;
+use App\Services\Finance\TaxPreviewFacts\Data\PartnershipBasisYearSummaryFact;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactRouting;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSource;
 use App\Services\Finance\TaxPreviewFacts\Data\TaxFactSourceType;
@@ -40,6 +41,21 @@ class PartnershipBasisFactsBuilder
     {
         $basisYears = $this->partnershipBasisService->basisYearsForUserYear($userId, $year);
 
+        $interestIds = $basisYears
+            ->pluck('partnership_interest_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        /** @var array<int, array<int, FinPartnershipBasisYear>> $historyByInterest */
+        $historyByInterest = $this->partnershipBasisService
+            ->basisYearsHistoryForInterests($interestIds, $year)
+            ->groupBy('partnership_interest_id')
+            ->map(fn (Collection $rows): array => $rows->values()->all())
+            ->all();
+
         $interests = [];
         $distributionGainSources = [];
         $liquidationGainLossSources = [];
@@ -51,7 +67,8 @@ class PartnershipBasisFactsBuilder
         $basisYearsByAccount = [];
 
         foreach ($basisYears as $basisYear) {
-            $interests[] = $this->interestFact($basisYear);
+            $interestHistory = $historyByInterest[(int) $basisYear->partnership_interest_id] ?? [];
+            $interests[] = $this->interestFact($basisYear, $interestHistory);
 
             $interest = $basisYear->partnershipInterest;
             if ($interest === null) {
@@ -543,10 +560,40 @@ class PartnershipBasisFactsBuilder
         return $start === null ? null : CarbonImmutable::parse($start)->toDateString();
     }
 
-    private function interestFact(FinPartnershipBasisYear $basisYear): PartnershipBasisInterestFacts
+    /**
+     * @param  array<int, FinPartnershipBasisYear>  $history  All persisted basis years for this interest
+     *                                                        through the preview year, ascending by tax year.
+     */
+    private function interestFact(FinPartnershipBasisYear $basisYear, array $history): PartnershipBasisInterestFacts
     {
         $basisYear->loadMissing(['partnershipInterest.basisEvents' => fn ($events) => $events->where('tax_year', $basisYear->tax_year)->orderBy('event_order')->orderBy('id')]);
         $interest = $basisYear->partnershipInterest;
+
+        /** @var array<int, FinPartnershipBasisYear> $priorByYear */
+        $priorByYear = [];
+        foreach ($history as $row) {
+            $priorByYear[(int) $row->tax_year] = $row;
+        }
+
+        $basisHistory = [];
+        foreach ($history as $row) {
+            $rowYear = (int) $row->tax_year;
+            $prior = $priorByYear[$rowYear - 1] ?? null;
+
+            $basisHistory[] = new PartnershipBasisYearSummaryFact(
+                taxYear: $rowYear,
+                reviewStatus: (string) $row->review_status,
+                isStale: (bool) $row->is_stale,
+                isLocked: $row->locked_at !== null,
+                carryoverMismatch: $this->carryoverMismatch($row, $prior),
+                worksheet: $this->worksheetFacts($row),
+            );
+        }
+
+        $previewPrior = $priorByYear[(int) $basisYear->tax_year - 1] ?? null;
+        $carryoverMismatch = $this->carryoverMismatch($basisYear, $previewPrior);
+        $reviewStatus = (string) $basisYear->review_status;
+        $isStale = (bool) $basisYear->is_stale;
 
         return new PartnershipBasisInterestFacts(
             interestId: (int) $basisYear->partnership_interest_id,
@@ -559,25 +606,9 @@ class PartnershipBasisFactsBuilder
             beginningBookCapital: MoneyMath::fromCents((int) $basisYear->beginning_book_capital_cents),
             endingBookCapital: MoneyMath::fromCents((int) $basisYear->ending_book_capital_cents),
             insideBasisConfidence: (string) $basisYear->inside_basis_confidence,
-            reviewStatus: (string) $basisYear->review_status,
-            isStale: (bool) $basisYear->is_stale,
-            worksheet: new PartnershipBasisWorksheetFacts(
-                beginningOutsideBasis: MoneyMath::fromCents((int) $basisYear->beginning_outside_basis_cents),
-                capitalContributions: MoneyMath::fromCents((int) $basisYear->capital_contributions_cents),
-                taxableIncomeIncrease: MoneyMath::fromCents((int) $basisYear->taxable_income_increase_cents),
-                taxExemptIncomeIncrease: MoneyMath::fromCents((int) $basisYear->tax_exempt_income_increase_cents),
-                liabilityIncrease: MoneyMath::fromCents((int) $basisYear->liability_increase_cents),
-                cashDistributions: MoneyMath::fromCents((int) $basisYear->cash_distributions_cents),
-                propertyDistributionsBasis: MoneyMath::fromCents((int) $basisYear->property_distributions_basis_cents),
-                liabilityDecrease: MoneyMath::fromCents((int) $basisYear->liability_decrease_cents),
-                deductionsLossesDecrease: MoneyMath::fromCents((int) $basisYear->deductions_losses_decrease_cents),
-                nondeductibleExpensesDecrease: MoneyMath::fromCents((int) $basisYear->nondeductible_expenses_decrease_cents),
-                foreignTaxesDecrease: MoneyMath::fromCents((int) $basisYear->foreign_taxes_decrease_cents),
-                distributionGain: MoneyMath::fromCents((int) $basisYear->distribution_gain_cents),
-                suspendedLossCarryforward: MoneyMath::fromCents((int) $basisYear->suspended_loss_carryforward_cents),
-                endingOutsideBasis: MoneyMath::fromCents((int) $basisYear->ending_outside_basis_cents),
-                liquidationGainLoss: $basisYear->liquidation_gain_loss_cents === null ? null : MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents),
-            ),
+            reviewStatus: $reviewStatus,
+            isStale: $isStale,
+            worksheet: $this->worksheetFacts($basisYear),
             events: $interest?->basisEvents->map(fn (FinPartnershipBasisEvent $event): PartnershipBasisEventFact => new PartnershipBasisEventFact(
                 id: (int) $event->id,
                 taxYear: (int) $event->tax_year,
@@ -594,6 +625,51 @@ class PartnershipBasisFactsBuilder
                 sourceLabel: $event->source_label,
                 reviewStatus: (string) $event->review_status,
             ))->values()->all() ?? [],
+            basisHistory: $basisHistory,
+            carryoverMismatch: $carryoverMismatch,
+            hasActionNeeded: $isStale || $carryoverMismatch !== null || $reviewStatus === 'needs_review',
         );
+    }
+
+    /**
+     * Map a persisted basis year's integer cents columns to the dollar-denominated worksheet DTO.
+     * Shared by the preview-year worksheet and every history-year worksheet so both paths convert
+     * cents → dollars identically.
+     */
+    private function worksheetFacts(FinPartnershipBasisYear $basisYear): PartnershipBasisWorksheetFacts
+    {
+        return new PartnershipBasisWorksheetFacts(
+            beginningOutsideBasis: MoneyMath::fromCents((int) $basisYear->beginning_outside_basis_cents),
+            capitalContributions: MoneyMath::fromCents((int) $basisYear->capital_contributions_cents),
+            taxableIncomeIncrease: MoneyMath::fromCents((int) $basisYear->taxable_income_increase_cents),
+            taxExemptIncomeIncrease: MoneyMath::fromCents((int) $basisYear->tax_exempt_income_increase_cents),
+            liabilityIncrease: MoneyMath::fromCents((int) $basisYear->liability_increase_cents),
+            cashDistributions: MoneyMath::fromCents((int) $basisYear->cash_distributions_cents),
+            propertyDistributionsBasis: MoneyMath::fromCents((int) $basisYear->property_distributions_basis_cents),
+            liabilityDecrease: MoneyMath::fromCents((int) $basisYear->liability_decrease_cents),
+            deductionsLossesDecrease: MoneyMath::fromCents((int) $basisYear->deductions_losses_decrease_cents),
+            nondeductibleExpensesDecrease: MoneyMath::fromCents((int) $basisYear->nondeductible_expenses_decrease_cents),
+            foreignTaxesDecrease: MoneyMath::fromCents((int) $basisYear->foreign_taxes_decrease_cents),
+            distributionGain: MoneyMath::fromCents((int) $basisYear->distribution_gain_cents),
+            suspendedLossCarryforward: MoneyMath::fromCents((int) $basisYear->suspended_loss_carryforward_cents),
+            endingOutsideBasis: MoneyMath::fromCents((int) $basisYear->ending_outside_basis_cents),
+            liquidationGainLoss: $basisYear->liquidation_gain_loss_cents === null ? null : MoneyMath::fromCents((int) $basisYear->liquidation_gain_loss_cents),
+        );
+    }
+
+    /**
+     * Prior year's ending outside basis minus this year's beginning outside basis, compared in cents and
+     * expressed in dollars. Null when there is no immediately-preceding persisted year or the values match
+     * exactly — a non-null delta flags a carryforward break the user should reconcile.
+     */
+    private function carryoverMismatch(FinPartnershipBasisYear $current, ?FinPartnershipBasisYear $prior): ?float
+    {
+        if ($prior === null) {
+            return null;
+        }
+
+        $deltaCents = (int) $prior->ending_outside_basis_cents - (int) $current->beginning_outside_basis_cents;
+
+        return $deltaCents === 0 ? null : MoneyMath::fromCents($deltaCents);
     }
 }

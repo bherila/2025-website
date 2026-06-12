@@ -4,6 +4,11 @@ import currency from 'currency.js'
 import { AlertTriangle, CheckCircle2, Lock, LockOpen, Plus, RefreshCw, Settings2 } from 'lucide-react'
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react'
 
+import {
+  humanizeBasisLabel as humanize,
+  reconciliationStatusBadge,
+  statusBadge,
+} from '@/components/finance/partnershipBasisDisplay'
 import { DetailsButton, InfoTooltip, type NavGlyph } from '@/components/finance/tax-preview-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -163,22 +168,6 @@ function dollarsToCents(value: string): number {
   return currency(value || 0).intValue
 }
 
-function statusBadge(status: string, isStale: boolean): ReactElement {
-  if (isStale) {
-    return <Badge variant="destructive">Stale</Badge>
-  }
-  if (status === 'locked') {
-    return <Badge className="bg-emerald-600 hover:bg-emerald-600">Locked</Badge>
-  }
-  if (status === 'reviewed') {
-    return <Badge className="bg-emerald-600 hover:bg-emerald-600">Reviewed</Badge>
-  }
-  if (status === 'estimated') {
-    return <Badge variant="secondary">Estimated</Badge>
-  }
-  return <Badge variant="outline">Needs review</Badge>
-}
-
 function metric(label: string, value: number | null, info?: string): ReactElement {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -191,10 +180,6 @@ function metric(label: string, value: number | null, info?: string): ReactElemen
   )
 }
 
-function humanize(value: string): string {
-  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
-}
-
 /** Holding period of the interest, used to characterise §731 gain on the deemed sale of the interest. */
 function holdingPeriodBadge(holdingPeriod: string): ReactElement {
   if (holdingPeriod === 'long') {
@@ -204,17 +189,6 @@ function holdingPeriodBadge(holdingPeriod: string): ReactElement {
     return <Badge variant="secondary">Short-term holding</Badge>
   }
   return <Badge variant="outline">Holding period: set acquisition date</Badge>
-}
-
-/** Badge for a reconciliation comparison: green when matched, amber for mismatch, neutral for info. */
-function reconciliationStatusBadge(status: string): ReactElement {
-  if (status === 'match') {
-    return <Badge className="bg-emerald-600 hover:bg-emerald-600">Match</Badge>
-  }
-  if (status === 'mismatch') {
-    return <Badge variant="destructive">Mismatch</Badge>
-  }
-  return <Badge variant="outline">Info</Badge>
 }
 
 /** Where an event originated, for the amber "Go to source" drill button. */
