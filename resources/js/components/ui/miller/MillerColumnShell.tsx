@@ -45,6 +45,7 @@ interface MillerColumnShellProps {
   onTruncate: (depth: number) => void
   className?: string
   homeColumnClassName?: string
+  homeColumnSize?: MillerColumnSize
 }
 
 function getMillerColumnSizeClass(column: Pick<MillerColumnShellColumn, 'size' | 'wide'>): string {
@@ -57,6 +58,7 @@ export function MillerColumnShell({
   onTruncate,
   className = '',
   homeColumnClassName = '',
+  homeColumnSize = 'full',
 }: MillerColumnShellProps): React.ReactElement {
   const columnDepth = columns.length
   const prevDepthRef = useRef(columnDepth)
@@ -122,7 +124,7 @@ export function MillerColumnShell({
           className={cn(
             'relative flex flex-col bg-card',
             hasColumns
-              ? ['hidden shrink-0 border-r border-border md:flex', MILLER_COLUMN_SIZE_CLASSES.full]
+              ? ['hidden shrink-0 border-r border-border md:flex', MILLER_COLUMN_SIZE_CLASSES[homeColumnSize]]
               : 'w-full',
             homeColumnClassName,
           )}

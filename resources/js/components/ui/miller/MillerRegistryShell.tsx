@@ -2,7 +2,7 @@ import { type ReactElement, type ReactNode } from 'react'
 
 import { MillerColumnShell, type MillerColumnShellColumn } from './MillerColumnShell'
 import { MillerInstanceTabs } from './MillerInstanceTabs'
-import type { MillerDrillTarget, MillerRegistryEntry } from './millerRegistry'
+import type { MillerColumnSize, MillerDrillTarget, MillerRegistryEntry } from './millerRegistry'
 import type { MillerColumnSpec, MillerRoute } from './millerRoute'
 
 interface MillerRegistryShellProps<State, Id extends string, Meta = unknown> {
@@ -15,6 +15,7 @@ interface MillerRegistryShellProps<State, Id extends string, Meta = unknown> {
   truncateTo: (depth: number) => void
   navigate: (route: MillerRoute<Id>) => void
   onDrillUnhandled?: (target: MillerDrillTarget<Id>, entry: MillerRegistryEntry<State, Id, Meta> | undefined) => void
+  homeColumnSize?: MillerColumnSize
 }
 
 export function MillerRegistryShell<State, Id extends string, Meta = unknown>({
@@ -27,6 +28,7 @@ export function MillerRegistryShell<State, Id extends string, Meta = unknown>({
   truncateTo,
   navigate,
   onDrillUnhandled,
+  homeColumnSize,
 }: MillerRegistryShellProps<State, Id, Meta>): ReactElement {
   const dispatchDrill =
     (depth: number) =>
@@ -129,5 +131,12 @@ export function MillerRegistryShell<State, Id extends string, Meta = unknown>({
     }
   })
 
-  return <MillerColumnShell homeView={homeView} columns={columns} onTruncate={truncateTo} />
+  return (
+    <MillerColumnShell
+      homeView={homeView}
+      columns={columns}
+      onTruncate={truncateTo}
+      {...(homeColumnSize ? { homeColumnSize } : {})}
+    />
+  )
 }

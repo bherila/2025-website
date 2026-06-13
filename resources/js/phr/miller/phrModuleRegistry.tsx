@@ -427,7 +427,7 @@ function makeDetailModule(
 
 export const phrModuleRegistry: Record<PhrModuleId, PhrRegistryEntry> = {
   summary: makeListModule(SUMMARY_MODULE, SummaryPage),
-  labs: makeListModule(LABS_MODULE, LabsPage),
+  labs: makeListModule(LABS_MODULE, LabsPage, 'wide'),
   'lab-panel-detail': makeDetailModule(LAB_PANEL_DETAIL_MODULE, LabPanelDetail),
   vitals: makeListModule(VITALS_MODULE, VitalsPage),
   'vitals-reading-detail': makeDetailModule(VITALS_READING_DETAIL_MODULE, VitalsReadingDetail),
