@@ -101,6 +101,34 @@ class PartnershipBasisFactsBuilderTest extends TestCase
         $this->assertSame([2023, 2024], $years);
     }
 
+    public function test_basis_history_excludes_rows_for_other_users_with_the_same_interest_id(): void
+    {
+        $interest = $this->interest();
+        $this->basisYear($interest, 2024, [
+            'beginning_outside_basis_cents' => 100_00,
+            'ending_outside_basis_cents' => 120_00,
+            'review_status' => 'reviewed',
+        ]);
+
+        $otherUser = User::factory()->create();
+        $this->basisYear($interest, 2023, [
+            'user_id' => $otherUser->id,
+            'ending_outside_basis_cents' => 999_00,
+            'review_status' => 'reviewed',
+        ]);
+
+        $facts = $this->build(2024);
+
+        $interestFact = $this->onlyInterest($facts);
+        $years = array_map(fn ($summary): int => $summary->taxYear, $interestFact->basisHistory);
+        $this->assertSame([2024], $years);
+        $this->assertNull($interestFact->carryoverMismatch);
+
+        $history2024 = collect($interestFact->basisHistory)->firstWhere('taxYear', 2024);
+        $this->assertNotNull($history2024);
+        $this->assertNull($history2024->carryoverMismatch);
+    }
+
     public function test_carryover_mismatch_flags_non_null_signed_delta_and_action_needed(): void
     {
         $interest = $this->interest();
@@ -122,7 +150,10 @@ class PartnershipBasisFactsBuilderTest extends TestCase
     public function test_carryover_mismatch_is_null_on_exact_match_and_first_year(): void
     {
         $interest = $this->interest();
-        $this->basisYear($interest, 2023, ['ending_outside_basis_cents' => 100_00]);
+        $this->basisYear($interest, 2023, [
+            'ending_outside_basis_cents' => 100_00,
+            'review_status' => 'reviewed',
+        ]);
         $this->basisYear($interest, 2024, [
             'beginning_outside_basis_cents' => 100_00,
             'ending_outside_basis_cents' => 120_00,
@@ -178,6 +209,28 @@ class PartnershipBasisFactsBuilderTest extends TestCase
         $this->assertSame('needs_review', $history2024->reviewStatus);
 
         // is_stale and needs_review both drive action-needed on the preview year.
+        $this->assertTrue($interestFact->hasActionNeeded);
+    }
+
+    public function test_historical_year_issues_drive_action_needed_even_when_preview_year_is_clean(): void
+    {
+        $interest = $this->interest();
+        $this->basisYear($interest, 2023, [
+            'ending_outside_basis_cents' => 100_00,
+            'review_status' => 'needs_review',
+            'is_stale' => false,
+        ]);
+        $this->basisYear($interest, 2024, [
+            'beginning_outside_basis_cents' => 100_00,
+            'ending_outside_basis_cents' => 120_00,
+            'review_status' => 'reviewed',
+            'is_stale' => false,
+        ]);
+
+        $facts = $this->build(2024);
+
+        $interestFact = $this->onlyInterest($facts);
+        $this->assertNull($interestFact->carryoverMismatch);
         $this->assertTrue($interestFact->hasActionNeeded);
     }
 

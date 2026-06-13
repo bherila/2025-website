@@ -373,6 +373,41 @@ describe('PartnershipBasisPanel', () => {
       expect(screen.getByText('Contributions match.')).toBeInTheDocument()
     })
 
+    it('does not seed reconciliation events while rendering', () => {
+      const recon: PartnershipBasisReconciliationFacts = {
+        accountId: 55,
+        year: 2024,
+        hasReconcilableData: true,
+        contributionCandidates: [
+          {
+            id: 'x1',
+            kind: 'capital_contribution',
+            date: null,
+            description: null,
+            amount: 1_000,
+            suggestedEventType: 'capital_contribution_cash',
+            lineItemId: 3,
+            statementId: null,
+            statementInvestmentId: null,
+            reviewStatus: 'needs_review',
+          },
+        ],
+        distributionCandidates: [],
+        flags: [],
+      }
+      const interest = makeInterest()
+
+      render(
+        <PartnershipBasisPanel
+          facts={makeFacts([interest], [recon])}
+          year={2024}
+          onRefresh={jest.fn()}
+        />,
+      )
+
+      expect(fetchWrapper.post).not.toHaveBeenCalled()
+    })
+
     it('seed button posts to the reconciliation/seed endpoint and calls onRefresh', async () => {
       const onRefresh = jest.fn().mockResolvedValue(undefined)
       ;(fetchWrapper.post as jest.Mock).mockResolvedValue({})

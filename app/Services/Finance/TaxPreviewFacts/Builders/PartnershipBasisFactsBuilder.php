@@ -594,6 +594,13 @@ class PartnershipBasisFactsBuilder
         $carryoverMismatch = $this->carryoverMismatch($basisYear, $previewPrior);
         $reviewStatus = (string) $basisYear->review_status;
         $isStale = (bool) $basisYear->is_stale;
+        $historyHasActionNeeded = false;
+        foreach ($basisHistory as $summary) {
+            if ($summary->isStale || $summary->carryoverMismatch !== null || $summary->reviewStatus === 'needs_review') {
+                $historyHasActionNeeded = true;
+                break;
+            }
+        }
 
         return new PartnershipBasisInterestFacts(
             interestId: (int) $basisYear->partnership_interest_id,
@@ -627,7 +634,7 @@ class PartnershipBasisFactsBuilder
             ))->values()->all() ?? [],
             basisHistory: $basisHistory,
             carryoverMismatch: $carryoverMismatch,
-            hasActionNeeded: $isStale || $carryoverMismatch !== null || $reviewStatus === 'needs_review',
+            hasActionNeeded: $historyHasActionNeeded,
         );
     }
 
