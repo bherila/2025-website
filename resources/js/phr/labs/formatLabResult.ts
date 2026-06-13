@@ -1,7 +1,7 @@
 const INFINITY_PLACEHOLDER_THRESHOLD = 99999
-const MAX_DECIMAL_PLACES = 2
+const DECIMAL_NUMBER_PATTERN = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))$/
 
-export function formatLabNumber(value: string | number | null | undefined): string | null {
+function normalizedLabNumber(value: string | number | null | undefined): string | null {
   if (value === null || value === undefined) {
     return null
   }
@@ -11,18 +11,51 @@ export function formatLabNumber(value: string | number | null | undefined): stri
     return null
   }
 
-  const parsed = Number(rawValue)
-  if (!Number.isFinite(parsed)) {
+  return rawValue
+}
+
+function formatDecimalLiteral(rawValue: string): string {
+  const match = DECIMAL_NUMBER_PATTERN.exec(rawValue)
+  if (match === null) {
     return rawValue
   }
 
-  if (Math.abs(parsed) >= INFINITY_PLACEHOLDER_THRESHOLD) {
+  const sign = match[1] === '-' ? '-' : ''
+  const integerDigits = match[2] ?? '0'
+  const fractionDigits = (match[3] ?? match[4] ?? '').replace(/0+$/, '')
+  const integer = integerDigits.replace(/^0+(?=\d)/, '') || '0'
+
+  if (integer === '0' && fractionDigits === '') {
+    return '0'
+  }
+
+  return `${sign}${integer}${fractionDigits ? `.${fractionDigits}` : ''}`
+}
+
+export function formatLabValueNumber(value: string | number | null | undefined): string | null {
+  const rawValue = normalizedLabNumber(value)
+  if (rawValue === null) {
+    return null
+  }
+
+  return formatDecimalLiteral(rawValue)
+}
+
+export function formatLabReferenceBound(value: string | number | null | undefined): string | null {
+  const rawValue = normalizedLabNumber(value)
+  if (rawValue === null) {
+    return null
+  }
+
+  const parsed = Number(rawValue)
+  if (Number.isFinite(parsed) && parsed <= -INFINITY_PLACEHOLDER_THRESHOLD) {
+    return '-∞'
+  }
+  if (Number.isFinite(parsed) && parsed >= INFINITY_PLACEHOLDER_THRESHOLD) {
     return '∞'
   }
 
-  return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: MAX_DECIMAL_PLACES,
-  }).format(parsed)
+  return formatDecimalLiteral(rawValue)
 }
 
 interface LabRangeResult {
@@ -33,8 +66,8 @@ interface LabRangeResult {
 }
 
 export function formatLabReferenceRange(result: LabRangeResult): string | null {
-  const min = formatLabNumber(result.range_min)
-  const max = formatLabNumber(result.range_max)
+  const min = formatLabReferenceBound(result.range_min)
+  const max = formatLabReferenceBound(result.range_max)
 
   if (min !== null && max !== null) {
     return `${min}–${max}${result.range_unit ? ` ${result.range_unit}` : ''}`
@@ -49,5 +82,5 @@ interface LabValueResult {
 }
 
 export function formatLabValue(result: LabValueResult): string | null {
-  return result.value ?? formatLabNumber(result.value_numeric)
+  return result.value ?? formatLabValueNumber(result.value_numeric)
 }
