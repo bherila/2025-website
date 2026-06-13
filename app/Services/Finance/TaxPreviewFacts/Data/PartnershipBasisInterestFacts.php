@@ -10,7 +10,13 @@ readonly class PartnershipBasisInterestFacts
     /** @var PartnershipBasisEventFact[] */
     public array $events;
 
-    /** @param array<int, PartnershipBasisEventFact> $events */
+    /** @var PartnershipBasisYearSummaryFact[] */
+    public array $basisHistory;
+
+    /**
+     * @param  array<int, PartnershipBasisEventFact>  $events
+     * @param  array<int, PartnershipBasisYearSummaryFact>  $basisHistory
+     */
     public function __construct(
         public int $interestId,
         public string $partnershipName,
@@ -26,8 +32,12 @@ readonly class PartnershipBasisInterestFacts
         public bool $isStale,
         public PartnershipBasisWorksheetFacts $worksheet,
         array $events,
+        array $basisHistory,
+        public ?float $carryoverMismatch,
+        public bool $hasActionNeeded,
     ) {
         $this->events = $events;
+        $this->basisHistory = $basisHistory;
     }
 
     /** @return array<string, mixed> */
@@ -48,6 +58,9 @@ readonly class PartnershipBasisInterestFacts
             'isStale' => $this->isStale,
             'worksheet' => $this->worksheet->toArray(),
             'events' => array_map(static fn (PartnershipBasisEventFact $event): array => $event->toArray(), $this->events),
+            'basisHistory' => array_map(static fn (PartnershipBasisYearSummaryFact $summary): array => $summary->toArray(), $this->basisHistory),
+            'carryoverMismatch' => $this->carryoverMismatch,
+            'hasActionNeeded' => $this->hasActionNeeded,
         ];
     }
 }

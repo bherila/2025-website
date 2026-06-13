@@ -519,6 +519,7 @@ year: number;
 };
 export type PartnershipBasisInterestFacts = {
 events: Array<PartnershipBasisEventFact>;
+basisHistory: Array<PartnershipBasisYearSummaryFact>;
 interestId: number;
 partnershipName: string;
 partnershipEin: string | null;
@@ -532,6 +533,8 @@ insideBasisConfidence: string;
 reviewStatus: string;
 isStale: boolean;
 worksheet: PartnershipBasisWorksheetFacts;
+carryoverMismatch: number | null;
+hasActionNeeded: boolean;
 };
 export type PartnershipBasisReconciliationFacts = {
 contributionCandidates: Array<PartnershipBasisReconciliationItem>;
@@ -578,6 +581,14 @@ distributionGain: number;
 suspendedLossCarryforward: number;
 endingOutsideBasis: number;
 liquidationGainLoss: number | null;
+};
+export type PartnershipBasisYearSummaryFact = {
+taxYear: number;
+reviewStatus: string;
+isStale: boolean;
+isLocked: boolean;
+carryoverMismatch: number | null;
+worksheet: PartnershipBasisWorksheetFacts;
 };
 export type QuarterTotals = {
 q1: number;

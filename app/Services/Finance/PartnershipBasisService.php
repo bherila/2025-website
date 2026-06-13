@@ -109,6 +109,29 @@ class PartnershipBasisService
             ->get();
     }
 
+    /**
+     * Read-only fetch of every persisted basis rollforward for the given interests through a tax year,
+     * ordered by interest then year, in a single query without eager-loading events. Used by read paths
+     * (Tax Preview facts) to render the per-interest basis history without mutating basis state.
+     *
+     * @param  array<int, int>  $interestIds
+     * @return EloquentCollection<int, FinPartnershipBasisYear>
+     */
+    public function basisYearsHistoryForInterests(array $interestIds, int $throughYear, int $userId): EloquentCollection
+    {
+        if ($interestIds === []) {
+            return new EloquentCollection;
+        }
+
+        return FinPartnershipBasisYear::query()
+            ->where('user_id', $userId)
+            ->whereIn('partnership_interest_id', $interestIds)
+            ->where('tax_year', '<=', $throughYear)
+            ->orderBy('partnership_interest_id')
+            ->orderBy('tax_year')
+            ->get();
+    }
+
     public function recomputeInterestYear(FinPartnershipInterest $interest, int $year): FinPartnershipBasisYear
     {
         $existing = FinPartnershipBasisYear::query()
