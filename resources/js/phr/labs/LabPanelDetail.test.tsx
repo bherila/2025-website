@@ -34,8 +34,8 @@ describe('LabPanelDetail', () => {
               value: '111',
               value_numeric: '111',
               unit: 'mg/dL',
-              range_min: '70',
-              range_max: '99',
+              range_min: '70.0000000000',
+              range_max: '9999999.0000000000',
               range_unit: 'mg/dL',
               reference_range_text: null,
               abnormal_flag: 'H',
@@ -57,6 +57,7 @@ describe('LabPanelDetail', () => {
       'href',
       '/api/phr/patients/42/documents/77/file',
     )
+    expect(screen.getByText('70–∞ mg/dL')).toBeInTheDocument()
     expect(screen.getByText('H')).toBeInTheDocument()
     expect(screen.getByText('↑')).toBeInTheDocument()
   })

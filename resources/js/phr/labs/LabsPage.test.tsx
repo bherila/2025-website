@@ -34,8 +34,8 @@ describe('LabsPage', () => {
           value: '111',
           value_numeric: '111',
           unit: 'mg/dL',
-          range_min: '70',
-          range_max: '99',
+          range_min: '70.0000000000',
+          range_max: '9999999.0000000000',
           range_unit: 'mg/dL',
           reference_range_text: null,
           normal_value: null,
@@ -58,7 +58,9 @@ describe('LabsPage', () => {
 
     render(<LabsPage patientId={42} onDrill={onDrill} />)
 
-    fireEvent.click(await screen.findByText('Glucose'))
+    expect(await screen.findByText('70–∞ mg/dL')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Glucose'))
 
     await waitFor(() => {
       expect(onDrill).toHaveBeenCalledWith({ id: 'lab-panel-detail', instance: '321' })

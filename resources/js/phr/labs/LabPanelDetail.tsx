@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { formatLabReferenceRange, formatLabValue } from '@/phr/labs/formatLabResult'
 import { PhrNotFoundColumn } from '@/phr/miller'
 import { errorMessage, fetchPhrDetail } from '@/phr/shared'
 import {
@@ -29,13 +30,6 @@ function flagClass(flag: string | null | undefined): string {
 
 function trendLabel(trend: PhrLabPanelResultRow['trend']): string {
   return trend === 'up' ? '↑' : trend === 'down' ? '↓' : trend === 'flat' ? '→' : '—'
-}
-
-function referenceRange(result: PhrLabPanelResultRow): string | null {
-  if (result.range_min !== null && result.range_max !== null) {
-    return `${result.range_min}–${result.range_max}${result.range_unit ? ` ${result.range_unit}` : ''}`
-  }
-  return result.reference_range_text
 }
 
 export default function LabPanelDetail({ patientId, recordId }: LabPanelDetailProps) {
@@ -120,10 +114,10 @@ export default function LabPanelDetail({ patientId, recordId }: LabPanelDetailPr
                   <tr key={row.id} className="border-b border-border last:border-0">
                     <td className="px-3 py-2 font-medium text-foreground">{row.analyte ?? '—'}</td>
                     <td className={`px-3 py-2 text-right ${flagClass(row.abnormal_flag)}`}>
-                      {row.value ?? row.value_numeric ?? '—'}
+                      {formatLabValue(row) ?? '—'}
                       {row.unit && <span className="ml-1 text-xs text-muted-foreground">{row.unit}</span>}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{referenceRange(row) ?? '—'}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{formatLabReferenceRange(row) ?? '—'}</td>
                     <td className={`px-3 py-2 text-center font-semibold ${flagClass(row.abnormal_flag)}`}>
                       {row.abnormal_flag && row.abnormal_flag !== 'N' ? row.abnormal_flag : '—'}
                     </td>
