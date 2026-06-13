@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWrapper } from '@/fetchWrapper'
+import { formatLabReferenceRange, formatLabValue } from '@/phr/labs/formatLabResult'
 import type { PhrListPageProps } from '@/phr/miller'
 import { errorMessage, numericPayload } from '@/phr/shared'
 import {
@@ -127,13 +128,6 @@ function AddLabForm({ patientId, onAdded }: AddLabFormProps) {
       </form>
     </div>
   )
-}
-
-function referenceRange(result: PhrLabResult): string | null {
-  if (result.range_min !== null && result.range_max !== null) {
-    return `${result.range_min}–${result.range_max}${result.range_unit ? ` ${result.range_unit}` : ''}`
-  }
-  return result.reference_range_text
 }
 
 export default function LabsPage({ patientId, onDrill }: PhrListPageProps) {
@@ -286,10 +280,10 @@ export default function LabsPage({ patientId, onDrill }: PhrListPageProps) {
                   <td className="px-3 py-2 font-medium text-foreground">{r.analyte ?? '—'}</td>
                   <td className="px-3 py-2 text-muted-foreground">{r.test_name ?? '—'}</td>
                   <td className={`px-3 py-2 text-right ${flagClass(r.abnormal_flag)}`}>
-                    {r.value ?? r.value_numeric ?? '—'}
+                    {formatLabValue(r) ?? '—'}
                     {r.unit && <span className="ml-1 text-xs text-muted-foreground">{r.unit}</span>}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">{referenceRange(r) ?? '—'}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{formatLabReferenceRange(r) ?? '—'}</td>
                   <td className={`px-3 py-2 text-center font-semibold ${flagClass(r.abnormal_flag)}`}>
                     {r.abnormal_flag && r.abnormal_flag !== 'N' ? r.abnormal_flag : ''}
                   </td>
