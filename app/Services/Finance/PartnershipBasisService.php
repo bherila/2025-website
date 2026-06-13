@@ -117,13 +117,14 @@ class PartnershipBasisService
      * @param  array<int, int>  $interestIds
      * @return EloquentCollection<int, FinPartnershipBasisYear>
      */
-    public function basisYearsHistoryForInterests(array $interestIds, int $throughYear): EloquentCollection
+    public function basisYearsHistoryForInterests(array $interestIds, int $throughYear, int $userId): EloquentCollection
     {
         if ($interestIds === []) {
             return new EloquentCollection;
         }
 
         return FinPartnershipBasisYear::query()
+            ->where('user_id', $userId)
             ->whereIn('partnership_interest_id', $interestIds)
             ->where('tax_year', '<=', $throughYear)
             ->orderBy('partnership_interest_id')

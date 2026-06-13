@@ -51,7 +51,7 @@ class PartnershipBasisFactsBuilder
 
         /** @var array<int, array<int, FinPartnershipBasisYear>> $historyByInterest */
         $historyByInterest = $this->partnershipBasisService
-            ->basisYearsHistoryForInterests($interestIds, $year)
+            ->basisYearsHistoryForInterests($interestIds, $year, $userId)
             ->groupBy('partnership_interest_id')
             ->map(fn (Collection $rows): array => $rows->values()->all())
             ->all();
