@@ -54,6 +54,7 @@ export function PhrMillerShell({ patientId, onPatientChange, onSectionChange }: 
             replaceFrom={replaceFrom}
             truncateTo={truncateTo}
             navigate={navigate}
+            homeColumnSize="narrow"
           />
         </Suspense>
       </div>
